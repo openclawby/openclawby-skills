@@ -1,0 +1,126 @@
+/* ============================================================================
+   report.css — professional A4 print stylesheet for analysis reports.
+   Inline this into the report HTML (or link it), then render HTML → PDF.
+   Design: clean editorial, one restrained accent, generous whitespace,
+   print-safe (backgrounds must survive `printBackground:true`).
+   ============================================================================ */
+
+:root {
+  --ink:      #14181f;   /* body text */
+  --muted:    #5b6472;   /* secondary text */
+  --hair:     #e3e7ee;   /* hairlines */
+  --panel:    #f6f8fb;   /* soft panels */
+  --accent:   #1f6feb;   /* single accent — change per brand if desired */
+  --accent-2: #0b3a82;
+  --good:     #16a34a;
+  --warn:     #d97706;
+  --bad:      #dc2626;
+  --font:     "Inter", "Helvetica Neue", "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+  --serif:    "Georgia", "Songti SC", "SimSun", serif;
+  --mono:     "SFMono-Regular", "JetBrains Mono", Consolas, monospace;
+}
+
+@page {
+  size: A4;
+  margin: 16mm 12mm 18mm 12mm;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 10.5pt;
+  line-height: 1.55;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ---- Cover page ---------------------------------------------------------- */
+.cover {
+  min-height: 265mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8mm 4mm;
+  page-break-after: always;
+}
+.cover .brandrow { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 9pt; letter-spacing: .04em; text-transform: uppercase; }
+.cover .title { font-family: var(--serif); font-size: 34pt; line-height: 1.1; margin: 0 0 6mm; }
+.cover .subtitle { font-size: 13pt; color: var(--muted); margin: 0; }
+.cover .asset-badge { display: inline-block; margin-bottom: 8mm; padding: 3px 12px; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); font-weight: 600; font-size: 10pt; }
+.cover .meta { border-top: 2px solid var(--ink); padding-top: 5mm; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; font-size: 9.5pt; }
+.cover .meta .k { color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-size: 8pt; margin-bottom: 2px; }
+.cover .meta .v { font-weight: 600; }
+.cover .rating { font-size: 12pt; font-weight: 700; }
+.cover .rating.buy, .cover .rating.bull { color: var(--good); }
+.cover .rating.hold, .cover .rating.neutral { color: var(--warn); }
+.cover .rating.sell, .cover .rating.bear { color: var(--bad); }
+
+/* ---- Section headings ---------------------------------------------------- */
+h1, h2, h3 { font-family: var(--font); color: var(--ink); }
+h2.section {
+  font-size: 15pt;
+  margin: 9mm 0 3mm;
+  padding-bottom: 2mm;
+  border-bottom: 2px solid var(--ink);
+  page-break-after: avoid;
+}
+h2.section .num { color: var(--accent); font-weight: 800; margin-right: 8px; }
+h3 { font-size: 11.5pt; margin: 5mm 0 2mm; color: var(--accent-2); page-break-after: avoid; }
+p { margin: 0 0 2.6mm; }
+.lead { font-size: 11.5pt; color: var(--ink); }
+.muted { color: var(--muted); }
+strong { font-weight: 650; }
+a { color: var(--accent); text-decoration: none; }
+
+/* ---- Callouts / key-takeaways -------------------------------------------- */
+.callout {
+  background: var(--panel);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 4mm 5mm;
+  margin: 3mm 0;
+}
+.callout.warn { border-left-color: var(--warn); }
+.callout.bad  { border-left-color: var(--bad); }
+
+/* ---- KPI / stat strip ---------------------------------------------------- */
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; margin: 3mm 0; }
+.kpi { border: 1px solid var(--hair); border-radius: 6px; padding: 3mm 4mm; }
+.kpi .label { font-size: 8pt; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.kpi .value { font-size: 15pt; font-weight: 700; }
+.kpi .delta.up { color: var(--good); } .kpi .delta.down { color: var(--bad); }
+
+/* ---- Figures / charts ---------------------------------------------------- */
+figure { margin: 4mm 0; page-break-inside: avoid; }
+figure img, figure svg { width: 100%; height: auto; border: 1px solid var(--hair); border-radius: 6px; background: #fff; }
+figcaption { font-size: 8.5pt; color: var(--muted); margin-top: 1.5mm; }
+figcaption .src { font-style: italic; }
+
+/* ---- Tables -------------------------------------------------------------- */
+table { width: 100%; border-collapse: collapse; margin: 3mm 0; font-size: 9.5pt; page-break-inside: avoid; }
+th, td { text-align: left; padding: 2mm 3mm; border-bottom: 1px solid var(--hair); }
+thead th { background: var(--panel); border-bottom: 1.5px solid var(--ink); font-size: 8.5pt; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+tbody tr:nth-child(even) td { background: #fafbfd; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+
+/* Scenario table accents */
+.scn-bear td:first-child { border-left: 3px solid var(--bad); }
+.scn-base td:first-child { border-left: 3px solid var(--warn); }
+.scn-bull td:first-child { border-left: 3px solid var(--good); }
+
+/* ---- Risk matrix pills --------------------------------------------------- */
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 8pt; font-weight: 600; }
+.pill.low  { background: #dcfce7; color: #166534; }
+.pill.med  { background: #fef3c7; color: #92400e; }
+.pill.high { background: #fee2e2; color: #991b1b; }
+
+/* ---- Page structure ------------------------------------------------------ */
+.section-block { page-break-inside: auto; }
+.page-break { page-break-before: always; }
+.disclaimer { margin-top: 6mm; padding-top: 3mm; border-top: 1px solid var(--hair); font-size: 8.5pt; color: var(--muted); }
+
+/* Running footer note (headless-chrome header/footer templates handle real page numbers) */
+.footer-note { position: running(footer); font-size: 8pt; color: var(--muted); }

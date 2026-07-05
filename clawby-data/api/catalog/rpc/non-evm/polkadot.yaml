@@ -1,0 +1,70 @@
+# ============================================================================
+# Non-EVM RPC — polkadot
+# Call: POST /api/rpc   body {"chain":"polkadot","method":"<method>","params":[...]}
+# ============================================================================
+chain: "polkadot"
+type: "Polkadot(Substrate)"
+slug: "polkadot"
+status: ok
+how_to_call: 'POST /api/rpc  {"chain":"polkadot","method":"<method>","params":[...]}'
+notes:
+  - "Polkadot uses the Substrate JSON-RPC system; addresses are SS58-encoded (not 0x hex)"
+  - "blockHash parameter is 32-byte 0x-prefixed hex; blockNumber is an 0x-prefixed hex string"
+  - "The key for state_getStorage is an XXHash/Blake2-encoded storage key, typically generated via polkadot.js tooling"
+  - "grandpa_proveFinality may be restricted on public nodes; recommend polling chain_getFinalizedHead for finalized height"
+  - "Substrate has additional methods (author_*, payment_*, rpc_*, state_call, etc.); the current node exposes only the following 11"
+methods:
+  - name: chain_getBlock
+    summary: "Returns the header + extrinsics of the specified block; omitting params returns the latest finalized block"
+    params: "[blockHash?] — 32-byte 0x hex; optional, omit for latest"
+    example: {"chain":"polkadot","method":"chain_getBlock","params":[]}
+
+  - name: chain_getBlockHash
+    summary: "Returns the hash of a block by block number"
+    params: "[blockNumber?] — 0x-prefixed hex string; optional, omit to return the latest finalized block hash"
+    example: {"chain":"polkadot","method":"chain_getBlockHash","params":["0xb48f90"]}
+
+  - name: chain_getHeader
+    summary: "Returns the header of the specified block (parent hash/block number/stateRoot/extrinsicsRoot/digest)"
+    params: "[blockHash?] — 32-byte 0x hex; optional"
+    example: {"chain":"polkadot","method":"chain_getHeader","params":[]}
+
+  - name: chain_getFinalizedHead
+    summary: "Returns the hash of the last finalized block in the canonical chain"
+    params: "none"
+    example: {"chain":"polkadot","method":"chain_getFinalizedHead","params":[]}
+
+  - name: state_getStorage
+    summary: "Reads an on-chain state storage value by storage key (SCALE-encoded hex); can specify a historical block"
+    params: "[storageKey(hex), blockHash?] — key required; blockHash optional"
+    example: {"chain":"polkadot","method":"state_getStorage","params":["0xf0c365c3cf59d671eb72da0e7a4113c49f1f0515f462cdcf84e0f1d6045dfcbb"]}
+
+  - name: state_getStorageHash
+    summary: "Returns the hash of the storage value for a given key at a specific block"
+    params: "[storageKey(hex), blockHash?]"
+    example: {"chain":"polkadot","method":"state_getStorageHash","params":["0xf0c365c3cf59d671eb72da0e7a4113c49f1f0515f462cdcf84e0f1d6045dfcbb"]}
+
+  - name: state_getStorageSize
+    summary: "Returns the storage size of the given storage key (in bytes, u64)"
+    params: "[storageKey(hex), blockHash?]"
+    example: {"chain":"polkadot","method":"state_getStorageSize","params":["0xf0c365c3cf59d671eb72da0e7a4113c49f1f0515f462cdcf84e0f1d6045dfcbb"]}
+
+  - name: grandpa_proveFinality
+    summary: "Provides a GRANDPA finality proof (Justification) for the specified block number; returns EncodedFinalityProofs"
+    params: "[blockNumber(integer)] — decimal integer"
+    example: {"chain":"polkadot","method":"grandpa_proveFinality","params":[11833440]}
+
+  - name: grandpa_roundState
+    summary: "Returns the current best GRANDPA round state and background round list (validator vote weight/missing voters)"
+    params: "none"
+    example: {"chain":"polkadot","method":"grandpa_roundState","params":[]}
+
+  - name: system_chain
+    summary: "Returns the chain name string (e.g. 'Polkadot')"
+    params: "none"
+    example: {"chain":"polkadot","method":"system_chain","params":[]}
+
+  - name: system_chainType
+    summary: "Returns the chain type string (e.g. 'Live' / 'Development' / 'Local')"
+    params: "none"
+    example: {"chain":"polkadot","method":"system_chainType","params":[]}

@@ -1,0 +1,93 @@
+# ============================================================================
+# Equities & Markets — Reference (reference lists)
+# Usage: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Reference"
+
+gotchas_for_all:
+  - "these endpoints return static enum lists; results can be cached — no need to call on every request"
+  - "pagination params: page / page_size (max 1000)"
+
+interfaces:
+  - name: "List of stock exchanges"
+    summary: "list of all stock exchange codes"
+    params:
+      - {name: format, required: false, format: "json|csv"}
+    example:
+      name: "List of stock exchanges"
+      params: {}
+
+  - name: "List of stock symbols"
+    summary: "list of stock symbols (filterable by region / exchange)"
+    params:
+      - {name: region,    required: false, format: "exchange region code",        example: "US"}
+      - {name: exchange,  required: false, format: "exchange code",               example: "NASDAQ"}
+      - {name: ordering,  required: false, format: "symbol|-symbol",             example: "symbol"}
+      - {name: page,      required: false, format: "integer"}
+      - {name: page_size, required: false, format: "integer, max 1000"}
+      - {name: format,    required: false, format: "json|csv"}
+    gotchas:
+      - "⚠️ stock symbol format is region:ticker (e.g. US:AAPL); valid region/exchange values can be obtained via 'List of stock exchanges'"
+    example:
+      name: "List of stock symbols"
+      params: {region: "US", page_size: 50}
+
+  - name: "List of crypto exchanges"
+    summary: "list of all crypto exchange codes"
+    params:
+      - {name: format, required: false, format: "json|csv"}
+    example:
+      name: "List of crypto exchanges"
+      params: {}
+
+  - name: "List of crypto pairs"
+    summary: "list of crypto pairs (filterable by base / quote)"
+    params:
+      - {name: base,      required: false, format: "base currency code", example: "BTC"}
+      - {name: quote,     required: false, format: "quote currency code", example: "USD"}
+      - {name: ordering,  required: false, format: "symbol|-symbol", example: "symbol"}
+      - {name: page,      required: false, format: "integer"}
+      - {name: page_size, required: false, format: "integer, max 1000"}
+      - {name: format,    required: false, format: "json|csv"}
+    example:
+      name: "List of crypto pairs"
+      params: {base: "BTC"}
+
+  - name: "List of forex pairs"
+    summary: "list of forex pairs (filterable by base / quote)"
+    params:
+      - {name: base,      required: false, format: "base currency code", example: "EUR"}
+      - {name: quote,     required: false, format: "quote currency code", example: "USD"}
+      - {name: ordering,  required: false, format: "symbol|-symbol", example: "symbol"}
+      - {name: page,      required: false, format: "integer"}
+      - {name: page_size, required: false, format: "integer, max 1000"}
+      - {name: format,    required: false, format: "json|csv"}
+    example:
+      name: "List of forex pairs"
+      params: {base: "EUR"}
+
+  - name: "List of option contracts"
+    summary: "available option contracts for a given stock (valid expirations, strikes, and contract types)"
+    params:
+      - {name: underlying,     required: true,  format: "US:TICKER",                          example: "US:SPY"}
+      - {name: contract_type,  required: false, format: "C=Call / P=Put",                     example: "C"}
+      - {name: expiration,     required: false, format: "YYYY-MM-DD, exact expiration date",  example: "2025-01-17"}
+      - {name: expiration_gte, required: false, format: "YYYY-MM-DD, expiration start"}
+      - {name: expiration_lt,  required: false, format: "YYYY-MM-DD, expiration end"}
+      - {name: ordering,       required: false, format: "expiration|strike|-expiration|-strike", example: "-expiration"}
+      - {name: page,           required: false, format: "integer"}
+      - {name: page_size,      required: false, format: "integer, max 1000"}
+      - {name: format,         required: false, format: "json|csv"}
+    gotchas:
+      - "⚠️ underlying must use stock format US:SPY, not bare ticker SPY"
+    example:
+      name: "List of option contracts"
+      params: {underlying: "US:SPY", contract_type: "C", expiration_gte: "2025-01-01"}
+
+  - name: "List of subreddits that we track"
+    summary: "list of tracked Reddit subreddits (for use with the subreddit param in reddit.yaml endpoints)"
+    params:
+      - {name: format, required: false, format: "json|csv"}
+    example:
+      name: "List of subreddits that we track"
+      params: {}

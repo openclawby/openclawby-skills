@@ -1,0 +1,42 @@
+# ============================================================================
+# Equities & Markets data — stocks / crypto / forex market data
+# ----------------------------------------------------------------------------
+# Usage: POST /api/relay   body: {"name": "<interface_name>", "params": {...}}
+# Auth:  header  X-API-Key: <your Clawby key>
+# ============================================================================
+category: "Equities & Markets (stocks · crypto · forex)"
+summary: >
+  Real-time quotes, OHLC bars, short data, dark pool, Reddit sentiment, options,
+  corporate actions (dividends/splits), per-exchange volume, and stock screener for
+  stocks/crypto/forex. Check the subcategory yaml for param details — symbol format
+  is the most common source of errors.
+
+# ⚠️⚠️ Top gotcha across all endpoints: symbol format differs by asset type — wrong format causes errors or empty results
+symbol_format:
+  stock:  "US:TICKER       e.g. US:AAPL · US:SPY · US:TSLA"
+  crypto: "BASE:USD        e.g. BTC:USD · ETH:USD     ← NOT US:xxx!"
+  forex:  "BASE:USD        e.g. EUR:USD · GBP:USD"
+  option: "option contract code  e.g. US:AAPL20240419C170  (underlying+expiryYYYYMMDD+C/P+strike)"
+
+# Common optional params (all endpoints)
+common_params:
+  page:      "page number (starting at 1)"
+  page_size: "results per page, max 1000"
+  ordering:  "sort field; prefix - for descending, e.g. -date"
+  format:    "json (default) or csv"
+
+# Subcategory list (each file details endpoints + params + gotchas)
+subcategories:
+  - {file: quotes.yaml,          desc: "real-time quotes (stock/crypto/forex)"}
+  - {file: bars.yaml,            desc: "OHLC bars (stock/crypto/forex/option)"}
+  - {file: short-data.yaml,      desc: "short data: short volume / short interest / borrow fee / FTDs"}
+  - {file: dark-pool.yaml,       desc: "dark pool: levels / prints / summary"}
+  - {file: reddit.yaml,          desc: "Reddit sentiment: mention counts / top tickers"}
+  - {file: options.yaml,         desc: "options chain summary (max pain / ITM-OTM)"}
+  - {file: corporate.yaml,       desc: "corporate actions: dividends / splits / float"}
+  - {file: exchange-volume.yaml, desc: "per-exchange volume"}
+  - {file: screener.yaml,        desc: "stock screener + filterable dimensions"}
+  - {file: reference.yaml,       desc: "reference data: exchange / symbol / contract / sector lists"}
+
+# Note: screener returns real-time data (requires an appropriate plan); quotes default to 30-minute delay —
+#       use screener for real-time stock quotes.

@@ -1,0 +1,55 @@
+# ============================================================================
+# Clawby Data Interface Catalog — Master Index
+# ----------------------------------------------------------------------------
+# How to call: POST /api/relay   body {"name": "<interface name>", "params": {...}}
+#              header  X-API-Key: <your key>
+#
+# Usage: locate the category subdirectory that matches your need, open the
+#        sub-category yaml inside it. Every interface lists its purpose /
+#        params (required · format · example) / ⚠️ common pitfalls.
+#        Always call using the param format from the yaml — that's the key to
+#        avoiding errors. (The full machine-readable list is in clawby.yaml.)
+# ============================================================================
+categories:
+  - dir: "equities/"
+    desc: "Stocks / crypto / forex: quotes · candles · short data · dark pool · Reddit sentiment · options · corporate actions · per-exchange volume · screener · reference lists"
+    count: 45
+  - dir: "derivatives/"
+    desc: "Crypto derivatives: funding rates · open interest · liquidations · long/short ratio · taker buy/sell volume · order book · price candles · market indicators · ETF · options · spot · on-chain · market lists"
+    count: 157
+  - dir: "perps/"
+    desc: "Perpetuals: whole-market data (funding / OI / mark price / candles) · spot · user positions & fills"
+    count: 13
+  - dir: "prediction-markets/"
+    desc: "Prediction markets: event / market discovery · order book & prices (CLOB) · trades & positions"
+    count: 11
+  - dir: "social/"
+    desc: "Social search: X (Twitter) · Facebook · Instagram posts / comments / profiles / topics / trends"
+    count: 21
+  - dir: "address-intel/"
+    desc: "On-chain address intel: label attribution (local / live modes) · AML risk scoring · address profile · counterparties · supported-chain lookup"
+    count: 10
+  - dir: "dex/"
+    desc: "DEX: pair / token search · pools · token quotes · promotion orders"
+    count: 8
+  - dir: "dex-trading/"
+    desc: "On-chain DEX/memecoin intelligence: token overview · security audit · pools · holders/traders · candles · trending/hot-search rankings · signals · swap quotes · gas · wallet P&L/activity/balances · smart money/KOL · new launches"
+    count: 19
+  - dir: "filings/"
+    desc: "US SEC: CIK lookup · financial concepts (XBRL) · filing history"
+    count: 3
+
+# On-chain native RPC (/api/rpc — a different endpoint from /api/relay above):
+onchain_rpc:
+  dir: "rpc/"
+  how_to_call: 'POST /api/rpc  {"chain":"<chain>","method":"<method>","params":[...]}'
+  desc: >-
+    Native JSON-RPC relay for 80+ chains. EVM chains (standard eth_*/web3_/net_) are in rpc/evm/<chain>.yaml;
+    non-EVM (solana/near/btc/xrp/polkadot/kusama/ton/sui/nervos_ckb…) are in rpc/non-evm/<chain>.yaml;
+    the full chain list + availability status (ok/needs_plan/no_nodes/unverified) is in rpc/_index.yaml. Pass the chain name when calling.
+
+# Common conventions (see subdirectories for per-category detail):
+conventions:
+  relay: 'POST /api/relay  {"name": "<interface name>", "params": {...}}'
+  common_params: "Most list-type interfaces support page / page_size (or per_page) / ordering / format"
+  on_error: "On a param error, first check the params and gotchas in that interface's sub-category yaml — verify required fields and formats"

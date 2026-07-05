@@ -1,0 +1,94 @@
+# ============================================================================
+# Derivatives — Open Interest
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Open Interest"
+
+gotchas_for_all:
+  - "⚠️ Single-pair endpoint (futures_open_interest_history): use exchange + symbol=BTCUSDT (pair format) + interval"
+  - "⚠️ Aggregated endpoint (aggregated_history): use symbol=BTC (coin name), no exchange needed"
+  - "⚠️ stablecoin / coin_margin endpoints: use exchange_list (comma-separated) + symbol=BTC + interval"
+  - "⚠️ unit: usd (USD-denominated) or coin (coin-quantity), defaults to usd"
+  - "⚠️ Response is {code, data}; success only when code='0'"
+
+interfaces:
+  - name: "futures_open_interest_history"
+    summary: "Single-pair OI OHLC history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT", note: "⚠️ use trading pair format"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: unit, required: false, format: "usd/coin", example: "usd"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ Use BTCUSDT not BTC; passing BTC returns 'pair does not exist'"
+    example:
+      name: "futures_open_interest_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_open_interest_aggregated_history"
+    summary: "Aggregated OI OHLC history across all exchanges (by coin)"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ use coin name BTC, not BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: unit, required: false, format: "usd/coin", example: "usd"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ Aggregated endpoint; symbol uses coin name BTC"
+    example:
+      name: "futures_open_interest_aggregated_history"
+      params: {symbol: "BTC", interval: "1h"}
+
+  - name: "futures_open_interest_aggregated_stablecoin_history"
+    summary: "Aggregated stablecoin-margin OI OHLC history"
+    params:
+      - {name: exchange_list, required: true, format: "comma-separated exchange names", example: "Binance,OKX", note: "⚠️ use exchange_list, not exchange"}
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ param is exchange_list (comma-separated string), not exchange"
+    example:
+      name: "futures_open_interest_aggregated_stablecoin_history"
+      params: {exchange_list: "Binance,OKX", symbol: "BTC", interval: "1h"}
+
+  - name: "futures_open_interest_aggregated_coin_margin_history"
+    summary: "Aggregated coin-margined OI OHLC history"
+    params:
+      - {name: exchange_list, required: true, format: "comma-separated exchange names", example: "Binance,OKX"}
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ param is exchange_list (comma-separated string)"
+    example:
+      name: "futures_open_interest_aggregated_coin_margin_history"
+      params: {exchange_list: "Binance,OKX", symbol: "BTC", interval: "1h"}
+
+  - name: "futures_open_interest_exchange_list"
+    summary: "Current OI snapshot comparison across exchanges for a given coin"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+    example:
+      name: "futures_open_interest_exchange_list"
+      params: {symbol: "BTC"}
+
+  - name: "futures_open_interest_exchange_history_chart"
+    summary: "OI historical trend broken down by exchange (chart format)"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: range, required: true, format: "all/1m/15m/1h/4h/12h", example: "4h", note: "time range, not interval"}
+      - {name: unit, required: false, format: "usd/coin", example: "usd"}
+    gotchas:
+      - "⚠️ time-range param is named range, not interval; values are all/1m/15m/1h/4h/12h"
+    example:
+      name: "futures_open_interest_exchange_history_chart"
+      params: {symbol: "BTC", range: "4h"}

@@ -1,0 +1,4 @@
+.DS_Store
+# 用户本地状态(仓库只保留 local/README.md 占位)
+clawby-data/local/*
+!clawby-data/local/README.md

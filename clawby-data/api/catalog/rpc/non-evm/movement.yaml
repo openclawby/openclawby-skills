@@ -1,0 +1,67 @@
+# ============================================================================
+# Movement REST API — movement
+# Movement Labs' Ethereum L2 built on MoveVM; REST interface is isomorphic to Aptos
+# ============================================================================
+chain: "movement"
+type: "Movement(REST)"
+slug: movement
+status: unverified             # not verified on the current key; availability depends on the plan
+api_style: REST
+how_to_call: 'POST /api/rpc  {"chain":"movement","method":"<method>","params":[...]}'
+notes:
+  - "⚠️ This chain uses the Movement REST API, not standard JSON-RPC; /api/rpc primarily proxies JSON-RPC so this chain may not work — the paths below are the main REST resources for reference"
+  - "⚠️ not verified on the current key; availability depends on the plan"
+  - "Movement is an Ethereum L2 built on MoveVM; its REST API structure is fully isomorphic to Aptos; base path is /v1/; responses are JSON"
+  - "Write operations (Submit transaction) use POST with a JSON/BCS body, which differs from JSON-RPC format"
+endpoints_or_methods:
+  # Accounts
+  - path: "GET /v1/accounts/{address}"
+    summary: "Returns the account's authentication_key and sequence_number"
+  - path: "GET /v1/accounts/{address}/resources"
+    summary: "Returns all Move resources for the account at the specified ledger_version"
+  - path: "GET /v1/accounts/{address}/modules"
+    summary: "Returns all module bytecode for the account at the specified ledger_version"
+  - path: "GET /v1/accounts/{address}/resource/{resource_type}"
+    summary: "Returns a single Move resource for the account (by type name)"
+  - path: "GET /v1/accounts/{address}/module/{module_name}"
+    summary: "Returns a single module's bytecode for the account (by module name)"
+  # Blocks
+  - path: "GET /v1/blocks/by_height/{block_height}"
+    summary: "Returns block info and transaction list by block height"
+  - path: "GET /v1/blocks/by_version/{version}"
+    summary: "Returns block info by ledger version"
+  # Events
+  - path: "GET /v1/accounts/{address}/events/{creation_number}"
+    summary: "Returns event list by event creation_number"
+  - path: "GET /v1/accounts/{address}/events/{event_handle}/{field_name}"
+    summary: "Returns event list by event handle and field name"
+  # General
+  - path: "GET /v1/"
+    summary: "Returns the latest ledger info (chain_id / epoch / ledger_version / block_height, etc.)"
+  # Table
+  - path: "POST /v1/tables/{table_handle}/item"
+    summary: "Reads a Move Table entry by key_type + value_type + key"
+  - path: "POST /v1/tables/{table_handle}/raw_item"
+    summary: "Reads a Move Table entry by raw hex key (returns BCS format)"
+  # Transactions
+  - path: "GET /v1/transactions"
+    summary: "Returns the list of submitted on-chain transactions (paginated)"
+  - path: "POST /v1/transactions"
+    summary: "Submits a transaction (JSON or BCS SignedTransaction format)"
+  - path: "GET /v1/transactions/by_hash/{txn_hash}"
+    summary: "Queries a transaction by hash (includes pending transactions in mempool)"
+  - path: "GET /v1/transactions/by_version/{txn_version}"
+    summary: "Queries a confirmed transaction by ledger version"
+  - path: "GET /v1/accounts/{address}/transactions"
+    summary: "Returns the account's on-chain submitted transactions"
+  - path: "POST /v1/transactions/batch"
+    summary: "Submits multiple transactions in a batch"
+  - path: "POST /v1/transactions/simulate"
+    summary: "Simulates a transaction (not broadcast to chain; returns execution result)"
+  - path: "POST /v1/transactions/encode_submission"
+    summary: "Encodes a UserTransactionRequestInner JSON into BCS"
+  - path: "GET /v1/estimate_gas_price"
+    summary: "Estimates the current recommended gas unit price"
+  # View
+  - path: "POST /v1/view"
+    summary: "Executes a Move module's view function and returns the result (read-only, not broadcast to chain)"

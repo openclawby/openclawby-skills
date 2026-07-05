@@ -1,0 +1,106 @@
+# ============================================================================
+# Derivatives — Long/Short Ratio
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Long/Short Ratio"
+
+gotchas_for_all:
+  - "⚠️ Most endpoints use exchange + symbol=BTCUSDT (trading pair format) + interval"
+  - "⚠️ Hyperliquid endpoints use symbol=BTC (coin name format); no exchange param"
+  - "⚠️ bitfinex_margin_long_short uses symbol=BTC (coin name) + interval, not trading pair"
+  - "⚠️ Common interval values: 1h / 4h / 1d"
+  - "⚠️ Response is {code, data}; code='0' means success"
+
+interfaces:
+  - name: "futures_global_long_short_account_ratio_history"
+    summary: "Global long/short account ratio history (for an exchange and trading pair)"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT", note: "⚠️ use trading pair format"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_global_long_short_account_ratio_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_top_long_short_account_ratio_history"
+    summary: "Top trader long/short account ratio history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT", note: "⚠️ use trading pair format"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_top_long_short_account_ratio_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_top_long_short_position_ratio_history"
+    summary: "Top trader long/short position ratio history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT", note: "⚠️ use trading pair format"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_top_long_short_position_ratio_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_net_position_history"
+    summary: "Net long/short position history (for an exchange and trading pair)"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_net_position_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_v2_net_position_history"
+    summary: "Net long/short position history v2 (for an exchange and trading pair)"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_v2_net_position_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "hyperliquid_global_long_short_account_ratio_history"
+    summary: "Hyperliquid global long/short account ratio history"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ Hyperliquid endpoint uses coin name BTC; no exchange param"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ Do not pass exchange for Hyperliquid endpoints; symbol must be BTC not BTCUSDT"
+    example:
+      name: "hyperliquid_global_long_short_account_ratio_history"
+      params: {symbol: "BTC", interval: "1h"}
+
+  - name: "bitfinex_margin_long_short"
+    summary: "Bitfinex margin long/short position history"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ use coin name BTC, not BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ symbol uses coin name BTC, not trading pair format"
+    example:
+      name: "bitfinex_margin_long_short"
+      params: {symbol: "BTC", interval: "1h"}

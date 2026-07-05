@@ -1,0 +1,81 @@
+# ============================================================================
+# Derivatives — Funding Rate
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Funding Rate"
+
+gotchas_for_all:
+  - "⚠️ Single-pair endpoint (futures_funding_rate_history) requires exchange + symbol=BTCUSDT (trading pair format) + interval"
+  - "⚠️ Aggregate endpoints (oi_weight / vol_weight) require symbol=BTC (coin name, no USDT); no exchange needed"
+  - "⚠️ Common interval values: 1h / 4h / 1d"
+  - "⚠️ Response is {code, data}; code='0' means success"
+
+interfaces:
+  - name: "futures_funding_rate_history"
+    summary: "Per-pair funding rate OHLC history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair (USDT suffix)", example: "BTCUSDT", note: "⚠️ use trading pair format, not plain coin name BTC"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer, max rows to return"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ symbol must be BTCUSDT not BTC; using BTC will return 'pair does not exist'"
+    example:
+      name: "futures_funding_rate_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_funding_rate_oi_weight_history"
+    summary: "OI-weighted funding rate OHLC history (aggregated across exchanges)"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ use coin name BTC, not BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ This is an aggregate endpoint; symbol must be the coin name BTC; BTCUSDT will cause an error"
+    example:
+      name: "futures_funding_rate_oi_weight_history"
+      params: {symbol: "BTC", interval: "1h"}
+
+  - name: "futures_funding_rate_vol_weight_history"
+    summary: "Volume-weighted funding rate OHLC history (aggregated across exchanges)"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ use coin name BTC, not BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ Aggregate endpoint; symbol must be coin name BTC"
+    example:
+      name: "futures_funding_rate_vol_weight_history"
+      params: {symbol: "BTC", interval: "1h"}
+
+  - name: "futures_funding_rate_exchange_list"
+    summary: "Current funding rate snapshot across exchanges (stablecoin-margin & coin-margined)"
+    params: []
+    example:
+      name: "futures_funding_rate_exchange_list"
+      params: {}
+
+  - name: "futures_funding_rate_accumulated_exchange_list"
+    summary: "Cumulative funding rate rankings by coin across exchanges"
+    params:
+      - {name: range, required: true, format: "1d/7d/30d/365d", example: "7d"}
+    example:
+      name: "futures_funding_rate_accumulated_exchange_list"
+      params: {range: "7d"}
+
+  - name: "futures_funding_rate_arbitrage"
+    summary: "Cross-exchange funding rate arbitrage opportunity list"
+    params:
+      - {name: usd, required: true, format: "principal amount (number, USD)", example: 10000, note: "use a number, not a string"}
+      - {name: exchange_list, required: false, format: "comma-separated exchange names", example: "Binance,OKX,Bybit"}
+    gotchas:
+      - "⚠️ usd must be a number (e.g. 10000); do not quote it"
+    example:
+      name: "futures_funding_rate_arbitrage"
+      params: {usd: 10000}

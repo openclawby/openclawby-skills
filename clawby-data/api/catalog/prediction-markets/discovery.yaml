@@ -1,0 +1,68 @@
+# ============================================================================
+# Prediction Markets — Discovery (Browse / Explore)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Prediction Markets — Discovery (Browse / Explore)"
+note: >
+  Discovery interfaces are for browsing events, markets, and category tags. Start with polymarket_events (event level,
+  each event can include multiple markets), then take token_id from clobTokenIds and pass it to clob.yaml endpoints.
+
+interfaces:
+  - name: "polymarket_events"
+    summary: "Browse prediction market event list (each event contains one or more sub-markets)"
+    params:
+      - {name: active,    required: false, format: "true|false", example: true,          note: "defaults to true, returns only active events"}
+      - {name: closed,    required: false, format: "true|false", example: false,         note: "defaults to false, excludes ended events"}
+      - {name: limit,     required: false, format: "integer 1-500", example: 20,         note: "default 20"}
+      - {name: offset,    required: false, format: "integer",       example: 0,          note: "pagination offset; response includes has_more field"}
+      - {name: order,     required: false, format: "volume_24hr|volume|liquidity|start_date|end_date|competitive", example: "volume_24hr"}
+      - {name: ascending, required: false, format: "true|false", example: false}
+      - {name: tag_id,    required: false, format: "integer",                            note: "category id, taken from polymarket_tags response"}
+      - {name: series_id, required: false, format: "integer",                            note: "sports series id, taken from polymarket_sports"}
+      - {name: slug,      required: false, format: "event slug string",                  note: "exact match for a specific event"}
+    gotchas:
+      - "Prefer events over markets: one event aggregates multiple markets, reducing call count"
+      - "Each market has a clobTokenIds array — the only source of token_ids for CLOB endpoints"
+      - "Pagination: use offset to continue when has_more=true"
+    example:
+      name: "polymarket_events"
+      params: {limit: 5, order: "volume_24hr", ascending: false}
+
+  - name: "polymarket_markets"
+    summary: "Query outcome tokens, prices, and order book flags for a prediction market"
+    params:
+      - {name: slug,      required: false, format: "market slug string",   note: "exact match for a specific market"}
+      - {name: limit,     required: false, format: "integer", example: 20}
+      - {name: offset,    required: false, format: "integer", example: 0}
+      - {name: active,    required: false, format: "true|false", example: true}
+      - {name: closed,    required: false, format: "true|false", example: false}
+      - {name: order,     required: false, format: "liquidity|volume24hr"}
+      - {name: ascending, required: false, format: "true|false"}
+    gotchas:
+      - "Key field clobTokenIds: JSON array where each element is an outcome token's token_id; pass to orderbook / price / midpoint / spread / price_history"
+      - "Markets with enableOrderBook=false cannot use order book endpoints; only lastTradePrice is available"
+      - "neg_risk=true indicates a negative-risk market; outcome token pricing logic is inverted vs. normal markets"
+      - "conditionId is the unique market identifier; used as the market param in polymarket_trades"
+    example:
+      name: "polymarket_markets"
+      params: {limit: 5, active: true}
+
+  - name: "polymarket_tags"
+    summary: "Fetch all category tags (politics/sports/crypto etc.) for filtering events"
+    params:
+      - {name: limit,  required: false, format: "integer", example: 50}
+      - {name: offset, required: false, format: "integer", example: 0}
+    gotchas:
+      - "The returned id field is the tag_id; pass it directly to polymarket_events' tag_id param"
+    example:
+      name: "polymarket_tags"
+      params: {limit: 50}
+
+  - name: "polymarket_sports"
+    summary: "Fetch sports series metadata (league/event ids) for filtering sports prediction events"
+    params: []
+    gotchas:
+      - "No required params; pass the returned series_id to polymarket_events' series_id param"
+    example:
+      name: "polymarket_sports"
+      params: {}

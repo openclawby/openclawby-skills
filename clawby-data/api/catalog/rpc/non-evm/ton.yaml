@@ -1,0 +1,151 @@
+# ============================================================================
+# Non-EVM RPC — ton
+# Call: POST /api/rpc   body {"chain":"ton","method":"<method>","params":{...}}
+# ============================================================================
+chain: "ton"
+type: "TON"
+slug: "ton_api_v2"
+status: ok
+how_to_call: 'POST /api/rpc  {"chain":"ton","method":"<method>","params":{...}}'
+notes:
+  - "TON JSON-RPC params is an object (key-value pairs), not an array — unlike EVM/Substrate"
+  - "TON addresses come in multiple formats: raw (0:HEX64) / user-friendly bounceable (EQ...) / non-bounceable (UQ...); using bounceable format consistently is recommended"
+  - "Balance unit is nanoton (1 TON = 10^9 nanoton); Jetton token balances must be read via runGetMethod"
+  - "Logical time lt is used to locate transactions; combining lt+hash in getTransactions enables pagination"
+  - "runGetMethod can call any smart contract get method; useful for querying Jetton/NFT data"
+  - "The body parameter for estimateFee is a base64-encoded BOC (bag-of-cells)"
+methods:
+  - name: getAddressInformation
+    summary: "Returns basic account info: balance/code/data/last_transaction_id/state (active/uninitialized/frozen)"
+    params: "{address} — TON account address (any format)"
+    example: {"chain":"ton","method":"getAddressInformation","params":{"address":"EQD5dunJah1URq6Hffu7SEpCSOd5PnuzxiqgoRHvkSN-q19W"}}
+
+  - name: getExtendedAddressInformation
+    summary: "Returns extended account info, attempting to parse known contract types (based on getAccountState); use getWalletInformation for wallet detection"
+    params: "{address}"
+    example: {"chain":"ton","method":"getExtendedAddressInformation","params":{"address":"EQD5dunJah1URq6Hffu7SEpCSOd5PnuzxiqgoRHvkSN-q19W"}}
+
+  - name: getWalletInformation
+    summary: "Parses wallet contract state; supports simple/standard/v3/v4 and other wallet types; returns wallet_type/seqno"
+    params: "{address}"
+    example: {"chain":"ton","method":"getWalletInformation","params":{"address":"EQD5dunJah1URq6Hffu7SEpCSOd5PnuzxiqgoRHvkSN-q19W"}}
+
+  - name: getAddressBalance
+    summary: "Returns the account balance (nanoton string)"
+    params: "{address}"
+    example: {"chain":"ton","method":"getAddressBalance","params":{"address":"EQD5dunJah1URq6Hffu7SEpCSOd5PnuzxiqgoRHvkSN-q19W"}}
+
+  - name: getAddressState
+    summary: "Returns the account state: 'active' / 'uninitialized' / 'frozen'"
+    params: "{address}"
+    example: {"chain":"ton","method":"getAddressState","params":{"address":"EQD5dunJah1URq6Hffu7SEpCSOd5PnuzxiqgoRHvkSN-q19W"}}
+
+  - name: getTransactions
+    summary: "Returns the historical transaction list for the specified account; supports lt+hash pagination; set archival=true to use a full-history node"
+    params: "{address, limit?(default=10,max=100), lt?, hash?, to_lt?, archival?}"
+    example: {"chain":"ton","method":"getTransactions","params":{"address":"EQD5dunJah1URq6Hffu7SEpCSOd5PnuzxiqgoRHvkSN-q19W","limit":10}}
+
+  - name: packAddress
+    summary: "Converts a raw address (0:HEX) to the user-friendly bounceable base64url format"
+    params: "{address} — raw format, e.g. '0:83dfd552...'"
+    example: {"chain":"ton","method":"packAddress","params":{"address":"0:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8"}}
+
+  - name: unpackAddress
+    summary: "Converts a user-friendly address (EQ.../UQ...) to raw format (0:HEX)"
+    params: "{address} — friendly format, e.g. 'EQCD39VS5...'"
+    example: {"chain":"ton","method":"unpackAddress","params":{"address":"EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N"}}
+
+  - name: detectAddress
+    summary: "Returns all possible formats for an address: raw/bounceable/non_bounceable/given_type/test_only"
+    params: "{address}"
+    example: {"chain":"ton","method":"detectAddress","params":{"address":"EQD5dunJah1URq6Hffu7SEpCSOd5PnuzxiqgoRHvkSN-q19W"}}
+
+  - name: getTokenData
+    summary: "Returns NFT or Jetton contract info (total_supply/mintable/jetton_content/contract_type, etc.)"
+    params: "{address} — NFT collection/item or Jetton master/wallet contract address"
+    example: {"chain":"ton","method":"getTokenData","params":{"address":"EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs"}}
+
+  - name: getMasterchainInfo
+    summary: "Returns the current masterchain state (latest block seqno/root_hash/file_hash and init block info)"
+    params: "{}"
+    example: {"chain":"ton","method":"getMasterchainInfo","params":{}}
+
+  - name: getMasterchainBlockSignatures
+    summary: "Returns the validator signature list for the specified masterchain block"
+    params: "{seqno} — masterchain block sequence number (integer)"
+    example: {"chain":"ton","method":"getMasterchainBlockSignatures","params":{"seqno":39064865}}
+
+  - name: getShardBlockProof
+    summary: "Returns the verifiable proof chain for the specified shard block relative to the masterchain"
+    params: "{workchain, shard, seqno, from_seqno?} — workchain=-1 is masterchain; shard=-9223372036854775808 is the masterchain shard"
+    example: {"chain":"ton","method":"getShardBlockProof","params":{"workchain":-1,"shard":-9223372036854775808,"seqno":39064865}}
+
+  - name: getConsensusBlock
+    summary: "Returns the current consensus block sequence number and its update timestamp"
+    params: "{}"
+    example: {"chain":"ton","method":"getConsensusBlock","params":{}}
+
+  - name: lookupBlock
+    summary: "Looks up a block by workchain/shard/seqno (or lt/unixtime); returns the full blockIdExt"
+    params: "{workchain, shard, seqno, lt?, unixtime?}"
+    example: {"chain":"ton","method":"lookupBlock","params":{"workchain":-1,"shard":-9223372036854775808,"seqno":39064985}}
+
+  - name: shards
+    summary: "Returns the list of all shard chain info for the specified masterchain block"
+    params: "{seqno} — masterchain block sequence number"
+    example: {"chain":"ton","method":"shards","params":{"seqno":39064985}}
+
+  - name: getBlockTransactions
+    summary: "Returns the transaction summary list for the specified block (shortTxId: account/lt/hash); supports after_lt+after_hash pagination"
+    params: "{workchain, shard, seqno, root_hash?, file_hash?, after_lt?, after_hash?, count?(default=40)}"
+    example: {"chain":"ton","method":"getBlockTransactions","params":{"workchain":-1,"shard":-9223372036854775808,"seqno":39064985}}
+
+  - name: getBlockTransactionsExt
+    summary: "Returns the full transaction list for the specified block (raw.transaction objects including in_msg/out_msgs/fee)"
+    params: "{workchain, shard, seqno, root_hash?, file_hash?, after_lt?, after_hash?, count?(default=40)}"
+    example: {"chain":"ton","method":"getBlockTransactionsExt","params":{"workchain":-1,"shard":-9223372036854775808,"seqno":39064985}}
+
+  - name: getBlockHeader
+    summary: "Returns the header metadata for the specified block (global_id/flags/start_lt/end_lt/gen_utime/prev_blocks, etc.)"
+    params: "{workchain, shard, seqno, root_hash?, file_hash?}"
+    example: {"chain":"ton","method":"getBlockHeader","params":{"workchain":-1,"shard":-9223372036854775808,"seqno":39064985}}
+
+  - name: getOutMsgQueueSizes
+    summary: "Returns the current outbound message queue size per shard and ext_msg_queue_size_limit"
+    params: "{}"
+    example: {"chain":"ton","method":"getOutMsgQueueSizes","params":{}}
+
+  - name: tryLocateTx
+    summary: "Locates the outbound transaction for a destination address by source+destination+created_lt (triggered by an inbound message)"
+    params: "{source, destination, created_lt} — created_lt is a string"
+    example: {"chain":"ton","method":"tryLocateTx","params":{"source":"UQAX2d4C2d48JeA-0y2_peGabRVumnKY22xPvkuEayC3zTI1","destination":"UQBP4mzpDIywL1SV-Wp9ZuBBlzprR9eXQgSYGEXiUEHm73vA","created_lt":"47597573000002"}}
+
+  - name: tryLocateResultTx
+    summary: "Same as tryLocateTx; locates the outbound result transaction for a destination address by inbound message"
+    params: "{source, destination, created_lt}"
+    example: {"chain":"ton","method":"tryLocateResultTx","params":{"source":"UQAX2d4C2d48JeA-0y2_peGabRVumnKY22xPvkuEayC3zTI1","destination":"UQBP4mzpDIywL1SV-Wp9ZuBBlzprR9eXQgSYGEXiUEHm73vA","created_lt":"47597573000002"}}
+
+  - name: tryLocateSourceTx
+    summary: "Locates the inbound source transaction for a source address by outbound message"
+    params: "{source, destination, created_lt}"
+    example: {"chain":"ton","method":"tryLocateSourceTx","params":{"source":"UQAX2d4C2d48JeA-0y2_peGabRVumnKY22xPvkuEayC3zTI1","destination":"UQBP4mzpDIywL1SV-Wp9ZuBBlzprR9eXQgSYGEXiUEHm73vA","created_lt":"47597573000002"}}
+
+  - name: getConfigParam
+    summary: "Returns the chain configuration parameter for the specified config_id (TVM cell format)"
+    params: "{config_id(integer), seqno?} — omit seqno for the latest state"
+    example: {"chain":"ton","method":"getConfigParam","params":{"config_id":5}}
+
+  - name: getConfigAll
+    summary: "Returns the full chain configuration (all config parameters, TVM cell format)"
+    params: "{seqno?}"
+    example: {"chain":"ton","method":"getConfigAll","params":{}}
+
+  - name: runGetMethod
+    summary: "Executes a smart contract get method (read-only, not on-chain); suitable for querying Jetton balances/NFT data, etc."
+    params: "{address, method(string), stack?(array)} — stack element format: ['tvm.Slice'|'num'|..., value]"
+    example: {"chain":"ton","method":"runGetMethod","params":{"address":"EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs","method":"get_wallet_address","stack":[]}}
+
+  - name: estimateFee
+    summary: "Estimates transaction fees (in_fwd_fee/storage_fee/gas_fee/fwd_fee); body is base64 BOC"
+    params: "{address, body(base64), ignore_chksig?(bool)}"
+    example: {"chain":"ton","method":"estimateFee","params":{"address":"EQBVbC7Hu-g3htYXzst8L5ucV76NMzeBK3URJKebN2Y1k55Q","body":"te6ccgEB...","ignore_chksig":false}}

@@ -1,0 +1,89 @@
+# ============================================================================
+# Clawby On-chain RPC (/api/rpc) — Master Index
+# ============================================================================
+how_to_call: 'POST /api/rpc  {"chain":"<chain>","method":"<method>","params":[...]}  header X-API-Key'
+note: >
+  Multi-chain JSON-RPC relay. EVM chain methods are in evm/<chain>.yaml (standard eth_*/web3_/net_, identical across
+  all EVM chains, only chain/chain_id differ); non-EVM chain methods are in non-evm/<chain>.yaml. When calling, pass
+  the chain name below as `chain` (not the internal slug).
+status_legend:
+  ok: "verified working"
+  no_nodes: "no nodes for this chain currently"
+  unverified: "not verified on the current key; availability depends on the plan"
+evm_chains:   # 53 chains — standard EVM JSON-RPC; see evm/<chain>.yaml
+  - {chain: "arbitrum", chain_id: 42161, status: ok}
+  - {chain: "arbitrum_nova", chain_id: 42170, status: ok}
+  - {chain: "avalanche", chain_id: 43114, status: ok}
+  - {chain: "b2", chain_id: 223, status: ok}
+  - {chain: "bahamut", chain_id: null, status: no_nodes}
+  - {chain: "base", chain_id: 8453, status: ok}
+  - {chain: "bitlayer", chain_id: 200901, status: ok}
+  - {chain: "blast", chain_id: 81457, status: ok}
+  - {chain: "bsc", chain_id: 56, status: ok}
+  - {chain: "celo", chain_id: 42220, status: ok}
+  - {chain: "chiliz", chain_id: 88888, status: ok}
+  - {chain: "core", chain_id: 1116, status: ok}
+  - {chain: "corn", chain_id: 21000000, status: ok}
+  - {chain: "electroneum", chain_id: 52014, status: ok}
+  - {chain: "eth", chain_id: 1, status: ok}
+  - {chain: "etherlink", chain_id: 42793, status: ok}
+  - {chain: "fantom", chain_id: 250, status: ok}
+  - {chain: "filecoin", chain_id: 314, status: ok}
+  - {chain: "flare", chain_id: 14, status: ok}
+  - {chain: "gnosis", chain_id: 100, status: ok}
+  - {chain: "gravity", chain_id: 1625, status: ok}
+  - {chain: "harmony", chain_id: 1666600000, status: ok}
+  - {chain: "horizen_eon", chain_id: 7332, status: ok}
+  - {chain: "iota_evm", chain_id: 8822, status: ok}
+  - {chain: "iotex", chain_id: 4689, status: ok}
+  - {chain: "kaia", chain_id: 8217, status: ok}
+  - {chain: "kava", chain_id: 2222, status: ok}
+  - {chain: "kite", chain_id: 2366, status: ok}
+  - {chain: "linea", chain_id: 59144, status: ok}
+  - {chain: "mantle", chain_id: 5000, status: ok}
+  - {chain: "matchain", chain_id: 698, status: ok}
+  - {chain: "metis", chain_id: 1088, status: ok}
+  - {chain: "moonbeam", chain_id: 1284, status: ok}
+  - {chain: "optimism", chain_id: 10, status: ok}
+  - {chain: "polygon", chain_id: 137, status: ok}
+  - {chain: "polygon_zkevm", chain_id: 1101, status: ok}
+  - {chain: "rollux", chain_id: 570, status: ok}
+  - {chain: "scroll", chain_id: 534352, status: ok}
+  - {chain: "sei", chain_id: 1329, status: ok}
+  - {chain: "sonic", chain_id: 146, status: ok}
+  - {chain: "story", chain_id: 1514, status: ok}
+  - {chain: "swell", chain_id: 1923, status: ok}
+  - {chain: "syscoin", chain_id: 57, status: ok}
+  - {chain: "tac", chain_id: 239, status: ok}
+  - {chain: "taiko", chain_id: 167000, status: ok}
+  - {chain: "telos", chain_id: 40, status: ok}
+  - {chain: "tenet", chain_id: 1559, status: ok}
+  - {chain: "tron", chain_id: 728126428, status: ok}
+  - {chain: "xai", chain_id: 660279, status: ok}
+  - {chain: "xdc", chain_id: 50, status: ok}
+  - {chain: "xlayer", chain_id: 196, status: ok}
+  - {chain: "xphere", chain_id: 20250217, status: ok}
+  - {chain: "zksync_era", chain_id: 324, status: ok}
+non_evm_chains:   # 22 chains — see non-evm/<chain>.yaml
+  - {chain: "allora", type: "non-EVM", status: unverified}
+  - {chain: "aptos", type: "Aptos(REST)", status: no_nodes}
+  - {chain: "atleta", type: "EVM", status: unverified}
+  - {chain: "avail", type: "non-EVM", status: unverified}
+  - {chain: "btc", type: "Bitcoin", status: ok}
+  - {chain: "eth_beacon", type: "Beacon", status: unverified}
+  - {chain: "fuel", type: "Fuel(GraphQL)", status: unverified}
+  - {chain: "gnosis_beacon", type: "Beacon", status: unverified}
+  - {chain: "iota", type: "non-EVM", status: unverified}
+  - {chain: "kusama", type: "Kusama(Substrate)", status: ok}
+  - {chain: "midnight", type: "non-EVM", status: unverified}
+  - {chain: "monad", type: "EVM", status: unverified}
+  - {chain: "movement", type: "Movement(REST)", status: unverified}
+  - {chain: "near", type: "NEAR", status: ok}
+  - {chain: "nervos_ckb", type: "Nervos-CKB", status: ok}
+  - {chain: "polkadot", type: "Polkadot(Substrate)", status: ok}
+  - {chain: "secret_network", type: "Secret(Cosmos REST/gRPC)", status: unverified}
+  - {chain: "solana", type: "Solana", status: ok}
+  - {chain: "stellar", type: "Stellar(Horizon REST)", status: unverified}
+  - {chain: "sui", type: "Sui", status: ok}
+  - {chain: "ton", type: "TON", status: ok}
+  - {chain: "xrp", type: "XRPL", status: ok}

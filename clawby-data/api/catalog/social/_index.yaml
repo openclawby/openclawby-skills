@@ -1,0 +1,50 @@
+# ============================================================================
+# Social — Index
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Social (X / Facebook / Instagram)"
+total_interfaces: 21
+
+subcategories:
+  - file: x.yaml
+    platform: "X / Twitter"
+    count: 9
+    interfaces:
+      - x_search
+      - x_post
+      - x_post_retweeters
+      - x_user_posts
+      - x_user_posts_search
+      - x_replies
+      - x_post_replies
+      - x_trends
+      - x_posts_by_urls
+
+  - file: facebook.yaml
+    platform: "Facebook"
+    count: 6
+    interfaces:
+      - facebook_search
+      - facebook_post
+      - facebook_comments
+      - facebook_profile
+      - facebook_profile_posts
+      - facebook_hashtag
+
+  - file: instagram.yaml
+    platform: "Instagram"
+    count: 6
+    interfaces:
+      - instagram_search
+      - instagram_media
+      - instagram_comments
+      - instagram_profile
+      - instagram_profile_posts
+      - instagram_hashtag
+
+common_gotchas:
+  - "All search interfaces (x_search / facebook_search / instagram_search) require the query param — missing it returns 422"
+  - "Path-style ID params (post_id / media_id / profile_id / tag / username) must exist; use the corresponding search interface to retrieve them first"
+  - "X handle params have no @; x_user_posts uses username, x_user_posts_search / x_replies use user — they are not interchangeable"
+  - "x_trends: woeid=1 is global trends; count minimum is 30"
+  - "instagram_search occasionally times out; retry or reduce count"

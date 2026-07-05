@@ -1,0 +1,53 @@
+# ============================================================================
+# DEX Trading Data Category Index (on-chain DEX / memecoin intelligence)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+#        header  X-API-Key: <your key>
+# ============================================================================
+category: "DEX Trading Data (on-chain / memecoin)"
+description: >-
+  On-chain DEX and memecoin intelligence: token quotes / security audits / pools, holders and traders, candlesticks,
+  trending and hot-search rankings, signals, swap quotes and gas, wallet P&L and activity, smart money / KOL wallets, new launches (trenches).
+  Covers Solana / BSC / Base / Ethereum (some endpoints also support tron / monad / hyperevm).
+  Read-only data queries only; swap execution / order submission goes through the executor, not this relay.
+
+files:
+  - file: "token.yaml"
+    summary: "Single token: overview / security / pools / holders / traders / candlesticks"
+    interfaces:
+      - dex_token_info            # token overview (price / market cap / liquidity / socials)
+      - dex_token_security        # security / risk audit (honeypot / permissions / concentration / burn)
+      - dex_token_pool            # liquidity pools (reserves / quote token)
+      - dex_token_holders         # top holders
+      - dex_token_traders         # top traders (by realized P&L)
+      - dex_token_kline           # OHLC candlesticks
+
+  - file: "market.yaml"
+    summary: "Market rankings: trending / hot searches / signals / gas / swap quotes"
+    interfaces:
+      - dex_trending              # trending tokens (sorted by interval)
+      - dex_hot_searches          # hot-search tokens
+      - dex_token_signals         # token signals (price moves / smart money buys / large buys, etc.)
+      - dex_swap_quote            # swap quote (read-only, estimate output, no order submission)
+      - dex_gas_price             # on-chain gas / priority fee suggestions
+
+  - file: "wallet.yaml"
+    summary: "Wallets & smart money: P&L / activity / balances / token creation history + KOL / smart money rankings"
+    interfaces:
+      - dex_wallet_stats          # wallet trading stats / P&L
+      - dex_wallet_activity       # wallet trading activity (buy/sell history)
+      - dex_wallet_balance        # wallet token balances
+      - dex_wallet_created_tokens # tokens created by a wallet (dev profile)
+      - dex_kol_wallets           # KOL wallet rankings
+      - dex_smart_money           # smart money wallet rankings
+
+  - file: "launchpad.yaml"
+    summary: "New launches / launchpad: new token lists + issuance stats"
+    interfaces:
+      - dex_new_launches          # new launches (trenches): newly created / near graduation / graduated
+      - dex_launchpad_stats       # token issuance stats by launchpad
+
+gotchas_global:
+  - "Interface names start with dex_ — pass as-is in the name field; parameters go in params"
+  - "Common chain values: sol / bsc / base / eth (some endpoints also support tron / monad / hyperevm)"
+  - "address = token contract / mint address; wallet_address = wallet address; these must not be mixed up"
+  - "Use this relay for data queries only; swap / order / token launch execution goes through the executor (exec), not here"

@@ -1,0 +1,126 @@
+# ============================================================================
+# EVM RPC — iota_evm
+# Call: POST /api/rpc   body {"chain":"iota_evm","method":"<method>","params":[...]}
+# ============================================================================
+chain: "iota_evm"                 # chain param for /api/rpc
+type: EVM
+chain_id: 8822
+status: ok                   # verified working
+how_to_call: 'POST /api/rpc  {"chain":"iota_evm","method":"<method>","params":[...]}'
+notes:
+  - Standard EVM JSON-RPC; methods identical to Ethereum; block param uses latest/earliest/pending or a block-number hex
+  - Read ERC-20 (decimals/symbol/totalSupply/balanceOf) via eth_call; query transfer events via eth_getLogs
+  - These node-custodial-key methods are unsupported on public RPC (sign locally, then use eth_sendRawTransaction): eth_accounts, eth_sign, eth_signTransaction, eth_sendTransaction
+methods:
+  - name: eth_blockNumber
+    summary: "Latest block number (hex)"
+    params: "none"
+    example: {"chain":"iota_evm","method":"eth_blockNumber","params":[]}
+  - name: eth_chainId
+    summary: "Chain ID (hex)"
+    params: "none"
+    example: {"chain":"iota_evm","method":"eth_chainId","params":[]}
+  - name: eth_gasPrice
+    summary: "Current gas price (hex wei)"
+    params: "none"
+    example: {"chain":"iota_evm","method":"eth_gasPrice","params":[]}
+  - name: eth_getBalance
+    summary: "Account balance (hex wei)"
+    params: "[address, block] — block is latest/earliest/pending or a block-number hex"
+    example: {"chain":"iota_evm","method":"eth_getBalance","params":["0xADDRESS", "latest"]}
+  - name: eth_getCode
+    summary: "Contract bytecode at an address"
+    params: "[address, block]"
+    example: {"chain":"iota_evm","method":"eth_getCode","params":["0xCONTRACT", "latest"]}
+  - name: eth_getStorageAt
+    summary: "Value at a contract storage slot"
+    params: "[address, position(hex), block]"
+    example: {"chain":"iota_evm","method":"eth_getStorageAt","params":["0xCONTRACT", "0x0", "latest"]}
+  - name: eth_getTransactionCount
+    summary: "Tx count sent from an address (nonce)"
+    params: "[address, block]"
+    example: {"chain":"iota_evm","method":"eth_getTransactionCount","params":["0xADDRESS", "latest"]}
+  - name: eth_call
+    summary: "Read-only contract call (no tx); use to read ERC-20 etc."
+    params: "[{to, data, from?, value?}, block]"
+    example: {"chain":"iota_evm","method":"eth_call","params":[{"to":"0xCONTRACT","data":"0x18160ddd"}, "latest"]}
+  - name: eth_estimateGas
+    summary: "Estimate gas for a transaction"
+    params: "[{from?, to, data?, value?}]"
+    example: {"chain":"iota_evm","method":"eth_estimateGas","params":[{"to":"0xADDRESS","value":"0x1"}]}
+  - name: eth_getLogs
+    summary: "Event logs by filter (e.g. query Transfer)"
+    params: "[{fromBlock, toBlock, address?, topics?}] — very wide block ranges are limited"
+    example: {"chain":"iota_evm","method":"eth_getLogs","params":[{"fromBlock":"0x0","toBlock":"latest","address":"0xCONTRACT","topics":["0xddf252ad..."]}]}
+  - name: eth_getBlockByNumber
+    summary: "Block by number"
+    params: "[block, fullTx(bool)]"
+    example: {"chain":"iota_evm","method":"eth_getBlockByNumber","params":["latest", false]}
+  - name: eth_getBlockByHash
+    summary: "Block by hash"
+    params: "[blockHash, fullTx(bool)]"
+    example: {"chain":"iota_evm","method":"eth_getBlockByHash","params":["0xHASH", false]}
+  - name: eth_getBlockTransactionCountByNumber
+    summary: "Tx count in a block, by number"
+    params: "[block]"
+    example: {"chain":"iota_evm","method":"eth_getBlockTransactionCountByNumber","params":["latest"]}
+  - name: eth_getBlockTransactionCountByHash
+    summary: "Tx count in a block, by hash"
+    params: "[blockHash]"
+    example: {"chain":"iota_evm","method":"eth_getBlockTransactionCountByHash","params":["0xHASH"]}
+  - name: eth_getTransactionByHash
+    summary: "Transaction by hash"
+    params: "[txHash]"
+    example: {"chain":"iota_evm","method":"eth_getTransactionByHash","params":["0xTXHASH"]}
+  - name: eth_getTransactionByBlockNumberAndIndex
+    summary: "Transaction by block number + index"
+    params: "[block, index(hex)]"
+    example: {"chain":"iota_evm","method":"eth_getTransactionByBlockNumberAndIndex","params":["latest", "0x0"]}
+  - name: eth_getTransactionByBlockHashAndIndex
+    summary: "Transaction by block hash + index"
+    params: "[blockHash, index(hex)]"
+    example: {"chain":"iota_evm","method":"eth_getTransactionByBlockHashAndIndex","params":["0xHASH", "0x0"]}
+  - name: eth_getTransactionReceipt
+    summary: "Transaction receipt (status/logs/gas used)"
+    params: "[txHash]"
+    example: {"chain":"iota_evm","method":"eth_getTransactionReceipt","params":["0xTXHASH"]}
+  - name: eth_sendRawTransaction
+    summary: "Broadcast a signed transaction (sign locally first)"
+    params: "[signedTxData(hex)]"
+    example: {"chain":"iota_evm","method":"eth_sendRawTransaction","params":["0xSIGNEDTX"]}
+  - name: eth_syncing
+    summary: "Sync status (false = synced)"
+    params: "none"
+    example: {"chain":"iota_evm","method":"eth_syncing","params":[]}
+  - name: eth_getUncleCountByBlockNumber
+    summary: "Uncle count in a block, by number"
+    params: "[block]"
+    example: {"chain":"iota_evm","method":"eth_getUncleCountByBlockNumber","params":["latest"]}
+  - name: eth_getUncleCountByBlockHash
+    summary: "Uncle count in a block, by hash"
+    params: "[blockHash]"
+    example: {"chain":"iota_evm","method":"eth_getUncleCountByBlockHash","params":["0xHASH"]}
+  - name: eth_getUncleByBlockNumberAndIndex
+    summary: "Uncle by block number + index"
+    params: "[block, index(hex)]"
+    example: {"chain":"iota_evm","method":"eth_getUncleByBlockNumberAndIndex","params":["latest", "0x0"]}
+  - name: eth_getUncleByBlockHashAndIndex
+    summary: "Uncle by block hash + index"
+    params: "[blockHash, index(hex)]"
+    example: {"chain":"iota_evm","method":"eth_getUncleByBlockHashAndIndex","params":["0xHASH", "0x0"]}
+  - name: net_version
+    summary: "Network ID"
+    params: "none"
+    example: {"chain":"iota_evm","method":"net_version","params":[]}
+  - name: net_listening
+    summary: "Whether the node is listening (bool)"
+    params: "none"
+    example: {"chain":"iota_evm","method":"net_listening","params":[]}
+  - name: web3_clientVersion
+    summary: "Node client version"
+    params: "none"
+    example: {"chain":"iota_evm","method":"web3_clientVersion","params":[]}
+  - name: web3_sha3
+    summary: "Keccak-256 hash of the input"
+    params: "[data(hex)]"
+    example: {"chain":"iota_evm","method":"web3_sha3","params":["0x68656c6c6f"]}

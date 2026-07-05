@@ -1,0 +1,32 @@
+# ============================================================================
+# Prediction Markets — Activity (Trades / Positions)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Prediction Markets — Activity (Trades / Positions)"
+
+interfaces:
+  - name: "polymarket_trades"
+    summary: "Query recent trades in a prediction market"
+    params:
+      - {name: market,    required: false, format: "condition id string", note: "⚠️ Pass conditionId (from polymarket_markets), not a token_id"}
+      - {name: user,      required: false, format: "0x wallet address",   note: "Filter by wallet; can be combined with market"}
+      - {name: limit,     required: false, format: "integer", example: 20}
+      - {name: offset,    required: false, format: "integer", example: 0}
+      - {name: takerOnly, required: false, format: "true|false",          note: "true = return only taker-side fills"}
+    gotchas:
+      - "⚠️ market param takes conditionId, not token_id; they are similar in length but differ in meaning"
+      - "Both market and user are optional; omitting both returns the latest trades platform-wide"
+    example:
+      name: "polymarket_trades"
+      params: {limit: 20}
+
+  - name: "polymarket_value"
+    summary: "Query the current USD total valuation of a wallet's open positions"
+    params:
+      - {name: user, required: true, format: "complete 0x wallet address", example: "0xabc...123"}
+    gotchas:
+      - "⚠️ user is required — must be a complete 0x wallet address"
+      - "Returns the current market value (USD) of all unsettled prediction market positions in the wallet"
+    example:
+      name: "polymarket_value"
+      params: {user: "0x0000000000000000000000000000000000000001"}

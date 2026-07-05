@@ -1,0 +1,126 @@
+# ============================================================================
+# Derivatives — Taker Volume / CVD / Netflow
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Taker Volume / CVD / Netflow"
+
+gotchas_for_all:
+  - "⚠️ Single-pair endpoints (v2_taker / volume_footprint / cvd / spot_volume_ratio): use exchange + symbol=BTCUSDT"
+  - "⚠️ Aggregated endpoints (aggregated_taker / aggregated_cvd): use exchange_list (comma-separated) + symbol=BTC (coin name)"
+  - "⚠️ futures_taker_buy_sell_volume_exchange_list uses symbol=BTC + range (1h/4h/12h/24h), not interval"
+  - "⚠️ unit is usd or coin (default usd)"
+  - "⚠️ Response is {code, data}; success only when code='0'"
+
+interfaces:
+  - name: "futures_taker_buy_sell_volume_exchange_list"
+    summary: "Taker buy/sell volume ratio snapshot across exchanges for a given coin"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ use coin name BTC"}
+      - {name: range, required: true, format: "1h/4h/12h/24h", example: "4h", note: "time window, not interval"}
+    gotchas:
+      - "⚠️ param is range, not interval"
+    example:
+      name: "futures_taker_buy_sell_volume_exchange_list"
+      params: {symbol: "BTC", range: "4h"}
+
+  - name: "futures_v2_taker_buy_sell_volume_history"
+    summary: "Single-pair taker buy/sell volume history (v2)"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT", note: "⚠️ use trading pair format"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_v2_taker_buy_sell_volume_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_aggregated_taker_buy_sell_volume_history"
+    summary: "Aggregated taker buy/sell volume history across exchanges (by coin)"
+    params:
+      - {name: exchange_list, required: true, format: "comma-separated exchange names", example: "Binance,OKX"}
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ use coin name BTC"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: unit, required: false, format: "usd/coin", example: "usd"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ exchange_list is a comma-separated string, not exchange"
+    example:
+      name: "futures_aggregated_taker_buy_sell_volume_history"
+      params: {exchange_list: "Binance,OKX", symbol: "BTC", interval: "1h"}
+
+  - name: "futures_volume_footprint_history"
+    summary: "Futures footprint volume history (last 90 days)"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_volume_footprint_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_cvd_history"
+    summary: "Futures cumulative volume delta (CVD) history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_cvd_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_aggregated_cvd_history"
+    summary: "Aggregated futures CVD history across exchanges (by coin)"
+    params:
+      - {name: exchange_list, required: true, format: "comma-separated exchange names", example: "Binance,OKX"}
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: unit, required: false, format: "usd/coin", example: "usd"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_aggregated_cvd_history"
+      params: {exchange_list: "Binance,OKX", symbol: "BTC", interval: "1h"}
+
+  - name: "futures_netflow_list"
+    summary: "Futures net flow ranking list by coin"
+    params:
+      - {name: per_page, required: false, format: "integer, items per page"}
+      - {name: page, required: false, format: "integer, page number"}
+    example:
+      name: "futures_netflow_list"
+      params: {}
+
+  - name: "futures_coin_netflow"
+    summary: "Futures net flow detail for a given coin (broken down by exchange)"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: exchange_list, required: true, format: "comma-separated exchange names", example: "Binance,OKX"}
+    gotchas:
+      - "⚠️ exchange_list is required; use a comma-separated string"
+    example:
+      name: "futures_coin_netflow"
+      params: {symbol: "BTC", exchange_list: "Binance,OKX"}
+
+  - name: "futures_spot_volume_ratio"
+    summary: "Futures vs spot volume ratio history"
+    params:
+      - {name: exchange_list, required: true, format: "comma-separated exchange names", example: "Binance,OKX"}
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_spot_volume_ratio"
+      params: {exchange_list: "Binance,OKX", symbol: "BTC", interval: "1h"}

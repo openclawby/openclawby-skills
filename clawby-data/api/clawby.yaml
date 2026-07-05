@@ -1,0 +1,2437 @@
+version: 433
+generated_at: "2026-07-01T13:52:26.481084+00:00"
+base_url: https://api.openclawby.com
+auth_header: X-API-Key
+relay: POST /api/relay  body {name|id, params}
+apis:
+  - id: 1
+    name: "List of stock exchanges"
+    asset_classes: "equity"
+    data_types: "reference"
+    description: "List of stock exchanges"
+    docs: |
+      List of stock exchanges
+      GET /ref/stocks/exchange/
+      Parameters (* = required):
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 2
+    name: "List of stock symbols"
+    asset_classes: "equity"
+    data_types: "reference"
+    description: "List of stock symbols — Stock symbols are of the form region:ticker."
+    docs: |
+      List of stock symbols
+      Stock symbols are of the form region:ticker.
+      GET /ref/stocks/symbol/
+      Parameters (* = required):
+        - region (string): Exchange region.
+        - exchange (string): Exchange code.
+        - ordering (string): Sortable on: symbol. Default: symbol.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 3
+    name: "List of crypto exchanges"
+    asset_classes: "crypto"
+    data_types: "reference"
+    description: "List of crypto exchanges"
+    docs: |
+      List of crypto exchanges
+      GET /ref/crypto/exchange/
+      Parameters (* = required):
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 4
+    name: "List of crypto pairs"
+    asset_classes: "crypto"
+    data_types: "reference"
+    description: "List of crypto pairs"
+    docs: |
+      List of crypto pairs
+      GET /ref/crypto/symbol/
+      Parameters (* = required):
+        - base (string): Pair base. ex: BTC
+        - quote (string): Pair quote. ex: USD
+        - ordering (string): Sortable on: symbol. Default: symbol.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 5
+    name: "List of forex pairs"
+    asset_classes: "forex"
+    data_types: "reference"
+    description: "List of forex pairs"
+    docs: |
+      List of forex pairs
+      GET /ref/forex/symbol/
+      Parameters (* = required):
+        - base (string)
+        - quote (string)
+        - ordering (string): Sortable on: symbol. Default: symbol.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 6
+    name: "List of option contracts"
+    asset_classes: "options"
+    data_types: "reference"
+    description: "List of option contracts — Underlying is a stock symbol."
+    docs: |
+      List of option contracts
+      Underlying is a stock symbol.
+      GET /ref/options/contracts/
+      Parameters (* = required):
+        - expiration_gte (string): Expires on or after date.
+        - expiration_lt (string): Expires before date.
+        - contract_type (string; C/P): * `P` - Put
+      * `C` - Call
+        - expiration (string): Expires on date.
+        - underlying* (string): Underlying stock symbol. ex: US:SPY
+        - ordering (string): Sortable on: expiration, strike. Default: -expiration.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 7
+    name: "List of subreddits that we track"
+    asset_classes: "equity,crypto"
+    data_types: "reddit-sentiment"
+    description: "List of subreddits that we track"
+    docs: |
+      List of subreddits that we track
+      GET /ref/reddit/subreddits/
+      Parameters (* = required):
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 8
+    name: "Exchange volume for a given stock"
+    asset_classes: "equity"
+    data_types: "exchange-volume"
+    description: "Exchange volume for a given stock — Response fields<ul><li>xnas-ltse: exchange MIC (<a target=\"_blank\" href=\"https://www.iso20022.org/market-identifier-codes\">https://www.iso20022.org/market-identifier-codes</a>)</li></ul>"
+    docs: |
+      Exchange volume for a given stock
+      Response fields<ul><li>xnas-ltse: exchange MIC (<a target="_blank" href="https://www.iso20022.org/market-identifier-codes">https://www.iso20022.org/market-identifier-codes</a>)</li></ul>
+      GET /data/stocks/exchange-volume/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:SPY
+        - ordering (string): Sortable on: date. Default: date.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 9
+    name: "Historical exchange volume for a given stock at 30 minute intervals"
+    asset_classes: "equity"
+    data_types: "exchange-volume"
+    description: "Historical exchange volume for a given stock at 30 minute intervals — Response datetimes are in the America/New_York timezone.<br><br>Response fields<ul><li>xnas-ltse: exchange MIC (<a target=\"_blank\" href=\"https://www.iso20022.org/market-identifier-codes\">https://www.i"
+    docs: |
+      Historical exchange volume for a given stock at 30 minute intervals
+      Response datetimes are in the America/New_York timezone.<br><br>Response fields<ul><li>xnas-ltse: exchange MIC (<a target="_blank" href="https://www.iso20022.org/market-identifier-codes">https://www.iso20022.org/market-identifier-codes</a>)</li></ul>
+      GET /data/stocks/exchange-volume-intraday/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:AAPL
+        - ordering (string): Sortable on: datetime. Default: datetime.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 10
+    name: "Short volume for a given stock"
+    asset_classes: "equity"
+    data_types: "short-volume"
+    description: "Short volume for a given stock — Response fields<ul><li>rt: reported total</li><li>st: short total</li><li>lt: long total</li><li>fs: off-exchange</li><li>fse: off-exchange exempt</li><li>xnas-baty: exchange MIC (<a target=\"_blank\" h"
+    docs: |
+      Short volume for a given stock
+      Response fields<ul><li>rt: reported total</li><li>st: short total</li><li>lt: long total</li><li>fs: off-exchange</li><li>fse: off-exchange exempt</li><li>xnas-baty: exchange MIC (<a target="_blank" href="https://www.iso20022.org/market-identifier-codes">https://www.iso20022.org/market-identifier-co
+      GET /data/stocks/short-volume/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:SPY
+        - mode (string; E/T/V): * `V` - Volume
+      * `T` - PercentOfTotal
+      * `E` - PercentOfExchange
+        - ordering (string): Sortable on: date. Default: -date.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 11
+    name: "Short Interest for a given stock"
+    asset_classes: "equity"
+    data_types: "short-interest"
+    description: "Short Interest for a given stock"
+    docs: |
+      Short Interest for a given stock
+      GET /data/stocks/short-interest/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:SPY
+        - ordering (string): Sortable on: date. Default: -date.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 12
+    name: "Daily Short Interest for a given stock"
+    asset_classes: "equity"
+    data_types: "short-interest"
+    description: "Daily Short Interest for a given stock"
+    docs: |
+      Daily Short Interest for a given stock
+      GET /data/stocks/short-interest-daily/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:SPY
+        - ordering (string): Sortable on: date. Default: -date.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 13
+    name: "Cost-to-borrow from Interactive Brokers"
+    asset_classes: "equity"
+    data_types: "borrow-fee"
+    description: "Cost-to-borrow from Interactive Brokers"
+    docs: |
+      Cost-to-borrow from Interactive Brokers
+      GET /data/stocks/borrow-fee/ib/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:AAPL
+        - timestamp_gte (string): On or after date.
+        - timestamp_lt (string): Before date.
+        - ordering (string): Sortable on: timestamp. Default: -timestamp.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 14
+    name: "FTDs for a given stock"
+    asset_classes: "equity"
+    data_types: "ftd"
+    description: "FTDs for a given stock — Response fields<ul><li>date: settlement date</li><li>fails: number of fails</li><li>price: price on trade date</li><li>t: trade date</li><li>t_35: trade date + 35 calendar days</li><li>noti: notional "
+    docs: |
+      FTDs for a given stock
+      Response fields<ul><li>date: settlement date</li><li>fails: number of fails</li><li>price: price on trade date</li><li>t: trade date</li><li>t_35: trade date + 35 calendar days</li><li>noti: notional value (fails x price)</li><li>change: change in number of fails</li></ul>
+      GET /data/stocks/failure-to-deliver/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:AAPL
+        - ordering (string): Sortable on: date. Default: -date.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 15
+    name: "Dividends for a given stock"
+    asset_classes: "equity"
+    data_types: "dividends"
+    description: "Dividends for a given stock"
+    docs: |
+      Dividends for a given stock
+      GET /data/stocks/dividends/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:AAPL
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 16
+    name: "Splits for a given stock"
+    asset_classes: "equity"
+    data_types: "splits"
+    description: "Splits for a given stock"
+    docs: |
+      Splits for a given stock
+      GET /data/stocks/splits/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:AAPL
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 17
+    name: "Option chain summary (max pain, ITM/OTM)"
+    asset_classes: "options"
+    data_types: "options-chain"
+    description: "Option chain summary (max pain, ITM/OTM)"
+    docs: |
+      Option chain summary (max pain, ITM/OTM)
+      GET /data/options/chain-summary/
+      Parameters (* = required):
+        - expiration* (string): Expiration date.
+        - underlying* (string): Underlying stock symbol. ex: US:SPY
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 18
+    name: "Top mentioned tickers for a given timeframe"
+    asset_classes: "equity,crypto"
+    data_types: "reddit-sentiment"
+    description: "Top mentioned tickers for a given timeframe"
+    docs: |
+      Top mentioned tickers for a given timeframe
+      GET /data/reddit/mentions/top/
+      Parameters (* = required):
+        - start* (string): Start of the window (UTC) as a Unix timestamp. ex: 1733011200
+        - end (string): End of the window (UTC) as a Unix timestamp. ex: 1735689600. Default: now.
+        - subreddit (string): Subreddits separated by a comma.
+        - limit (string): Default 100, max 1000.
+        - filter_noise (boolean): Filter out single character tickers and things like CEO, YES, GO, YOLO etc. Default: True
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 19
+    name: "Reddit mentions for a given stock"
+    asset_classes: "equity"
+    data_types: "reddit-sentiment"
+    description: "Reddit mentions for a given stock"
+    docs: |
+      Reddit mentions for a given stock
+      GET /data/reddit/mentions/stock/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:AAPL
+        - created_gte (string): Created on or after.
+        - created_lt (string): Created before.
+        - ordering (string): Sortable on: created. Default: -created.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 20
+    name: "Daily Reddit mention counts for a given stock"
+    asset_classes: "equity"
+    data_types: "reddit-sentiment"
+    description: "Daily Reddit mention counts for a given stock"
+    docs: |
+      Daily Reddit mention counts for a given stock
+      GET /data/reddit/mentions/daily/stock/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:AAPL
+        - date_gte (string): On or after date.
+        - date_lt (string): Before date.
+        - subreddit (string): Subreddits separated by a comma.
+        - ordering (string): Sortable on: date. Default: -date.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 21
+    name: "Reddit mentions for a given crypto base"
+    asset_classes: "crypto"
+    data_types: "reddit-sentiment"
+    description: "Reddit mentions for a given crypto base"
+    docs: |
+      Reddit mentions for a given crypto base
+      GET /data/reddit/mentions/crypto/
+      Parameters (* = required):
+        - base* (string): Crypto base. ex: BTC
+        - created_gte (string): Created on or after.
+        - created_lt (string): Created before.
+        - ordering (string): Sortable on: created. Default: -created.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 22
+    name: "Daily Reddit mention counts for a given crypto base"
+    asset_classes: "crypto"
+    data_types: "reddit-sentiment"
+    description: "Daily Reddit mention counts for a given crypto base"
+    docs: |
+      Daily Reddit mention counts for a given crypto base
+      GET /data/reddit/mentions/daily/crypto/
+      Parameters (* = required):
+        - base* (string): Crypto base. ex: BTC
+        - date_gte (string): On or after date.
+        - date_lt (string): Before date.
+        - subreddit (string): Subreddits separated by a comma.
+        - ordering (string): Sortable on: date. Default: -date.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 23
+    name: "Quote for a given stock"
+    asset_classes: "equity"
+    data_types: "quote"
+    description: "Quote for a given stock — Delayed 30 minutes. Use the Screener API for live data."
+    docs: |
+      Quote for a given stock
+      Delayed 30 minutes. Use the Screener API for live data.
+      GET /feed/stocks/quote/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:AAPL
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 24
+    name: "Quote for a given crypto"
+    asset_classes: "crypto"
+    data_types: "quote"
+    description: "Quote for a given crypto"
+    docs: |
+      Quote for a given crypto
+      GET /feed/crypto/quote/
+      Parameters (* = required):
+        - symbol* (string): Crypto pair. ex: BTC:USD
+        - exchange (string): Crypto exchange. ex: COINBASE
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 25
+    name: "Quote for a given forex"
+    asset_classes: "forex"
+    data_types: "quote"
+    description: "Quote for a given forex"
+    docs: |
+      Quote for a given forex
+      GET /feed/forex/quote/
+      Parameters (* = required):
+        - symbol* (string): Forex pair. ex: EUR:USD
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 26
+    name: "Crypto aggregate OHLC bars (k-line)"
+    asset_classes: "crypto"
+    data_types: "ohlc-bars"
+    description: "Crypto aggregate OHLC bars (k-line) — For day bars, response volume is since 12:00AM UTC."
+    docs: |
+      Crypto aggregate OHLC bars (k-line)
+      For day bars, response volume is since 12:00AM UTC.
+      GET /data/crypto/bars/
+      Parameters (* = required):
+        - symbol* (string): Crypto pair. ex: BTC:USD
+        - exchange (string): Crypto exchange. ex: COINBASE
+        - agg_type* (string; day/minute): * `minute` - Minute
+      * `day` - Day
+        - start* (string): Start of the time window (UTC) as a Unix timestamp. ex: 1687392000
+        - limit (string): Number of bars to return. Max 500, default 50.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 27
+    name: "Forex aggregate OHLC bars (k-line)"
+    asset_classes: "forex"
+    data_types: "ohlc-bars"
+    description: "Forex aggregate OHLC bars (k-line) — Volume is in lots (lot = 100,000 units). For day bars, response volume is since 12:00AM UTC."
+    docs: |
+      Forex aggregate OHLC bars (k-line)
+      Volume is in lots (lot = 100,000 units). For day bars, response volume is since 12:00AM UTC.
+      GET /data/forex/bars/
+      Parameters (* = required):
+        - symbol* (string): Forex pair. ex: EUR:USD
+        - agg_type* (string; day/minute): * `minute` - Minute
+      * `day` - Day
+        - start* (string): Start of the time window (UTC) as a Unix timestamp. ex: 1687392000
+        - limit (string): Number of bars to return. Max 500, default 50.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 28
+    name: "Stock aggregate OHLC bars (k-line)"
+    asset_classes: "equity"
+    data_types: "ohlc-bars"
+    description: "Stock aggregate OHLC bars (k-line)"
+    docs: |
+      Stock aggregate OHLC bars (k-line)
+      GET /data/stocks/bars/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:AAPL
+        - agg_type* (string; day): * `day` - Day
+        - start* (string): Start of the time window (UTC) as a Unix timestamp. ex: 1713187800
+        - limit (string): Number of bars to return. Max 500, default 50.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 29
+    name: "Option aggregate OHLC bars (k-line)"
+    asset_classes: "options"
+    data_types: "ohlc-bars"
+    description: "Option aggregate OHLC bars (k-line)"
+    docs: |
+      Option aggregate OHLC bars (k-line)
+      GET /data/options/bars/
+      Parameters (* = required):
+        - symbol* (string): Option symbol. ex: US:AAPL20240419C170
+        - agg_type* (string; day): * `day` - Day
+        - start* (string): Start of the time window (UTC) as a Unix timestamp. ex: 1712808000
+        - limit (string): Number of bars to return. Max 500, default 50.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 30
+    name: "Historical Float and Shares Outstanding for a given stock"
+    asset_classes: "equity"
+    data_types: "float-shares"
+    description: "Historical Float and Shares Outstanding for a given stock"
+    docs: |
+      Historical Float and Shares Outstanding for a given stock
+      GET /data/stocks/shares/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:SPY
+        - ordering (string): Sortable on: date. Default: -date.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 31
+    name: "Dark Pool Levels for a given stock"
+    asset_classes: "equity"
+    data_types: "dark-pool"
+    description: "Dark Pool Levels for a given stock"
+    docs: |
+      Dark Pool Levels for a given stock
+      GET /data/dark-pool-levels/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:SPY
+        - date* (string): Trading date.
+        - decimals* (string; 0/1/2): * `2` - 2
+      * `1` - 1
+      * `0` - 0
+        - ordering (string): Sortable on: level, trades, volume, premium. Default: -premium.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 32
+    name: "Dark Pool Prints (trades) for a given stock"
+    asset_classes: "equity"
+    data_types: "dark-pool"
+    description: "Dark Pool Prints (trades) for a given stock — <ul><li>exchange MIC (<a target=\"_blank\" href=\"https://www.iso20022.org/market-identifier-codes\">https://www.iso20022.org/market-identifier-codes</a>)</li></ul>"
+    docs: |
+      Dark Pool Prints (trades) for a given stock
+      <ul><li>exchange MIC (<a target="_blank" href="https://www.iso20022.org/market-identifier-codes">https://www.iso20022.org/market-identifier-codes</a>)</li></ul>
+      GET /data/dark-pool-prints/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:SPY
+        - date* (string): Trading date.
+        - all_exchanges (boolean): Include trades from all exchanges, not just "Off Exchange"
+        - ordering (string): Sortable on: time, side, price, size, premium. Default: -time.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 33
+    name: "Dark Pool Prints (trades) summary for a given stock"
+    asset_classes: "equity"
+    data_types: "dark-pool"
+    description: "Dark Pool Prints (trades) summary for a given stock"
+    docs: |
+      Dark Pool Prints (trades) summary for a given stock
+      GET /data/dark-pool-prints/summary/
+      Parameters (* = required):
+        - symbol* (string): Stock symbol. ex: US:SPY
+        - date* (string): Trading date.
+        - all_exchanges (boolean): Include trades from all exchanges, not just "Off Exchange"
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 34
+    name: "Crypto level 2 snapshots"
+    asset_classes: "crypto"
+    data_types: "orderbook-l2"
+    description: "Crypto level 2 snapshots — <p>Minute-by-minute snapshots covering 10% above and 10% below the mid point.<br><br>The following pairs have 180 days of history: [\"BTC:USD\", \"BTC:USDT\", \"ETH:USD\", \"ETH:USDT\"]. All other pairs have "
+    docs: |
+      Crypto level 2 snapshots
+      <p>Minute-by-minute snapshots covering 10% above and 10% below the mid point.<br><br>The following pairs have 180 days of history: ["BTC:USD", "BTC:USDT", "ETH:USD", "ETH:USDT"]. All other pairs have 7 days of history.</p><p>Response <code>depth</code>: <ul><li>JSON string of the form "[bids, asks]"
+      GET /data/crypto/level-2-snapshots/
+      Parameters (* = required):
+        - symbol* (string): Crypto pair. ex: BTC:USD
+        - exchange* (string): Crypto exchange. ex: COINBASE
+        - start* (string): Start of the time window (UTC) as a Unix timestamp (ex: 1754028000) or datetime (ex: 2025-08-01 06:00:00)
+        - end (string): End of the time window (UTC) as a Unix timestamp (ex: 1754028000) or datetime (ex: 2025-08-01 06:00:00)
+        - ordering (string): Sortable on: timestamp. Default: timestamp.
+        - page (integer): A page number within the paginated result set.
+        - page_size (integer): Number of results to return per page.
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 35
+    name: "Screen thousands of stocks on numerous fields"
+    asset_classes: "equity"
+    data_types: "screener"
+    description: "Screen thousands of stocks on numerous fields — Data is delayed during trial. You can activate your subscription and get live data by clicking \"Skip Trial\" on the Premium tab of your account."
+    docs: |
+      Screen thousands of stocks on numerous fields
+      Data is delayed during trial. You can activate your subscription and get live data by clicking "Skip Trial" on the Premium tab of your account.
+      GET /screener/stocks/
+      Parameters (* = required):
+        - view_cols (string): List of Column values from /screener/stocks/columns/. ex: display,reg_price,reg_date,reg_change_pct,market_cap,reg_volume,name,industry
+        - per_page (number): Results per page. Max 100.
+        - page (number): Page number
+        - sort (string): Column,Direction ex: market_cap,desc
+        - symbol (string): List of symbols. ex: AAPL,SPY
+        - region (string): List of Region values from /screener/stocks/groups/region/. ex: US,CA
+        - equity_type (string): List of EquityType values from /screener/stocks/groups/equity-type/. ex: cs,et,ad
+        - exchange (string): List of Exchange values from /screener/stocks/groups/exchange/. ex: NASDAQ,NYSE,NYSEAMERICAN,BATS
+        - currency (string): List of Currency values from /screener/stocks/groups/currency/. ex: USD
+        - sector (string): List of Sector values from /screener/stocks/groups/sector/. ex: 3,10
+        - industry (string): List of Industry values from /screener/stocks/groups/industry/. ex: 38,114,78
+        - country (string): List of Country values from /screener/stocks/groups/country/. ex: United States,Canada
+        - next_earnings (string): List of NextEarnings values from /screener/stocks/groups/next-earnings/. ex: 2024-04-15,2024-04-16
+        - options (string): List of Options values from /screener/stocks/groups/options/. ex: Y
+        - market_cap (string): Market Cap. ex: >1B <1T
+        - thirty_day_avg_vol (string): 30 Day Avg Volume. ex: >=10m
+        - relative_vol (string): Relative Volume. ex: >2.5
+        - reg_volume (string): Volume
+        - ten_day_avg_vol (string): 10 Day Avg Volume. ex: >=1m
+        - shares_out (string): Shares Out.
+        - pe_ratio (string): P/E Ratio
+        - six_month_beta (string): Six Month Beta
+        - one_year_beta (string): 1 Year Beta
+        - two_year_beta (string): 2 Year Beta
+        - five_year_beta (string): 5 Year Beta
+        - employees (string): Employees
+        - reg_price (string): Price
+        - reg_change_pct (string): Day %. ex: <-5
+        - open_change_pct (string): Change From Open %. ex: >2
+        - pre_change_pct (string): Pre-market %
+        - ah_change_pct (string): After-hours %
+        - one_week_change_pct (string): 1 Week %
+        - one_month_change_pct (string): 1 Month %
+        - mtd_change_pct (string): Month-to-date %
+        - three_month_change_pct (string): 3 Month %
+        - six_month_change_pct (string): 6 Month %
+        - one_year_change_pct (string): 1 Year %
+        - ytd_change_pct (string): Year-to-date %
+        - two_year_change_pct (string): 2 Year %
+        - three_year_change_pct (string): 3 Year %
+        - five_year_change_pct (string): 5 Year %
+        - borrow_fee_rate_ib (string): Borrow Fee % IBKR
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 36
+    name: "List of Columns"
+    asset_classes: "equity"
+    data_types: "screener"
+    description: "List of Columns"
+    docs: |
+      List of Columns
+      GET /screener/stocks/columns/
+      Parameters (* = required):
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 37
+    name: "List of Regions"
+    asset_classes: "equity"
+    data_types: "screener"
+    description: "List of Regions"
+    docs: |
+      List of Regions
+      GET /screener/stocks/groups/region/
+      Parameters (* = required):
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 38
+    name: "List of EquityTypes"
+    asset_classes: "equity"
+    data_types: "screener"
+    description: "List of EquityTypes"
+    docs: |
+      List of EquityTypes
+      GET /screener/stocks/groups/equity-type/
+      Parameters (* = required):
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 39
+    name: "List of Exchanges"
+    asset_classes: "equity"
+    data_types: "screener"
+    description: "List of Exchanges"
+    docs: |
+      List of Exchanges
+      GET /screener/stocks/groups/exchange/
+      Parameters (* = required):
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 40
+    name: "List of Currencies"
+    asset_classes: "equity"
+    data_types: "screener"
+    description: "List of Currencies"
+    docs: |
+      List of Currencies
+      GET /screener/stocks/groups/currency/
+      Parameters (* = required):
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 41
+    name: "List of Sectors"
+    asset_classes: "equity"
+    data_types: "screener"
+    description: "List of Sectors"
+    docs: |
+      List of Sectors
+      GET /screener/stocks/groups/sector/
+      Parameters (* = required):
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 42
+    name: "List of Industries"
+    asset_classes: "equity"
+    data_types: "screener"
+    description: "List of Industries"
+    docs: |
+      List of Industries
+      GET /screener/stocks/groups/industry/
+      Parameters (* = required):
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 43
+    name: "List of Countries"
+    asset_classes: "equity"
+    data_types: "screener"
+    description: "List of Countries"
+    docs: |
+      List of Countries
+      GET /screener/stocks/groups/country/
+      Parameters (* = required):
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 44
+    name: "List of NextEarnings"
+    asset_classes: "equity"
+    data_types: "screener"
+    description: "List of NextEarnings"
+    docs: |
+      List of NextEarnings
+      GET /screener/stocks/groups/next-earnings/
+      Parameters (* = required):
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 45
+    name: "List of Options"
+    asset_classes: "options,equity"
+    data_types: "screener"
+    description: "List of Options"
+    docs: |
+      List of Options
+      GET /screener/stocks/groups/options/
+      Parameters (* = required):
+        - format (string; csv/json)
+      Common: page/page_size (max 1000), ordering=field|-field, format=json|csv
+      Symbols: stocks US:TICKER · crypto BASE:USD · forex BASE:USD
+  - id: 46
+    name: "polymarket_events"
+    asset_classes: "prediction_market"
+    data_types: "events,markets,odds"
+    description: "Prediction-market events (each event contains its markets). Browse trending/active prediction markets."
+    docs: |
+      Params: active(true/false), closed(true/false), limit(1-500, default 20), offset(pagination), order(volume_24hr|volume|liquidity|start_date|end_date|competitive), ascending(true/false), tag_id(filter by category, from polymarket_tags), series_id(sports), slug(exact event from polymarket.com/event/{slug}). Default include active=true&closed=false. Prefer events over markets (fewer calls). Response has has_more for pagination.
+  - id: 47
+    name: "polymarket_markets"
+    asset_classes: "prediction_market"
+    data_types: "markets,outcomes,prices"
+    description: "Individual prediction markets with outcome tokens, prices, and orderbook flags."
+    docs: |
+      Params: slug(exact market), limit, offset, active, closed, order(liquidity|volume24hr), ascending. Key fields: clobTokenIds (JSON array of outcome token ids → use with CLOB endpoints), conditionId, enableOrderBook, neg_risk, outcomes, outcomePrices, lastTradePrice, volume, liquidity.
+  - id: 48
+    name: "polymarket_tags"
+    asset_classes: "prediction_market"
+    data_types: "tags,categories"
+    description: "Category tags for filtering prediction-market events (politics, sports, crypto, etc.)."
+    docs: |
+      Params: limit, offset. Returns tag id + label; use the id as tag_id in polymarket_events.
+  - id: 49
+    name: "polymarket_sports"
+    asset_classes: "prediction_market"
+    data_types: "sports,series"
+    description: "Sports metadata (leagues / series) for prediction markets."
+    docs: |
+      No required params. Returns sports series metadata; use series_id in polymarket_events.
+  - id: 50
+    name: "polymarket_orderbook"
+    asset_classes: "prediction_market"
+    data_types: "orderbook,depth,bids,asks"
+    description: "Live order book (bids/asks) for a prediction-market outcome token."
+    docs: |
+      Param: token_id (required, an outcome token id from market.clobTokenIds). Returns bids/asks [{price,size}], tick_size, neg_risk. 404 'No orderbook' = that token has no live book.
+  - id: 51
+    name: "polymarket_price"
+    asset_classes: "prediction_market"
+    data_types: "price,probability"
+    description: "Best price (probability) for a prediction-market outcome token."
+    docs: |
+      Params: token_id (required), side (BUY=best ask, SELL=best bid). Price 0-1 = implied probability.
+  - id: 52
+    name: "polymarket_midpoint"
+    asset_classes: "prediction_market"
+    data_types: "price,midpoint,probability"
+    description: "Midpoint price (implied probability) for an outcome token."
+    docs: |
+      Param: token_id (required). Returns {mid}. If spread>0.10 the UI shows last trade price instead.
+  - id: 53
+    name: "polymarket_spread"
+    asset_classes: "prediction_market"
+    data_types: "spread,liquidity"
+    description: "Bid-ask spread for an outcome token (liquidity gauge)."
+    docs: |
+      Param: token_id (required). Returns {spread}.
+  - id: 54
+    name: "polymarket_price_history"
+    asset_classes: "prediction_market"
+    data_types: "price_history,timeseries"
+    description: "Historical price (probability) time series for an outcome token."
+    docs: |
+      Params: market (required = the outcome token id), interval(1h|6h|1d|1w|1m|max) OR startTs/endTs (unix seconds, mutually exclusive with interval), fidelity (minutes between points, e.g. 60). Each point {t: unix_ts, p: price}.
+  - id: 55
+    name: "polymarket_trades"
+    asset_classes: "prediction_market"
+    data_types: "trades,fills"
+    description: "Recent trades on prediction markets."
+    docs: |
+      Params: market (condition id), user (0x wallet), limit, offset, takerOnly(true/false). All optional; returns recent fills.
+  - id: 56
+    name: "polymarket_value"
+    asset_classes: "prediction_market"
+    data_types: "positions,value,portfolio"
+    description: "Current USD value of a wallet's open prediction-market positions."
+    docs: |
+      Param: user (required, 0x wallet address). Returns position value.
+  - id: 57
+    name: "hyperliquid_all_mids"
+    asset_classes: "perp,spot,crypto"
+    data_types: "price,mids"
+    description: "All current mid prices on Hyperliquid (perps + spot)."
+    docs: |
+      No params. Returns {coin: midPrice}. Coin names are perp symbols (BTC, ETH…) or spot @index / token names.
+  - id: 58
+    name: "hyperliquid_perp_meta"
+    asset_classes: "perp,spot,crypto"
+    data_types: "perp,meta,universe"
+    description: "Hyperliquid perpetuals universe / metadata."
+    docs: |
+      No params. universe[]: {name, szDecimals, maxLeverage, marginTableId}. Use names as `coin` in other calls.
+  - id: 59
+    name: "hyperliquid_perp_contexts"
+    asset_classes: "perp,spot,crypto"
+    data_types: "perp,funding,open_interest,mark_price"
+    description: "Hyperliquid perp metadata + live per-asset context: mark/oracle price, funding, open interest, volume."
+    docs: |
+      No params. Returns [meta, assetCtxs[]] aligned with universe order. Each ctx: {markPx, oraclePx, funding, openInterest, premium, dayNtlVlm, prevDayPx}.
+  - id: 60
+    name: "hyperliquid_spot_meta"
+    asset_classes: "perp,spot,crypto"
+    data_types: "spot,meta,tokens"
+    description: "Hyperliquid spot tokens and trading pairs metadata."
+    docs: |
+      No params. tokens[] and universe[] (pairs). Pair index maps to @{index} coin used in spot queries.
+  - id: 61
+    name: "hyperliquid_spot_contexts"
+    asset_classes: "perp,spot,crypto"
+    data_types: "spot,price,supply"
+    description: "Hyperliquid spot metadata + live context: mark/mid price, circulating supply, volume."
+    docs: |
+      No params. Returns [meta, ctxs[]]. Each ctx: {markPx, midPx, circulatingSupply, dayNtlVlm, prevDayPx}.
+  - id: 62
+    name: "hyperliquid_l2_book"
+    asset_classes: "perp,spot,crypto"
+    data_types: "orderbook,depth"
+    description: "Hyperliquid order book (L2) for a coin."
+    docs: |
+      Params: coin (required, e.g. 'BTC' for perp or spot pair name). Optional: nSigFigs(2-5), mantissa. Returns {coin, time, levels:[bids,asks]} where each level {px, sz, n}.
+  - id: 63
+    name: "hyperliquid_candles"
+    asset_classes: "perp,spot,crypto"
+    data_types: "ohlc,candles,price_history"
+    description: "Hyperliquid OHLC candle history for a coin."
+    docs: |
+      Param: req (required, an OBJECT): {coin, interval(1m|5m|15m|1h|4h|1d|1w), startTime(ms epoch), endTime(ms epoch)}. Example params: {"req":{"coin":"BTC","interval":"1h","startTime":1719360000000,"endTime":1719446400000}}. Each candle: {t,T,s,i,o,h,l,c,v,n}.
+  - id: 64
+    name: "hyperliquid_funding_history"
+    asset_classes: "perp,spot,crypto"
+    data_types: "funding,history"
+    description: "Historical funding rates for a Hyperliquid perp."
+    docs: |
+      Params: coin (required), startTime (ms epoch, required), endTime (ms epoch, optional). Returns [{coin, fundingRate, premium, time}].
+  - id: 65
+    name: "hyperliquid_predicted_fundings"
+    asset_classes: "perp,spot,crypto"
+    data_types: "funding,predicted"
+    description: "Predicted next funding rates across venues for Hyperliquid perps."
+    docs: |
+      No params. Returns per-coin predicted funding across venues (HlPerp, BinPerp, etc.).
+  - id: 66
+    name: "hyperliquid_user_state"
+    asset_classes: "perp,spot,crypto"
+    data_types: "positions,margin,account"
+    description: "A wallet's Hyperliquid perp account state: positions, margin, PnL."
+    docs: |
+      Param: user (required, 0x wallet address). Returns assetPositions[], marginSummary, withdrawable.
+  - id: 67
+    name: "hyperliquid_spot_user_state"
+    asset_classes: "perp,spot,crypto"
+    data_types: "spot,balances,account"
+    description: "A wallet's Hyperliquid spot balances."
+    docs: |
+      Param: user (required, 0x wallet address). Returns balances[] {coin, total, hold}.
+  - id: 68
+    name: "hyperliquid_open_orders"
+    asset_classes: "perp,spot,crypto"
+    data_types: "orders,open"
+    description: "A wallet's open orders on Hyperliquid."
+    docs: |
+      Param: user (required, 0x wallet address). Returns open orders [{coin, side, limitPx, sz, oid, timestamp}].
+  - id: 69
+    name: "hyperliquid_user_fills"
+    asset_classes: "perp,spot,crypto"
+    data_types: "fills,trades,history"
+    description: "A wallet's recent fills (trade history) on Hyperliquid."
+    docs: |
+      Param: user (required, 0x wallet address). Returns recent fills [{coin, px, sz, side, time, closedPnl, fee}].
+  - id: 70
+    name: "sec_cik_lookup"
+    asset_classes: "us_equities,fundamentals"
+    data_types: "cik,ticker,filings"
+    description: "Resolve a US stock ticker to its SEC CIK number (needed by all other SEC interfaces) + recent filings."
+    docs: |
+      Find a company CIK by name via SEC EDGAR (browse-edgar). Returns Atom XML, not JSON. Parameters: company* (company name, e.g. "Apple Inc"; ticker symbols are not supported here). Optional: type (filing-type filter, e.g. 10-K). Read the <cik> value from the returned XML, then use it with sec_company_concept / sec_submissions.
+  - id: 71
+    name: "sec_company_concept"
+    asset_classes: "us_equities,fundamentals"
+    data_types: "financials,income_statement,balance_sheet,cash_flow"
+    description: "One financial-statement line item (us-gaap concept) for a company across all reported periods."
+    docs: |
+      One US-GAAP financial concept for a company across all reported periods (SEC XBRL companyconcept). Parameters: cik* (company CIK; plain digits are fine and auto-padded to 10, e.g. 320193 or 0000320193), concept* (a us-gaap tag, e.g. NetIncomeLoss, Revenues, Assets, EarningsPerShareDiluted). Returns JSON with every annual and quarterly value. If you only have a ticker, resolve the CIK first with sec_cik_lookup.
+  - id: 72
+    name: "sec_submissions"
+    asset_classes: "us_equities,fundamentals"
+    data_types: "filings,profile,company"
+    description: "A company's profile + recent SEC filing history (10-K/10-Q/8-K…)."
+    docs: |
+      Company profile and full filing history (SEC submissions). Parameters: cik* (company CIK; plain digits are fine and auto-padded to 10, e.g. 320193). Returns JSON: company name, SIC, tickers, exchanges, and recent filings with accession numbers. If you only have a ticker, resolve the CIK first with sec_cik_lookup.
+  - id: 74
+    name: "dexscreener_search"
+    asset_classes: "crypto,dex"
+    data_types: "dex,pairs,price,liquidity"
+    description: "Search DEX trading pairs across all chains by token name, symbol, or address."
+    docs: |
+      Param: q (required, e.g. 'WBTC' or a token address). Returns pairs[] with chainId, dexId, baseToken/quoteToken, priceUsd, priceNative, liquidity.usd, volume (m5/h1/h6/h24), priceChange, fdv, marketCap, txns, pairAddress.
+  - id: 75
+    name: "dexscreener_token_pools"
+    asset_classes: "crypto,dex"
+    data_types: "dex,pools,price,liquidity"
+    description: "Get DEX pools/pairs for one or more token addresses on a specific chain."
+    docs: |
+      Path params: chainId (e.g. solana, ethereum, base, bsc), tokenAddresses (one address, or up to 30 comma-separated). Returns the pools array for those tokens on that chain (price, liquidity, volume, etc.).
+  - id: 76
+    name: "dexscreener_token_pairs"
+    asset_classes: "crypto,dex"
+    data_types: "dex,pairs,price"
+    description: "Get all DEX pairs for a token across ALL chains (by token address)."
+    docs: |
+      Path param: tokenAddresses (one address, or up to 30 comma-separated). Returns pairs[] across every chain the token trades on. Use this when the chain is unknown.
+  - id: 77
+    name: "dexscreener_pair"
+    asset_classes: "crypto,dex"
+    data_types: "dex,pair,price"
+    description: "Get a single DEX pair by chain + pair (pool) address."
+    docs: |
+      Path params: chainId (e.g. solana, ethereum), pairId (the pair/pool address). Returns full pair stats: priceUsd, liquidity, volume, txns, priceChange, fdv, marketCap.
+  - id: 78
+    name: "dexscreener_token_profiles"
+    asset_classes: "crypto,dex"
+    data_types: "dex,profiles,tokens"
+    description: "Latest token profiles listed on DexScreener (links, description, socials)."
+    docs: |
+      No params. Returns recent token profiles: url, chainId, tokenAddress, description, links/socials.
+  - id: 79
+    name: "dexscreener_token_boosts_latest"
+    asset_classes: "crypto,dex"
+    data_types: "dex,boosts,tokens"
+    description: "Latest boosted tokens on DexScreener."
+    docs: |
+      No params. Returns recently boosted tokens (chainId, tokenAddress, amount, totalAmount, description, links).
+  - id: 80
+    name: "dexscreener_token_boosts_top"
+    asset_classes: "crypto,dex"
+    data_types: "dex,boosts,trending"
+    description: "Tokens with the most active boosts on DexScreener."
+    docs: |
+      No params. Returns top-boosted tokens ranked by active boost amount.
+  - id: 81
+    name: "dexscreener_orders"
+    asset_classes: "crypto,dex"
+    data_types: "dex,orders,status"
+    description: "Check paid DexScreener orders (profile/boost) for a token."
+    docs: |
+      Path params: chainId, tokenAddress. Returns {orders, boosts} the token has paid for (e.g. tokenProfile, tokenAd, communityTakeover) with status & timestamps.
+  - id: 82
+    name: "x_search"
+    asset_classes: "social,search"
+    data_types: "social,x,twitter,search,posts"
+    description: "Search X (Twitter) posts/users by keyword, phrase, @user, or #hashtag."
+    docs: |
+      Params: query (required; keyword/phrase/@handle/#tag). Optional: sort (Top|Latest, default Top), user (filter to an author handle), start_date / end_date (YYYY-MM-DD), lang (e.g. en), verified / blue_verified / is_quote / is_video / is_image (true/false), min_retweets / min_replies / min_likes (int), count (1-100, default 20). Returns an array of tweets with user{username,followers_count,...}, text, engagement, created_at.
+  - id: 83
+    name: "facebook_search"
+    asset_classes: "social,search"
+    data_types: "social,facebook,meta,ads,search"
+    description: "Search Facebook (Meta Ad Library) by keyword, phrase, or hashtag."
+    docs: |
+      Body params: query (required; Meta Ad Library keyword/phrase/hashtag). Optional: count (default 10), cursor (pagination cursor from a previous response). Returns an array of ad-library posts {id, url, text, createTime, author{name,url}}.
+  - id: 84
+    name: "instagram_search"
+    asset_classes: "social,search"
+    data_types: "social,instagram,search,profiles,posts"
+    description: "Search Instagram by keyword, username, or phrase."
+    docs: |
+      Body params: query (required; keyword/username/phrase). Optional: count (default 10), cursor (pagination). Returns an array of Instagram profiles/posts {id, type, username, title, url, avatar, ...}.
+  - id: 85
+    name: "x_post"
+    asset_classes: "social,search"
+    data_types: "social,x,twitter,post"
+    description: "Retrieve an X (Twitter) post by its ID."
+    docs: |
+      Param: id (required, tweet id).
+  - id: 86
+    name: "x_post_retweeters"
+    asset_classes: "social,search"
+    data_types: "social,x,twitter,retweeters"
+    description: "Get the users who retweeted an X post."
+    docs: |
+      Params: id (required, tweet id). Optional: cursor (pagination).
+  - id: 87
+    name: "x_user_posts_search"
+    asset_classes: "social,search"
+    data_types: "social,x,twitter,posts"
+    description: "Search a specific X user's posts by keyword."
+    docs: |
+      Params: user (required, handle without @). Optional: query (keyword filter), count (default 10).
+  - id: 88
+    name: "x_user_posts"
+    asset_classes: "social,search"
+    data_types: "social,x,twitter,timeline"
+    description: "Get an X user's recent posts by username."
+    docs: |
+      Params: username (required, without @). Optional: cursor (pagination).
+  - id: 89
+    name: "x_replies"
+    asset_classes: "social,search"
+    data_types: "social,x,twitter,replies"
+    description: "Fetch an X user's tweets and replies."
+    docs: |
+      Params: user (required, handle). Optional: count (default 10), query (keyword filter).
+  - id: 90
+    name: "x_post_replies"
+    asset_classes: "social,search"
+    data_types: "social,x,twitter,replies"
+    description: "Retrieve the replies to a specific X post."
+    docs: |
+      Params: post_id (required). Optional: count (default 10), query (keyword filter).
+  - id: 91
+    name: "x_trends"
+    asset_classes: "social,search"
+    data_types: "social,x,twitter,trends"
+    description: "Get trending topics on X for a region."
+    docs: |
+      Params: woeid (required, Where-On-Earth id; 1 = worldwide). Optional: count (default 30, minimum 30).
+  - id: 92
+    name: "x_posts_by_urls"
+    asset_classes: "social,search"
+    data_types: "social,x,twitter,posts"
+    description: "Fetch X posts by their URLs."
+    docs: |
+      Param: urls (required, comma-separated tweet/x.com URLs).
+  - id: 93
+    name: "facebook_comments"
+    asset_classes: "social,search"
+    data_types: "social,facebook,comments"
+    description: "Retrieve comments on a Facebook post."
+    docs: |
+      Path: post_id (required). Optional query: count (default 20), cursor.
+  - id: 94
+    name: "facebook_hashtag"
+    asset_classes: "social,search"
+    data_types: "social,facebook,hashtag"
+    description: "Retrieve Facebook posts for a hashtag."
+    docs: |
+      Path: tag (required, without #). Optional query: count (default 20), cursor.
+  - id: 95
+    name: "facebook_post"
+    asset_classes: "social,search"
+    data_types: "social,facebook,post"
+    description: "Retrieve a Facebook post by ID."
+    docs: |
+      Path: id (required).
+  - id: 96
+    name: "facebook_profile"
+    asset_classes: "social,search"
+    data_types: "social,facebook,profile"
+    description: "Retrieve a Facebook profile or page."
+    docs: |
+      Path: profile_id (required, profile/page id or username).
+  - id: 97
+    name: "facebook_profile_posts"
+    asset_classes: "social,search"
+    data_types: "social,facebook,posts"
+    description: "Retrieve posts from a Facebook profile/page."
+    docs: |
+      Path: profile_id (required). Optional query: count (default 20), cursor.
+  - id: 98
+    name: "instagram_comments"
+    asset_classes: "social,search"
+    data_types: "social,instagram,comments"
+    description: "Retrieve comments on an Instagram media item."
+    docs: |
+      Path: media_id (required). Optional query: count (default 20), cursor.
+  - id: 99
+    name: "instagram_hashtag"
+    asset_classes: "social,search"
+    data_types: "social,instagram,hashtag"
+    description: "Retrieve Instagram media for a hashtag."
+    docs: |
+      Path: tag (required, without #). Optional query: count (default 20), cursor.
+  - id: 100
+    name: "instagram_media"
+    asset_classes: "social,search"
+    data_types: "social,instagram,media"
+    description: "Retrieve an Instagram media item by ID."
+    docs: |
+      Path: id (required).
+  - id: 101
+    name: "instagram_profile"
+    asset_classes: "social,search"
+    data_types: "social,instagram,profile"
+    description: "Retrieve an Instagram profile."
+    docs: |
+      Path: username (required, without @).
+  - id: 102
+    name: "instagram_profile_posts"
+    asset_classes: "social,search"
+    data_types: "social,instagram,posts"
+    description: "Retrieve posts from an Instagram profile."
+    docs: |
+      Path: username (required). Optional query: count (default 20), cursor.
+  - id: 103
+    name: "address_labels"
+    asset_classes: "crypto,onchain"
+    data_types: "address_labels,attribution,entity"
+    description: "Address labels & attribution (who owns an on-chain address)"
+    docs: |
+       HyperEVM addresses: use coin=HYPE.
+  - id: 291
+    name: "etf_bitcoin_list"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "List of Bitcoin spot ETFs with key status (AUM, shares, NAV, BTC holdings). No params."
+    docs: |
+      List of Bitcoin spot ETFs with key status (AUM, shares, NAV, BTC holdings). No params.
+  - id: 292
+    name: "hk_etf_bitcoin_flow_history"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "Historical daily flow data for Hong Kong-listed Bitcoin ETFs. No params."
+    docs: |
+      Historical daily flow data for Hong Kong-listed Bitcoin ETFs. No params.
+  - id: 293
+    name: "etf_bitcoin_net_assets_history"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "Historical net assets (USD) of Bitcoin ETFs. Optional ticker (e.g. GBTC, IBIT)."
+    docs: |
+      Historical net assets (USD) of Bitcoin ETFs. Optional ticker (e.g. GBTC, IBIT). Optional: ticker.
+  - id: 294
+    name: "etf_bitcoin_flow_history"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "Historical daily net inflow/outflow (USD) for Bitcoin ETFs, broken down by ticker. No params."
+    docs: |
+      Historical daily net inflow/outflow (USD) for Bitcoin ETFs, broken down by ticker. No params.
+  - id: 295
+    name: "etf_bitcoin_premium_discount_history"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "Historical premium/discount vs NAV for Bitcoin ETFs. Optional ticker (e.g. GBTC)."
+    docs: |
+      Historical premium/discount vs NAV for Bitcoin ETFs. Optional ticker (e.g. GBTC). Optional: ticker.
+  - id: 296
+    name: "etf_bitcoin_history"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "Historical Bitcoin ETF data (price, NAV, premium/discount, shares, net assets). Requires ticker (e.g. GBTC)."
+    docs: |
+      Historical Bitcoin ETF data (price, NAV, premium/discount, shares, net assets). Requires ticker (e.g. GBTC). Required: ticker.
+  - id: 297
+    name: "etf_bitcoin_price_history"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "OHLC price + volume history for a Bitcoin ETF. Requires ticker (e.g. GBTC) and range (1d/7d/all)."
+    docs: |
+      OHLC price + volume history for a Bitcoin ETF. Requires ticker (e.g. GBTC) and range (1d/7d/all). Required: ticker, range.
+  - id: 298
+    name: "etf_bitcoin_detail"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "Detailed info for a Bitcoin ETF (quotes, trades, performance). Requires ticker (e.g. GBTC)."
+    docs: |
+      Detailed info for a Bitcoin ETF (quotes, trades, performance). Requires ticker (e.g. GBTC). Required: ticker.
+  - id: 299
+    name: "etf_bitcoin_aum"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "Historical AUM (USD) for Bitcoin ETFs. Optional ticker (e.g. GBTC, IBIT)."
+    docs: |
+      Historical AUM (USD) for Bitcoin ETFs. Optional ticker (e.g. GBTC, IBIT). Optional: ticker.
+  - id: 300
+    name: "etf_ethereum_net_assets_history"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "Historical net assets (USD) of Ethereum ETFs. No params."
+    docs: |
+      Historical net assets (USD) of Ethereum ETFs. No params.
+  - id: 301
+    name: "etf_ethereum_list"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "List of Ethereum spot ETFs with key status (NAV, holdings, fees). No params."
+    docs: |
+      List of Ethereum spot ETFs with key status (NAV, holdings, fees). No params.
+  - id: 302
+    name: "etf_ethereum_flow_history"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "Historical daily flow data for Ethereum ETFs, broken down by ticker. No params."
+    docs: |
+      Historical daily flow data for Ethereum ETFs, broken down by ticker. No params.
+  - id: 303
+    name: "grayscale_holdings_list"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "List of Grayscale trust holdings (amounts, USD value, premium rate). No params."
+    docs: |
+      List of Grayscale trust holdings (amounts, USD value, premium rate). No params.
+  - id: 304
+    name: "grayscale_premium_history"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "Historical premium/discount vs NAV for a Grayscale trust. Requires symbol (e.g. BTC; also ETC,LTC,BCH,SOL,...)."
+    docs: |
+      Historical premium/discount vs NAV for a Grayscale trust. Requires symbol (e.g. BTC; also ETC,LTC,BCH,SOL,...). Required: symbol.
+  - id: 305
+    name: "etf_solana_flow_history"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "Historical daily flow data for Solana ETFs, broken down by ticker. No params."
+    docs: |
+      Historical daily flow data for Solana ETFs, broken down by ticker. No params.
+  - id: 306
+    name: "etf_xrp_flow_history"
+    asset_classes: "crypto,etf"
+    data_types: "etf"
+    description: "Historical daily flow data for XRP ETFs, broken down by ticker. No params."
+    docs: |
+      Historical daily flow data for XRP ETFs, broken down by ticker. No params.
+  - id: 307
+    name: "futures_funding_rate_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Funding rate OHLC candles for a single pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Funding rate OHLC candles for a single pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 308
+    name: "futures_funding_rate_oi_weight_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Open-interest-weighted funding rate OHLC for a coin. symbol=BTC, interval=1h/4h/1d."
+    docs: |
+      Open-interest-weighted funding rate OHLC for a coin. symbol=BTC, interval=1h/4h/1d. Required: symbol, interval. Optional: limit, start_time, end_time.
+  - id: 309
+    name: "futures_funding_rate_vol_weight_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Volume-weighted funding rate OHLC for a coin. symbol=BTC, interval=1h/4h/1d."
+    docs: |
+      Volume-weighted funding rate OHLC for a coin. symbol=BTC, interval=1h/4h/1d. Required: symbol, interval. Optional: limit, start_time, end_time.
+  - id: 310
+    name: "futures_funding_rate_exchange_list"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Current funding rates per coin across exchanges (stablecoin & coin margin). No params."
+    docs: |
+      Current funding rates per coin across exchanges (stablecoin & coin margin). No params.
+  - id: 311
+    name: "futures_funding_rate_accumulated_exchange_list"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Accumulated funding rates per coin across exchanges. Requires range (1d/7d/30d/365d)."
+    docs: |
+      Accumulated funding rates per coin across exchanges. Requires range (1d/7d/30d/365d). Required: range.
+  - id: 312
+    name: "futures_funding_rate_arbitrage"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Funding-rate arbitrage opportunities across exchanges. Requires usd (principal, e.g. 10000); optional exchange_list (Binance,OKX,Bybit)."
+    docs: |
+      Funding-rate arbitrage opportunities across exchanges. Requires usd (principal, e.g. 10000); optional exchange_list (Binance,OKX,Bybit). Required: usd. Optional: exchange_list.
+  - id: 313
+    name: "hyperliquid_whale_alert"
+    asset_classes: "crypto,derivatives"
+    data_types: "hyperliquid"
+    description: "Hyperliquid whale position alerts (large position open/close events). No params."
+    docs: |
+      Hyperliquid whale position alerts (large position open/close events). No params.
+  - id: 314
+    name: "hyperliquid_whale_position"
+    asset_classes: "crypto,derivatives"
+    data_types: "hyperliquid"
+    description: "Current Hyperliquid whale positions. No params."
+    docs: |
+      Current Hyperliquid whale positions. No params.
+  - id: 315
+    name: "hyperliquid_position"
+    asset_classes: "crypto,derivatives"
+    data_types: "hyperliquid"
+    description: "Hyperliquid wallet positions for a coin. Requires symbol (e.g. BTC); optional current_page."
+    docs: |
+      Hyperliquid wallet positions for a coin. Requires symbol (e.g. BTC); optional current_page. Required: symbol. Optional: current_page.
+  - id: 316
+    name: "hyperliquid_user_position"
+    asset_classes: "crypto,derivatives"
+    data_types: "hyperliquid"
+    description: "Hyperliquid positions for a specific wallet. Requires user_address."
+    docs: |
+      Hyperliquid positions for a specific wallet. Requires user_address. Required: user_address.
+  - id: 317
+    name: "hyperliquid_wallet_position_distribution"
+    asset_classes: "crypto,derivatives"
+    data_types: "hyperliquid"
+    description: "Distribution of Hyperliquid wallet positions. No params."
+    docs: |
+      Distribution of Hyperliquid wallet positions. No params.
+  - id: 318
+    name: "hyperliquid_wallet_pnl_distribution"
+    asset_classes: "crypto,derivatives"
+    data_types: "hyperliquid"
+    description: "Distribution of Hyperliquid wallet PnL. No params."
+    docs: |
+      Distribution of Hyperliquid wallet PnL. No params.
+  - id: 319
+    name: "hyperliquid_global_long_short_account_ratio_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "hyperliquid"
+    description: "Hyperliquid global long/short account ratio history. symbol=BTC, interval=1h/4h/1d."
+    docs: |
+      Hyperliquid global long/short account ratio history. symbol=BTC, interval=1h/4h/1d. Required: symbol, interval. Optional: limit, start_time, end_time.
+  - id: 320
+    name: "futures_liquidation_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Pair liquidation history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Pair liquidation history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 321
+    name: "futures_liquidation_aggregated_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Coin (aggregated) liquidation history. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d."
+    docs: |
+      Coin (aggregated) liquidation history. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d. Required: exchange_list, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 322
+    name: "futures_liquidation_coin_list"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Liquidation totals per coin for an exchange. Requires exchange (e.g. Binance)."
+    docs: |
+      Liquidation totals per coin for an exchange. Requires exchange (e.g. Binance). Required: exchange.
+  - id: 323
+    name: "futures_liquidation_exchange_list"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Liquidation totals per exchange for a coin. Optional symbol=BTC; requires range (1h/4h/12h/24h)."
+    docs: |
+      Liquidation totals per exchange for a coin. Optional symbol=BTC; requires range (1h/4h/12h/24h). Required: range. Optional: symbol.
+  - id: 324
+    name: "futures_liquidation_order"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Individual liquidation orders. exchange=Binance, symbol=BTCUSDT, min_liquidation_amount required."
+    docs: |
+      Individual liquidation orders. exchange=Binance, symbol=BTCUSDT, min_liquidation_amount required. Required: exchange, symbol, min_liquidation_amount. Optional: start_time, end_time.
+  - id: 325
+    name: "futures_liquidation_heatmap_model1"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Pair liquidation heatmap (model1). exchange=Binance, symbol=BTCUSDT, range required."
+    docs: |
+      Pair liquidation heatmap (model1). exchange=Binance, symbol=BTCUSDT, range required. Required: exchange, symbol, range.
+  - id: 326
+    name: "futures_liquidation_heatmap_model2"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Pair liquidation heatmap (model2). exchange=Binance, symbol=BTCUSDT, range required."
+    docs: |
+      Pair liquidation heatmap (model2). exchange=Binance, symbol=BTCUSDT, range required. Required: exchange, symbol, range.
+  - id: 327
+    name: "futures_liquidation_heatmap_model3"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Pair liquidation heatmap (model3). exchange=Binance, symbol=BTCUSDT, range required."
+    docs: |
+      Pair liquidation heatmap (model3). exchange=Binance, symbol=BTCUSDT, range required. Required: exchange, symbol, range.
+  - id: 328
+    name: "futures_liquidation_aggregated_heatmap_model1"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Coin (aggregated) liquidation heatmap (model1). symbol=BTC, range required."
+    docs: |
+      Coin (aggregated) liquidation heatmap (model1). symbol=BTC, range required. Required: symbol, range.
+  - id: 329
+    name: "futures_liquidation_aggregated_heatmap_model2"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Coin (aggregated) liquidation heatmap (model2). symbol=BTC, range required."
+    docs: |
+      Coin (aggregated) liquidation heatmap (model2). symbol=BTC, range required. Required: symbol, range.
+  - id: 330
+    name: "futures_liquidation_aggregated_heatmap_model3"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Coin (aggregated) liquidation heatmap (model3). symbol=BTC, range required."
+    docs: |
+      Coin (aggregated) liquidation heatmap (model3). symbol=BTC, range required. Required: symbol, range.
+  - id: 331
+    name: "futures_liquidation_map"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Pair liquidation map. exchange=Binance, symbol=BTCUSDT, range required."
+    docs: |
+      Pair liquidation map. exchange=Binance, symbol=BTCUSDT, range required. Required: exchange, symbol, range.
+  - id: 332
+    name: "futures_liquidation_aggregated_map"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Coin (aggregated) liquidation map. symbol=BTC, range required."
+    docs: |
+      Coin (aggregated) liquidation map. symbol=BTC, range required. Required: symbol, range.
+  - id: 333
+    name: "futures_liquidation_max_pain"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Liquidation max pain. Optional range."
+    docs: |
+      Liquidation max pain. Optional range. Optional: range.
+  - id: 334
+    name: "futures_global_long_short_account_ratio_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Global long/short account ratio history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Global long/short account ratio history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 335
+    name: "futures_top_long_short_account_ratio_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Top trader long/short account ratio history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Top trader long/short account ratio history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 336
+    name: "futures_top_long_short_position_ratio_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Top trader long/short position ratio history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Top trader long/short position ratio history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 337
+    name: "futures_taker_buy_sell_volume_exchange_list"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Taker buy/sell volume ratio per exchange for a coin. symbol=BTC, range required."
+    docs: |
+      Taker buy/sell volume ratio per exchange for a coin. symbol=BTC, range required. Required: symbol, range.
+  - id: 338
+    name: "futures_net_position_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Net long/short position history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Net long/short position history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 339
+    name: "futures_v2_net_position_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Net long/short position history (v2). exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Net long/short position history (v2). exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 340
+    name: "futures_open_interest_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Open interest OHLC for a single pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; unit=usd/coin."
+    docs: |
+      Open interest OHLC for a single pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; unit=usd/coin. Required: exchange, symbol, interval. Optional: limit, start_time, end_time, unit.
+  - id: 341
+    name: "futures_open_interest_aggregated_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Aggregated open interest OHLC for a coin. symbol=BTC, interval=1h/4h/1d; unit=usd/coin."
+    docs: |
+      Aggregated open interest OHLC for a coin. symbol=BTC, interval=1h/4h/1d; unit=usd/coin. Required: symbol, interval. Optional: limit, start_time, end_time, unit.
+  - id: 342
+    name: "futures_open_interest_aggregated_stablecoin_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Aggregated stablecoin-margined OI OHLC. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d."
+    docs: |
+      Aggregated stablecoin-margined OI OHLC. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d. Required: exchange_list, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 343
+    name: "futures_open_interest_aggregated_coin_margin_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Aggregated coin-margined OI OHLC. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d."
+    docs: |
+      Aggregated coin-margined OI OHLC. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d. Required: exchange_list, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 344
+    name: "futures_open_interest_exchange_list"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Open interest for a coin across exchanges. symbol=BTC."
+    docs: |
+      Open interest for a coin across exchanges. symbol=BTC. Required: symbol.
+  - id: 345
+    name: "futures_open_interest_exchange_history_chart"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Open interest history per exchange (chart format). symbol=BTC, range (all/1m/15m/1h/4h/12h); unit=usd/coin."
+    docs: |
+      Open interest history per exchange (chart format). symbol=BTC, range (all/1m/15m/1h/4h/12h); unit=usd/coin. Required: symbol, range. Optional: unit.
+  - id: 346
+    name: "futures_orderbook_ask_bids_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Pair orderbook bid/ask history (within +/- range). exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional range."
+    docs: |
+      Pair orderbook bid/ask history (within +/- range). exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional range. Required: exchange, symbol, interval. Optional: limit, start_time, end_time, range.
+  - id: 347
+    name: "futures_orderbook_aggregated_ask_bids_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Coin aggregated orderbook bid/ask history (+/- range). exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d; optional range."
+    docs: |
+      Coin aggregated orderbook bid/ask history (+/- range). exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d; optional range. Required: exchange_list, symbol, interval. Optional: limit, start_time, end_time, range.
+  - id: 348
+    name: "futures_orderbook_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Orderbook heatmap history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d, limit required."
+    docs: |
+      Orderbook heatmap history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d, limit required. Required: exchange, symbol, interval, limit. Optional: start_time, end_time.
+  - id: 349
+    name: "futures_orderbook_large_limit_order"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Current large open limit orders. exchange=Binance, symbol=BTCUSDT."
+    docs: |
+      Current large open limit orders. exchange=Binance, symbol=BTCUSDT. Required: exchange, symbol.
+  - id: 350
+    name: "futures_orderbook_large_limit_order_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Historical large limit orders. exchange=Binance, symbol=BTCUSDT, start_time, end_time, state all required."
+    docs: |
+      Historical large limit orders. exchange=Binance, symbol=BTCUSDT, start_time, end_time, state all required. Required: exchange, symbol, start_time, end_time, state.
+  - id: 351
+    name: "futures_v2_taker_buy_sell_volume_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Pair taker buy/sell volume history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Pair taker buy/sell volume history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 352
+    name: "futures_aggregated_taker_buy_sell_volume_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Coin (aggregated) taker buy/sell volume history. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d; unit=usd/coin."
+    docs: |
+      Coin (aggregated) taker buy/sell volume history. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d; unit=usd/coin. Required: exchange_list, symbol, interval. Optional: limit, start_time, end_time, unit.
+  - id: 353
+    name: "futures_volume_footprint_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Footprint volume history (90d). exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Footprint volume history (90d). exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 354
+    name: "futures_cvd_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Cumulative Volume Delta (CVD) history for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Cumulative Volume Delta (CVD) history for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 355
+    name: "futures_aggregated_cvd_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Aggregated CVD history for a coin. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d; unit=usd/coin."
+    docs: |
+      Aggregated CVD history for a coin. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d; unit=usd/coin. Required: exchange_list, symbol, interval. Optional: limit, start_time, end_time, unit.
+  - id: 356
+    name: "futures_netflow_list"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Futures coin netflow list. Optional per_page, page."
+    docs: |
+      Futures coin netflow list. Optional per_page, page. Optional: per_page, page.
+  - id: 357
+    name: "futures_coin_netflow"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Futures netflow for a coin. symbol=BTC, exchange_list required."
+    docs: |
+      Futures netflow for a coin. symbol=BTC, exchange_list required. Required: symbol, exchange_list.
+  - id: 358
+    name: "futures_supported_coins"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "List of supported futures coins. No params."
+    docs: |
+      List of supported futures coins. No params.
+  - id: 359
+    name: "futures_supported_exchanges"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "List of supported futures exchanges. No params."
+    docs: |
+      List of supported futures exchanges. No params.
+  - id: 360
+    name: "futures_supported_exchange_pairs"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Supported futures exchange/pair combinations. Optional exchange (e.g. Binance)."
+    docs: |
+      Supported futures exchange/pair combinations. Optional exchange (e.g. Binance). Optional: exchange.
+  - id: 361
+    name: "futures_coins_markets"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Performance/market snapshot for futures coins. Optional exchange_list, per_page, page."
+    docs: |
+      Performance/market snapshot for futures coins. Optional exchange_list, per_page, page. Optional: exchange_list, per_page, page.
+  - id: 362
+    name: "futures_pairs_markets"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Market data for all pairs of a futures coin. symbol=BTC."
+    docs: |
+      Market data for all pairs of a futures coin. symbol=BTC. Required: symbol.
+  - id: 363
+    name: "futures_coins_price_change"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Price change snapshot across futures coins. No params."
+    docs: |
+      Price change snapshot across futures coins. No params.
+  - id: 364
+    name: "futures_price_history"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Futures price OHLC history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d, limit required."
+    docs: |
+      Futures price OHLC history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d, limit required. Required: exchange, symbol, interval, limit. Optional: start_time, end_time.
+  - id: 365
+    name: "futures_delisted_exchange_pairs"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "List of delisted futures exchange pairs. No params."
+    docs: |
+      List of delisted futures exchange pairs. No params.
+  - id: 366
+    name: "futures_exchange_rank"
+    asset_classes: "crypto,derivatives"
+    data_types: "futures"
+    description: "Futures exchange ranking. No params."
+    docs: |
+      Futures exchange ranking. No params.
+  - id: 367
+    name: "futures_rsi_list"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "RSI values across futures coins (list). No params."
+    docs: |
+      RSI values across futures coins (list). No params.
+  - id: 368
+    name: "futures_indicators_rsi"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "RSI indicator for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional window, series_type."
+    docs: |
+      RSI indicator for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional window, series_type. Required: exchange, symbol, interval. Optional: limit, start_time, end_time, window, series_type.
+  - id: 369
+    name: "futures_indicators_ma"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Moving Average (MA) for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional window, series_type."
+    docs: |
+      Moving Average (MA) for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional window, series_type. Required: exchange, symbol, interval. Optional: limit, start_time, end_time, window, series_type.
+  - id: 370
+    name: "futures_ma_list"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Moving average values across futures coins (list). No params."
+    docs: |
+      Moving average values across futures coins (list). No params.
+  - id: 371
+    name: "futures_indicators_ema"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Exponential Moving Average (EMA) for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional window, series_type."
+    docs: |
+      Exponential Moving Average (EMA) for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional window, series_type. Required: exchange, symbol, interval. Optional: limit, start_time, end_time, window, series_type.
+  - id: 372
+    name: "futures_ema_list"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "EMA values across futures coins (list). No params."
+    docs: |
+      EMA values across futures coins (list). No params.
+  - id: 373
+    name: "futures_indicators_boll"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bollinger Bands (BOLL) for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional series_type, window, mult."
+    docs: |
+      Bollinger Bands (BOLL) for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional series_type, window, mult. Required: exchange, symbol, interval. Optional: limit, start_time, end_time, series_type, window, mult.
+  - id: 374
+    name: "futures_indicators_macd"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "MACD for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional series_type, fast/slow/signal_window."
+    docs: |
+      MACD for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional series_type, fast/slow/signal_window. Required: exchange, symbol, interval. Optional: limit, start_time, end_time, series_type, fast_window, slow_window, signal_window.
+  - id: 375
+    name: "futures_macd_list"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "MACD values across futures coins (list). No params."
+    docs: |
+      MACD values across futures coins (list). No params.
+  - id: 376
+    name: "futures_basis_history"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Futures basis history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Futures basis history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 377
+    name: "futures_whale_index_history"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Whale index history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Whale index history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 378
+    name: "futures_cgdi_index_history"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Derivatives Index (CGDI) history. No params."
+    docs: |
+      Derivatives Index (CGDI) history. No params.
+  - id: 379
+    name: "futures_cdri_index_history"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Derivatives Risk Index (CDRI) history. No params."
+    docs: |
+      Derivatives Risk Index (CDRI) history. No params.
+  - id: 380
+    name: "futures_indicators_avg_true_range"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Average True Range (ATR) for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional window."
+    docs: |
+      Average True Range (ATR) for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional window. Required: exchange, symbol, interval. Optional: limit, start_time, end_time, window.
+  - id: 381
+    name: "futures_avg_true_range_list"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "ATR values across futures coins (list). No params."
+    docs: |
+      ATR values across futures coins (list). No params.
+  - id: 382
+    name: "index_ahr999"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "AHR999 index history. No params."
+    docs: |
+      AHR999 index history. No params.
+  - id: 383
+    name: "bull_market_peak_indicator"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bull market peak indicators. No params."
+    docs: |
+      Bull market peak indicators. No params.
+  - id: 384
+    name: "index_puell_multiple"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Puell Multiple index history. No params."
+    docs: |
+      Puell Multiple index history. No params.
+  - id: 385
+    name: "index_stock_flow"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Stock-to-Flow model data. No params."
+    docs: |
+      Stock-to-Flow model data. No params.
+  - id: 386
+    name: "index_pi_cycle_indicator"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Pi Cycle Top indicator history. No params."
+    docs: |
+      Pi Cycle Top indicator history. No params.
+  - id: 387
+    name: "index_golden_ratio_multiplier"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Golden Ratio Multiplier data. No params."
+    docs: |
+      Golden Ratio Multiplier data. No params.
+  - id: 388
+    name: "index_bitcoin_profitable_days"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin profitable days indicator. No params."
+    docs: |
+      Bitcoin profitable days indicator. No params.
+  - id: 389
+    name: "index_bitcoin_rainbow_chart"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin rainbow chart data. No params."
+    docs: |
+      Bitcoin rainbow chart data. No params.
+  - id: 390
+    name: "index_fear_greed_history"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Crypto Fear & Greed index history. No params."
+    docs: |
+      Crypto Fear & Greed index history. No params.
+  - id: 391
+    name: "index_stablecoin_marketcap_history"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Stablecoin market cap history. No params."
+    docs: |
+      Stablecoin market cap history. No params.
+  - id: 392
+    name: "index_bitcoin_bubble_index"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin bubble index. No params."
+    docs: |
+      Bitcoin bubble index. No params.
+  - id: 393
+    name: "index_2_year_ma_multiplier"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "2-Year MA Multiplier data. No params."
+    docs: |
+      2-Year MA Multiplier data. No params.
+  - id: 394
+    name: "index_200_week_moving_average_heatmap"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "200-week moving average heatmap. No params."
+    docs: |
+      200-week moving average heatmap. No params.
+  - id: 395
+    name: "index_altcoin_season"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Altcoin Season index. No params."
+    docs: |
+      Altcoin Season index. No params.
+  - id: 396
+    name: "index_bitcoin_sth_sopr"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin short-term holder SOPR. No params."
+    docs: |
+      Bitcoin short-term holder SOPR. No params.
+  - id: 397
+    name: "index_bitcoin_lth_sopr"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin long-term holder SOPR. No params."
+    docs: |
+      Bitcoin long-term holder SOPR. No params.
+  - id: 398
+    name: "index_bitcoin_sth_realized_price"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin short-term holder realized price. No params."
+    docs: |
+      Bitcoin short-term holder realized price. No params.
+  - id: 399
+    name: "index_bitcoin_lth_realized_price"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin long-term holder realized price. No params."
+    docs: |
+      Bitcoin long-term holder realized price. No params.
+  - id: 400
+    name: "index_bitcoin_short_term_holder_supply"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin short-term holder supply. No params."
+    docs: |
+      Bitcoin short-term holder supply. No params.
+  - id: 401
+    name: "index_bitcoin_long_term_holder_supply"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin long-term holder supply. No params."
+    docs: |
+      Bitcoin long-term holder supply. No params.
+  - id: 402
+    name: "index_bitcoin_rhodl_ratio"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin RHODL ratio. No params."
+    docs: |
+      Bitcoin RHODL ratio. No params.
+  - id: 403
+    name: "index_bitcoin_reserve_risk"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin reserve risk. No params."
+    docs: |
+      Bitcoin reserve risk. No params.
+  - id: 404
+    name: "index_bitcoin_active_addresses"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin active addresses. No params."
+    docs: |
+      Bitcoin active addresses. No params.
+  - id: 405
+    name: "index_bitcoin_new_addresses"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin new addresses. No params."
+    docs: |
+      Bitcoin new addresses. No params.
+  - id: 406
+    name: "index_bitcoin_net_unrealized_profit_loss"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin Net Unrealized Profit/Loss (NUPL). No params."
+    docs: |
+      Bitcoin Net Unrealized Profit/Loss (NUPL). No params.
+  - id: 407
+    name: "index_bitcoin_correlation"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin correlations with other assets. No params."
+    docs: |
+      Bitcoin correlations with other assets. No params.
+  - id: 408
+    name: "index_bitcoin_macro_oscillator"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin Macro Oscillator (BMO). No params."
+    docs: |
+      Bitcoin Macro Oscillator (BMO). No params.
+  - id: 409
+    name: "index_option_vs_futures_oi_ratio"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Options vs futures open interest ratio. No params."
+    docs: |
+      Options vs futures open interest ratio. No params.
+  - id: 410
+    name: "index_bitcoin_vs_global_m2_growth"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin vs global M2 supply & growth. No params."
+    docs: |
+      Bitcoin vs global M2 supply & growth. No params.
+  - id: 411
+    name: "index_bitcoin_vs_us_m2_growth"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin vs US M2 supply & growth. No params."
+    docs: |
+      Bitcoin vs US M2 supply & growth. No params.
+  - id: 412
+    name: "index_bitcoin_dominance"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitcoin dominance history. No params."
+    docs: |
+      Bitcoin dominance history. No params.
+  - id: 413
+    name: "exchange_assets_transparency_list"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Exchange assets transparency list. No params."
+    docs: |
+      Exchange assets transparency list. No params.
+  - id: 414
+    name: "futures_spot_volume_ratio"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Futures vs spot volume ratio. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d."
+    docs: |
+      Futures vs spot volume ratio. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d. Required: exchange_list, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 415
+    name: "coinbase_premium_index"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Coinbase premium index. interval=1h/4h/1d required; optional limit, start_time, end_time."
+    docs: |
+      Coinbase premium index. interval=1h/4h/1d required; optional limit, start_time, end_time. Required: interval. Optional: limit, start_time, end_time.
+  - id: 416
+    name: "bitfinex_margin_long_short"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Bitfinex margin long/short. symbol=BTC, interval=1h/4h/1d required; optional limit, start/end_time."
+    docs: |
+      Bitfinex margin long/short. symbol=BTC, interval=1h/4h/1d required; optional limit, start/end_time. Required: symbol, interval. Optional: limit, start_time, end_time.
+  - id: 417
+    name: "borrow_interest_rate_history"
+    asset_classes: "crypto,indicators"
+    data_types: "index"
+    description: "Borrow interest rate history. exchange=Binance, symbol=BTC, interval=1h/4h/1d."
+    docs: |
+      Borrow interest rate history. exchange=Binance, symbol=BTC, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 418
+    name: "exchange_assets"
+    asset_classes: "crypto,onchain"
+    data_types: "onchain"
+    description: "On-chain assets/reserves held by an exchange. Requires exchange (e.g. Binance); optional per_page, page."
+    docs: |
+      On-chain assets/reserves held by an exchange. Requires exchange (e.g. Binance); optional per_page, page. Required: exchange. Optional: per_page, page.
+  - id: 419
+    name: "exchange_balance_list"
+    asset_classes: "crypto,onchain"
+    data_types: "onchain"
+    description: "Exchange on-chain balances for a coin. symbol=BTC."
+    docs: |
+      Exchange on-chain balances for a coin. symbol=BTC. Required: symbol.
+  - id: 420
+    name: "exchange_balance_chart"
+    asset_classes: "crypto,onchain"
+    data_types: "onchain"
+    description: "Exchange on-chain balance history (chart). symbol=BTC."
+    docs: |
+      Exchange on-chain balance history (chart). symbol=BTC. Required: symbol.
+  - id: 421
+    name: "coin_unlock_list"
+    asset_classes: "crypto,onchain"
+    data_types: "onchain"
+    description: "Token unlock schedule list. Optional per_page, page."
+    docs: |
+      Token unlock schedule list. Optional per_page, page. Optional: per_page, page.
+  - id: 422
+    name: "coin_vesting"
+    asset_classes: "crypto,onchain"
+    data_types: "onchain"
+    description: "Token vesting/unlock schedule for a coin. symbol (e.g. BTC/token)."
+    docs: |
+      Token vesting/unlock schedule for a coin. symbol (e.g. BTC/token). Required: symbol.
+  - id: 423
+    name: "exchange_chain_tx_list"
+    asset_classes: "crypto,onchain"
+    data_types: "onchain"
+    description: "Exchange on-chain ERC-20 transfers. Optional symbol, start_time, min_usd, per_page, page."
+    docs: |
+      Exchange on-chain ERC-20 transfers. Optional symbol, start_time, min_usd, per_page, page. Optional: symbol, start_time, min_usd, per_page, page.
+  - id: 424
+    name: "chain_v2_whale_transfer"
+    asset_classes: "crypto,onchain"
+    data_types: "onchain"
+    description: "On-chain whale transfers. Optional symbol, start_time, end_time."
+    docs: |
+      On-chain whale transfers. Optional symbol, start_time, end_time. Optional: symbol, start_time, end_time.
+  - id: 425
+    name: "option_max_pain"
+    asset_classes: "crypto,derivatives,options"
+    data_types: "options"
+    description: "Options max pain. symbol=BTC, exchange (e.g. Deribit) required."
+    docs: |
+      Options max pain. symbol=BTC, exchange (e.g. Deribit) required. Required: symbol, exchange.
+  - id: 426
+    name: "option_info"
+    asset_classes: "crypto,derivatives,options"
+    data_types: "options"
+    description: "Options market info/overview for a coin. symbol=BTC."
+    docs: |
+      Options market info/overview for a coin. symbol=BTC. Required: symbol.
+  - id: 427
+    name: "option_exchange_oi_history"
+    asset_classes: "crypto,derivatives,options"
+    data_types: "options"
+    description: "Options open interest history per exchange. symbol=BTC, unit and range required."
+    docs: |
+      Options open interest history per exchange. symbol=BTC, unit and range required. Required: symbol, unit, range.
+  - id: 428
+    name: "option_exchange_vol_history"
+    asset_classes: "crypto,derivatives,options"
+    data_types: "options"
+    description: "Options volume history per exchange. symbol=BTC, unit required."
+    docs: |
+      Options volume history per exchange. symbol=BTC, unit required. Required: symbol, unit.
+  - id: 429
+    name: "calendar_economic_data"
+    asset_classes: "crypto"
+    data_types: "other"
+    description: "Economic/financial calendar data. Optional start_time, end_time, language."
+    docs: |
+      Economic/financial calendar data. Optional start_time, end_time, language. Optional: start_time, end_time, language.
+  - id: 430
+    name: "article_list"
+    asset_classes: "crypto"
+    data_types: "other"
+    description: "Crypto news article list. Optional start_time, end_time, language, page, per_page."
+    docs: |
+      Crypto news article list. Optional start_time, end_time, language, page, per_page. Optional: start_time, end_time, language, page, per_page.
+  - id: 431
+    name: "spot_orderbook_ask_bids_history"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Spot pair orderbook bid/ask history (+/- range). exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional range."
+    docs: |
+      Spot pair orderbook bid/ask history (+/- range). exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; optional range. Required: exchange, symbol, interval. Optional: limit, start_time, end_time, range.
+  - id: 432
+    name: "spot_orderbook_aggregated_ask_bids_history"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Spot coin aggregated orderbook bid/ask history (+/- range). exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d; optional range."
+    docs: |
+      Spot coin aggregated orderbook bid/ask history (+/- range). exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d; optional range. Required: exchange_list, symbol, interval. Optional: limit, start_time, end_time, range.
+  - id: 433
+    name: "spot_orderbook_history"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Spot orderbook heatmap history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Spot orderbook heatmap history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 434
+    name: "spot_orderbook_large_limit_order"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Current spot large limit orders. exchange=Binance, symbol=BTCUSDT."
+    docs: |
+      Current spot large limit orders. exchange=Binance, symbol=BTCUSDT. Required: exchange, symbol.
+  - id: 435
+    name: "spot_orderbook_large_limit_order_history"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Historical spot large limit orders. exchange=Binance, symbol=BTCUSDT, start_time, end_time, state required."
+    docs: |
+      Historical spot large limit orders. exchange=Binance, symbol=BTCUSDT, start_time, end_time, state required. Required: exchange, symbol, start_time, end_time, state.
+  - id: 436
+    name: "spot_taker_buy_sell_volume_history"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Spot pair taker buy/sell volume history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Spot pair taker buy/sell volume history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 437
+    name: "spot_aggregated_taker_buy_sell_volume_history"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Spot coin aggregated taker buy/sell volume history. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d; unit=usd/coin."
+    docs: |
+      Spot coin aggregated taker buy/sell volume history. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d; unit=usd/coin. Required: exchange_list, symbol, interval. Optional: limit, start_time, end_time, unit.
+  - id: 438
+    name: "spot_volume_footprint_history"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Spot footprint volume history (90d). exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Spot footprint volume history (90d). exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 439
+    name: "spot_cvd_history"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Spot CVD history for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; unit=usd/coin."
+    docs: |
+      Spot CVD history for a pair. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d; unit=usd/coin. Required: exchange, symbol, interval. Optional: limit, start_time, end_time, unit.
+  - id: 440
+    name: "spot_aggregated_cvd_history"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Spot aggregated CVD history for a coin. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d; unit=usd/coin."
+    docs: |
+      Spot aggregated CVD history for a coin. exchange_list=Binance,OKX; symbol=BTC; interval=1h/4h/1d; unit=usd/coin. Required: exchange_list, symbol, interval. Optional: limit, start_time, end_time, unit.
+  - id: 441
+    name: "spot_netflow_list"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Spot coin netflow list. Optional per_page, page."
+    docs: |
+      Spot coin netflow list. Optional per_page, page. Optional: per_page, page.
+  - id: 442
+    name: "spot_coin_netflow"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Spot netflow for a coin. symbol=BTC, exchange_list required."
+    docs: |
+      Spot netflow for a coin. symbol=BTC, exchange_list required. Required: symbol, exchange_list.
+  - id: 443
+    name: "spot_supported_coins"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "List of supported spot coins. No params."
+    docs: |
+      List of supported spot coins. No params.
+  - id: 444
+    name: "spot_supported_exchange_pairs"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Supported spot exchange/pair combinations. No params."
+    docs: |
+      Supported spot exchange/pair combinations. No params.
+  - id: 445
+    name: "spot_coins_markets"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Market snapshot for spot coins. Optional per_page, page."
+    docs: |
+      Market snapshot for spot coins. Optional per_page, page. Optional: per_page, page.
+  - id: 446
+    name: "spot_pairs_markets"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Market data for all pairs of a spot coin. symbol=BTC."
+    docs: |
+      Market data for all pairs of a spot coin. symbol=BTC. Required: symbol.
+  - id: 447
+    name: "spot_price_history"
+    asset_classes: "crypto,spot"
+    data_types: "spot"
+    description: "Spot price OHLC history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
+    docs: |
+      Spot price OHLC history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
+  - id: 448
+    name: "address_overview"
+    asset_classes: "crypto,onchain,aml"
+    data_types: "risk,aml,address"
+    description: "Address overview: native balance, tx count, first_seen/last_seen, total received/spent. Params: coin* (chain id e.g. ETH/BTC/TRX/SOL/POL-Pol"
+    docs: |
+      Address overview: native balance, tx count, first_seen/last_seen, total received/spent. Params: coin* (chain id e.g. ETH/BTC/TRX/SOL/POL-Polygon/ETH-Base/ETH-Arbitrum), address*.
+  - id: 449
+    name: "address_risk_score"
+    asset_classes: "crypto,onchain,aml"
+    data_types: "risk,aml,address"
+    description: "AML/KYT risk score. Params: coin*, and address OR txid. Returns score (3-100), risk_level (Low/Moderate/High/Severe), detail_list, hacking_e"
+    docs: |
+      AML/KYT risk score. Params: coin*, and address OR txid. Returns score (3-100), risk_level (Low/Moderate/High/Severe), detail_list, hacking_event, risk_detail (entity/risk_type/exposure_type/hop_num/volume/percent), risk_report_url. risk_type: sanctioned_entity/illicit_activity/mixer/gambling/risk_exchange/bridge. Same score across all coins of one address.
+  - id: 450
+    name: "address_action"
+    asset_classes: "crypto,onchain,aml"
+    data_types: "risk,aml,address"
+    description: "Behavior breakdown: received_txs/spent_txs grouped by action (DEX/Exchange/Mixer/Transfer/Swap) with count & proportion. Key for spotting mi"
+    docs: |
+      Behavior breakdown: received_txs/spent_txs grouped by action (DEX/Exchange/Mixer/Transfer/Swap) with count & proportion. Key for spotting mixer use. Params: coin*, address*.
+  - id: 451
+    name: "address_trace"
+    asset_classes: "crypto,onchain,aml"
+    data_types: "risk,aml,address"
+    description: "Address profile: first_address (gas-funding source), use_platform (exchange/dex/mixer/nft + counts), malicious_event (phishing/ransom/steali"
+    docs: |
+      Address profile: first_address (gas-funding source), use_platform (exchange/dex/mixer/nft + counts), malicious_event (phishing/ransom/stealing/laundering), relation_info (wallet/ens/twitter). Params: coin*, address*.
+  - id: 452
+    name: "address_counterparty"
+    asset_classes: "crypto,onchain,aml"
+    data_types: "risk,aml,address"
+    description: "Top counterparties: list of {name, amount(USD), percent}. Params: coin*, address*. Not supported for exchange hot wallets."
+    docs: |
+      Top counterparties: list of {name, amount(USD), percent}. Params: coin*, address*. Not supported for exchange hot wallets.
+  - id: 453
+    name: "transactions_investigation"
+    asset_classes: "crypto,onchain,aml"
+    data_types: "risk,aml,address"
+    description: "Tx investigation: in/out transfer lists with counterparty address, type (1 normal/2 malicious/3 entity/4 contract), tx_hash_list, amount, la"
+    docs: |
+      Tx investigation: in/out transfer lists with counterparty address, type (1 normal/2 malicious/3 entity/4 contract), tx_hash_list, amount, label; page/total_pages. Params: coin*, address*, type (in/out/all default all), page (default 1), start_timestamp/end_timestamp (unix sec, optional).
+  - id: 454
+    name: "chain_status"
+    asset_classes: "crypto,onchain,aml"
+    data_types: "risk,aml,address"
+    description: "Service status + full list of supported chains/tokens (200+). No params; call to confirm a coin is supported."
+    docs: |
+      Service status + full list of supported chains/tokens (200+). No params; call to confirm a coin is supported.
+  - id: 455
+    name: "address_labels_fast"
+    asset_classes: "crypto,onchain"
+    data_types: "address_labels,attribution"
+    description: "Address labels (fast, local DB only)"
+    docs: |
+      Address labels FAST mode: query ONLY Clawby local label DB (no upstream), instant & free. Params: coin* (ETH/BNB/SOL/SUI/POL-Polygon/ETH-Base/ETH-Arbitrum/HYPE...), address*. Returns {label_list,label_type,cached,no_data}.
+  - id: 456
+    name: "address_labels_deep"
+    asset_classes: "crypto,onchain"
+    data_types: "address_labels,attribution"
+    description: "Address labels (deep, live upstream lookup)"
+    docs: |
+      Address labels DEEP mode: live upstream attribution lookup for any supported chain (including SUI) then cache the result. Use when fast (local DB) returns no_data. Params: coin* (ETH/BNB/SOL/SUI/POL-Polygon/ETH-Base/ETH-Arbitrum/HYPE...), address*. Returns {label_list,label_type,cached:false} or no_data.
+  - id: 459
+    name: "dex_token_info"
+    asset_classes: "crypto"
+    data_types: "dex,token,metadata"
+    description: "DEX token overview: metadata, price, market cap, liquidity, pool & socials (multi-chain)."
+    docs: |
+      Params: chain* (sol|bsc|base|eth|tron|monad|hyperevm), address* (token contract/mint). Returns symbol/name/decimals/price/market_cap/liquidity/holder_count/socials.
+  - id: 460
+    name: "dex_token_security"
+    asset_classes: "crypto"
+    data_types: "dex,security,risk"
+    description: "DEX token security/risk audit: honeypot, mint/freeze authority, top-holder %, burn & dev holdings."
+    docs: |
+      Params: chain*, address*. Returns is_honeypot/renounced/top_10_holder_rate/burn_ratio/dev_token_burn flags. Use before trading any low-cap token.
+  - id: 461
+    name: "dex_token_pool"
+    asset_classes: "crypto"
+    data_types: "dex,liquidity,pool"
+    description: "DEX token liquidity pool: reserves, quote token, initial liquidity."
+    docs: |
+      Params: chain*, address*. Returns pool_address/quote_symbol/liquidity/base_reserve/quote_reserve.
+  - id: 462
+    name: "dex_token_holders"
+    asset_classes: "crypto"
+    data_types: "dex,holders"
+    description: "Top holders of a DEX token (address, balance, share %)."
+    docs: |
+      Params: chain*, address*, limit? (default server-side). Returns holder list with amounts & percentages.
+  - id: 463
+    name: "dex_token_traders"
+    asset_classes: "crypto"
+    data_types: "dex,traders,pnl"
+    description: "Top traders of a DEX token ranked by realized PnL."
+    docs: |
+      Params: chain*, address*, limit?. Returns trader wallets with bought/sold/realized_profit.
+  - id: 464
+    name: "dex_token_kline"
+    asset_classes: "crypto"
+    data_types: "dex,ohlc,candles"
+    description: "OHLC candlestick history for a DEX token."
+    docs: |
+      Params: chain*, address*, resolution* (1m|5m|15m|1h|4h|1d), from? & to? (unix seconds). Returns list of {time,open,high,low,close,volume}.
+  - id: 465
+    name: "dex_trending"
+    asset_classes: "crypto"
+    data_types: "dex,trending,rank"
+    description: "Trending DEX tokens ranked over an interval (volume, price change, swaps)."
+    docs: |
+      Params: chain*, interval* (1m|5m|1h|6h|24h), limit?. Optional min_/max_ range filters. Returns ranked token list with market/volume metrics.
+  - id: 466
+    name: "dex_swap_quote"
+    asset_classes: "crypto"
+    data_types: "dex,swap,quote"
+    description: "Read-only DEX swap quote: best route + estimated output for a token swap (NO execution)."
+    docs: |
+      Params: chain*, from_address*, input_token*, output_token*, input_amount* (raw base units), slippage? (percent). Returns output_amount/min_output_amount/route. Execution requires the trading executor.
+  - id: 467
+    name: "dex_gas_price"
+    asset_classes: "crypto"
+    data_types: "dex,gas,fees"
+    description: "Chain gas price / priority-fee suggestions (low/avg/high) + native token USD price."
+    docs: |
+      Params: chain*. Returns low/average/high fees, suggest_base_fee, native_token_usd_price, estimate times.
+  - id: 468
+    name: "dex_hot_searches"
+    asset_classes: "crypto"
+    data_types: "dex,trending,search"
+    description: "Most-searched / hot tokens per chain and interval."
+    docs: |
+      Body: {params: [{interval* (1m|5m|1h|6h|24h), chain*, limit?}]}. Returns per-request hot token lists.
+  - id: 469
+    name: "dex_token_signals"
+    asset_classes: "crypto"
+    data_types: "dex,signals,alerts"
+    description: "DEX token signals (momentum / ATH / market-cap trigger events)."
+    docs: |
+      Body: {chain*, groups: [{signal_type?:[int], mc_min?, mc_max?, trigger_mc_min?, trigger_mc_max?, total_fee_min?, total_fee_max?}]}. Returns signalled tokens with trigger_mc/ath.
+  - id: 470
+    name: "dex_new_launches"
+    asset_classes: "crypto"
+    data_types: "dex,launchpad,new"
+    description: "New token launches / launchpad activity (trenches): new creations, near-completion, completed (bonded)."
+    docs: |
+      Params: chain* (sol|bsc|base|eth). Optional body overrides (limit, launchpad_platform). Returns new_creation/near_completion/completed token buckets.
+  - id: 471
+    name: "dex_launchpad_stats"
+    asset_classes: "crypto"
+    data_types: "dex,launchpad,stats"
+    description: "Launchpad statistics: token creation counts per launchpad."
+    docs: |
+      No params. Returns per-launchpad {launchpad, token_count}.
+  - id: 472
+    name: "dex_kol_wallets"
+    asset_classes: "crypto"
+    data_types: "dex,wallets,kol"
+    description: "KOL (key opinion leader) wallet list."
+    docs: |
+      Params: chain?, limit?. Returns KOL wallets with labels/stats.
+  - id: 473
+    name: "dex_smart_money"
+    asset_classes: "crypto"
+    data_types: "dex,wallets,smartmoney"
+    description: "Smart-money wallet list (top-performing wallets)."
+    docs: |
+      Params: chain?, limit?. Returns smart-money wallets with performance stats.
+  - id: 474
+    name: "dex_wallet_stats"
+    asset_classes: "crypto"
+    data_types: "dex,wallet,pnl"
+    description: "Wallet trading stats / PnL over a period."
+    docs: |
+      Params: chain*, wallet_address*, period? (1d|7d|30d). Returns realized_profit/pnl/buy/sell/bought_cost/win rate.
+  - id: 475
+    name: "dex_wallet_activity"
+    asset_classes: "crypto"
+    data_types: "dex,wallet,activity"
+    description: "Wallet trade activity (recent buys/sells)."
+    docs: |
+      Params: chain*, wallet_address*, limit?. Returns activity list + pagination cursor.
+  - id: 476
+    name: "dex_wallet_balance"
+    asset_classes: "crypto"
+    data_types: "dex,wallet,balance"
+    description: "Wallet token balances."
+    docs: |
+      Params: chain*, wallet_address*, token_address? (filter to one token). Returns balances list.
+  - id: 477
+    name: "dex_wallet_created_tokens"
+    asset_classes: "crypto"
+    data_types: "dex,wallet,dev"
+    description: "Tokens created/deployed by a wallet (dev history + rug/open stats)."
+    docs: |
+      Params: chain*, wallet_address*. Returns created token list + open_ratio/creator_ath_info.

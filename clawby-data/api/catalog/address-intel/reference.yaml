@@ -1,0 +1,18 @@
+# ============================================================================
+# Address Intel — Reference Data / Supported Chains
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# Data: address labels / AML data
+# ============================================================================
+category: "Reference Data / Supported Chains"
+
+interfaces:
+  - name: "chain_status"
+    summary: "Query all currently supported chains and tokens (200+ entries), and service status. Use to confirm chain availability and get the correct coin param value."
+    params: []
+    gotchas:
+      - "⚠️ No params required; call directly."
+      - "Response contains a full list of all supported coin (chain ID) values — call this interface first when unsure of the correct coin param for a chain."
+      - "Common pitfall: Base chain=ETH-Base, Polygon=POL-Polygon, Arbitrum=ETH-Arbitrum, Optimism=ETH-Optimism, Avalanche=AVAX-Avalanche — all require the suffix; never use bare ETH etc."
+    example:
+      name: "chain_status"
+      params: {}

@@ -1,0 +1,187 @@
+# ============================================================================
+# Cosmos/Tendermint JSON-RPC + REST — allora
+# Tendermint JSON-RPC: POST /api/rpc  {"chain":"allora","method":"<method>","params":[...]}
+# Cosmos REST: accessed via HTTP gateway (not the /api/rpc JSON-RPC path)
+# ============================================================================
+chain: "allora"                # chain param for /api/rpc (Tendermint JSON-RPC)
+type: non-EVM
+slug: "allora"
+status: unverified             # ⚠️ not verified on the current key
+api_style: "Tendermint JSON-RPC + Cosmos REST"
+how_to_call: |
+  Tendermint JSON-RPC: POST /api/rpc  {"chain":"allora","method":"<method>","params":[...]}
+  Cosmos REST: GET/POST requests, path prefix /cosmos/<module>/v1beta1/...
+notes:
+  - "Allora is a Cosmos/Tendermint-based decentralized AI/ML prediction network (Chain ID: allora-testnet-1)"
+  - "Provides two interfaces: Tendermint JSON-RPC (via the method field) and Cosmos REST (independent HTTP endpoints)"
+  - "Tendermint methods can be accessed via both POST JSON-RPC and GET REST"
+  - "Cosmos REST modules include: auth/bank/distribution/evidence/gov/mint/slashing/staking/upgrade/ibc"
+  - "⚠️ not verified on the current key; availability depends on the plan"
+methods:
+  # ===== Tendermint JSON-RPC Methods =====
+  # ---------- Info — block/consensus info ----------
+  - name: blockchain
+    summary: "Returns a list of block headers in the minHeight ~ maxHeight range (up to 20)"
+    params: "[minHeight(integer), maxHeight(integer)]"
+    example: {"chain":"allora","method":"blockchain","params":["1","100"]}
+  - name: block
+    summary: "Returns the block at the specified height; omit height to return the latest block"
+    params: "[height?(integer)]"
+    example: {"chain":"allora","method":"block","params":["761001"]}
+  - name: block_by_hash
+    summary: "Returns a block by hash"
+    params: "[hash(hex string with 0x prefix)]"
+    example: {"chain":"allora","method":"block_by_hash","params":["0xD70952032620CC4E2737EB8AC379806359D8E0B17B0488F627997A0B043ABDED"]}
+  - name: block_results
+    summary: "Returns the block execution results at the specified height (events/tx results)"
+    params: "[height?(integer)]"
+    example: {"chain":"allora","method":"block_results","params":["761001"]}
+  - name: commit
+    summary: "Returns commit info at the specified height"
+    params: "[height?(integer)]"
+    example: {"chain":"allora","method":"commit","params":["761001"]}
+  - name: validators
+    summary: "Returns the validator set at the specified height"
+    params: "[height?(integer), page?(integer), per_page?(integer)]"
+    example: {"chain":"allora","method":"validators","params":["761001","1","30"]}
+  - name: genesis_chunked
+    summary: "Retrieves the genesis file in chunks (pagination for large files)"
+    params: "[chunk(integer)]"
+    example: {"chain":"allora","method":"genesis_chunked","params":["0"]}
+  - name: dump_consensus_state
+    summary: "Returns a full consensus state dump"
+    params: "none"
+    example: {"chain":"allora","method":"dump_consensus_state","params":[]}
+  - name: consensus_state
+    summary: "Returns a summary of the current consensus state"
+    params: "none"
+    example: {"chain":"allora","method":"consensus_state","params":[]}
+  - name: consensus_params
+    summary: "Returns consensus parameters at the specified height"
+    params: "[height?(integer)]"
+    example: {"chain":"allora","method":"consensus_params","params":["761001"]}
+  - name: unconfirmed_txs
+    summary: "Returns the list of unconfirmed transactions in the mempool"
+    params: "[limit?(integer)]"
+    example: {"chain":"allora","method":"unconfirmed_txs","params":["30"]}
+  - name: num_unconfirmed_txs
+    summary: "Returns the count and total byte size of unconfirmed transactions in the mempool"
+    params: "none"
+    example: {"chain":"allora","method":"num_unconfirmed_txs","params":[]}
+  - name: tx_search
+    summary: "Searches transactions by query condition"
+    params: "[query(string), prove?(bool), page?(integer), per_page?(integer), order_by?('asc'|'desc')]"
+    example: {"chain":"allora","method":"tx_search","params":["tx.height=761001","false","1","10","asc"]}
+  - name: block_search
+    summary: "Searches blocks by BeginBlock/EndBlock events"
+    params: "[query(string), page?(integer), per_page?(integer), order_by?('asc'|'desc')]"
+    example: {"chain":"allora","method":"block_search","params":["block.height > 100","1","10","asc"]}
+  - name: tx
+    summary: "Queries transaction details by hash"
+    params: "[hash(base64 or hex), prove?(bool)]"
+    example: {"chain":"allora","method":"tx","params":["TX_HASH_BASE64","false"]}
+  # ---------- Tx — transaction broadcast ----------
+  - name: broadcast_tx_sync
+    summary: "Sync broadcast: waits for CheckTx result before returning (does not wait for DeliverTx)"
+    params: "[tx(base64)]"
+    example: {"chain":"allora","method":"broadcast_tx_sync","params":["BASE64_TX"]}
+  - name: broadcast_tx_async
+    summary: "Async broadcast: returns immediately without waiting for any result"
+    params: "[tx(base64)]"
+    example: {"chain":"allora","method":"broadcast_tx_async","params":["BASE64_TX"]}
+  - name: broadcast_tx_commit
+    summary: "Commit broadcast: waits for both CheckTx and DeliverTx results before returning"
+    params: "[tx(base64)]"
+    example: {"chain":"allora","method":"broadcast_tx_commit","params":["BASE64_TX"]}
+  - name: check_tx
+    summary: "Checks transaction validity (no execution, no broadcast)"
+    params: "[tx(base64)]"
+    example: {"chain":"allora","method":"check_tx","params":["BASE64_TX"]}
+  # ---------- ABCI ----------
+  - name: abci_info
+    summary: "Returns ABCI application info (version, data hash, etc.)"
+    params: "none"
+    example: {"chain":"allora","method":"abci_info","params":[]}
+  - name: abci_query
+    summary: "Queries data from the ABCI application layer"
+    params: "[path(string), data(hex), height?(integer), prove?(bool)]"
+    example: {"chain":"allora","method":"abci_query","params":["/cosmos/bank/v1beta1/balances/ADDRESS","","0",false]}
+  # ===== Cosmos REST Endpoints =====
+  # Note: Cosmos REST is accessed via independent HTTP endpoints, not through the /api/rpc JSON-RPC path
+  # (Cosmos REST/Tendermint endpoints; routed via /api/rpc, no direct connection needed)
+endpoints_or_methods:
+  # --- Auth ---
+  - name: "GET /cosmos/auth/v1beta1/accounts/{address}"
+    summary: "Returns account details by address"
+    params: "address(path): Bech32 address"
+    example: "GET /cosmos/auth/v1beta1/accounts/allo1ahapa6dzd8m26740zy7h2wzgjlufs864fx4uxw"
+  - name: "GET /cosmos/auth/v1beta1/params"
+    summary: "Returns all auth module parameters"
+    params: "none"
+    example: "GET /cosmos/auth/v1beta1/params"
+  # --- Bank ---
+  - name: "GET /cosmos/bank/v1beta1/balances/{address}"
+    summary: "Returns all token balances for the address"
+    params: "address(path)"
+    example: "GET /cosmos/bank/v1beta1/balances/allo1ahapa6dzd8m26740zy7h2wzgjlufs864fx4uxw"
+  - name: "GET /cosmos/bank/v1beta1/supply"
+    summary: "Returns the total supply of all tokens on-chain"
+    params: "none"
+    example: "GET /cosmos/bank/v1beta1/supply"
+  - name: "GET /cosmos/bank/v1beta1/params"
+    summary: "Returns bank module parameters"
+    params: "none"
+    example: "GET /cosmos/bank/v1beta1/params"
+  # --- Distribution ---
+  - name: "GET /cosmos/distribution/v1beta1/delegators/{delegatorAddress}/rewards"
+    summary: "Returns the delegator's rewards across all validators"
+    params: "delegatorAddress(path)"
+    example: "GET /cosmos/distribution/v1beta1/delegators/allo1.../rewards"
+  - name: "GET /cosmos/distribution/v1beta1/params"
+    summary: "Returns distribution module parameters"
+    params: "none"
+    example: "GET /cosmos/distribution/v1beta1/params"
+  # --- Gov ---
+  - name: "GET /cosmos/gov/v1beta1/proposals"
+    summary: "Returns the list of governance proposals"
+    params: "proposal_status/voter/depositor(query, optional)"
+    example: "GET /cosmos/gov/v1beta1/proposals"
+  - name: "GET /cosmos/gov/v1beta1/proposals/{proposal_id}"
+    summary: "Returns details for the specified proposal"
+    params: "proposal_id(path)"
+    example: "GET /cosmos/gov/v1beta1/proposals/1"
+  # --- Mint ---
+  - name: "GET /cosmos/mint/v1beta1/inflation"
+    summary: "Returns the current inflation rate"
+    params: "none"
+    example: "GET /cosmos/mint/v1beta1/inflation"
+  - name: "GET /cosmos/mint/v1beta1/params"
+    summary: "Returns mint module parameters"
+    params: "none"
+    example: "GET /cosmos/mint/v1beta1/params"
+  # --- Staking ---
+  - name: "GET /cosmos/staking/v1beta1/validators"
+    summary: "Returns the list of validators"
+    params: "status(query, optional: BOND_STATUS_BONDED, etc.)"
+    example: "GET /cosmos/staking/v1beta1/validators?status=BOND_STATUS_BONDED"
+  - name: "GET /cosmos/staking/v1beta1/delegations/{delegatorAddr}"
+    summary: "Returns all delegation records for the delegator"
+    params: "delegatorAddr(path)"
+    example: "GET /cosmos/staking/v1beta1/delegations/allo1..."
+  - name: "GET /cosmos/staking/v1beta1/params"
+    summary: "Returns staking module parameters"
+    params: "none"
+    example: "GET /cosmos/staking/v1beta1/params"
+  # --- Tx Service ---
+  - name: "GET /cosmos/tx/v1beta1/txs/{hash}"
+    summary: "Queries a transaction by hash"
+    params: "hash(path)"
+    example: "GET /cosmos/tx/v1beta1/txs/TX_HASH"
+  - name: "POST /cosmos/tx/v1beta1/txs"
+    summary: "Broadcasts a signed transaction"
+    params: "body: {tx_bytes(base64), mode('BROADCAST_MODE_SYNC'|'BROADCAST_MODE_ASYNC'|'BROADCAST_MODE_BLOCK')}"
+    example: "POST /cosmos/tx/v1beta1/txs  {\"tx_bytes\":\"BASE64_TX\",\"mode\":\"BROADCAST_MODE_SYNC\"}"
+  - name: "GET /cosmos/tx/v1beta1/txs"
+    summary: "Searches transactions by event filter"
+    params: "events(query): e.g. 'message.sender=allo1...'"
+    example: "GET /cosmos/tx/v1beta1/txs?events=message.sender%3Dallo1..."

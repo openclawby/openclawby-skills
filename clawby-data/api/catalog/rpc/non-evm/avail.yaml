@@ -1,0 +1,60 @@
+# ============================================================================
+# Substrate JSON-RPC — avail
+# Call: POST /api/rpc   body {"chain":"avail","method":"<method>","params":[...]}
+# ============================================================================
+chain: "avail"                 # chain param for /api/rpc
+type: non-EVM
+slug: "avail"
+status: unverified             # ⚠️ not verified on the current key
+api_style: JSON-RPC
+how_to_call: 'POST /api/rpc  {"chain":"avail","method":"<method>","params":[...]}'
+notes:
+  - "Avail is a Polkadot/Substrate-based Web3 data availability (DA) infrastructure layer designed for modular execution layers"
+  - "Uses the Substrate JSON-RPC protocol; method namespaces: chain_*, state_*, grandpa_*, system_*"
+  - "Turing Testnet is the current testnet; the actual slug is avail_turing_testnet (check provider docs)"
+  - "⚠️ not verified on the current key; availability depends on the plan"
+methods:
+  - name: chain_getBlock
+    summary: "Returns the block header and body (extrinsics) by hash; omit hash to return the latest finalized block"
+    params: "[blockHash?(hex, 32 bytes)] — optional; omit to return the latest finalized block"
+    example: {"chain":"avail","method":"chain_getBlock","params":[]}
+  - name: chain_getBlockHash
+    summary: "Returns the block hash by block number; omit to return the latest finalized block hash"
+    params: "[blockNumber?(hex)] — optional"
+    example: {"chain":"avail","method":"chain_getBlockHash","params":["0x499A4"]}
+  - name: chain_getHeader
+    summary: "Returns the block header by hash; omit hash to return the latest finalized block header"
+    params: "[blockHash?(hex, 32 bytes)] — optional"
+    example: {"chain":"avail","method":"chain_getHeader","params":[]}
+  - name: chain_getFinalizedHead
+    summary: "Returns the hash of the latest finalized block"
+    params: "none"
+    example: {"chain":"avail","method":"chain_getFinalizedHead","params":[]}
+  - name: state_getStorage
+    summary: "Queries on-chain storage value by key"
+    params: "[key(hex), blockHash?(hex)] — blockHash is optional"
+    example: {"chain":"avail","method":"state_getStorage","params":["0xSTORAGE_KEY"]}
+  - name: state_getStorageHash
+    summary: "Returns the hash of the value at the given storage key"
+    params: "[key(hex), blockHash?(hex)]"
+    example: {"chain":"avail","method":"state_getStorageHash","params":["0xSTORAGE_KEY"]}
+  - name: state_getStorageSize
+    summary: "Returns the byte size of the value at the given storage key"
+    params: "[key(hex), blockHash?(hex)]"
+    example: {"chain":"avail","method":"state_getStorageSize","params":["0xSTORAGE_KEY"]}
+  - name: grandpa_proveFinality
+    summary: "Returns the GRANDPA finality proof (Justification) for the given block number"
+    params: "[blockNumber(integer)]"
+    example: {"chain":"avail","method":"grandpa_proveFinality","params":[300000]}
+  - name: grandpa_roundState
+    summary: "Returns the current best GRANDPA round state and any ongoing background rounds"
+    params: "none"
+    example: {"chain":"avail","method":"grandpa_roundState","params":[]}
+  - name: system_chain
+    summary: "Returns the chain name (e.g. 'Avail Turing Testnet')"
+    params: "none"
+    example: {"chain":"avail","method":"system_chain","params":[]}
+  - name: system_chainType
+    summary: "Returns the chain type (Development, Local, Live, etc.)"
+    params: "none"
+    example: {"chain":"avail","method":"system_chainType","params":[]}

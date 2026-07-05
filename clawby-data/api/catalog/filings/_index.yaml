@@ -1,0 +1,21 @@
+# ============================================================================
+# Filings Category Index
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "SEC Filings and Company Documents (US Stocks)"
+description: "Query US-listed companies' CIK numbers, US-GAAP financial concept history, and full filing history via SEC EDGAR. US-listed companies only."
+
+files:
+  - file: "filings.yaml"
+    summary: "SEC filing interfaces (all 3)"
+    interfaces:
+      - sec_cik_lookup        # company name → CIK (returns Atom XML)
+      - sec_company_concept   # CIK + us-gaap concept → historical financial values
+      - sec_submissions       # CIK → company info + filing history
+
+gotchas_global:
+  - "US stocks only; non-US companies have no SEC CIK and cannot use these interfaces"
+  - "All interface names start with sec_; pass them as-is in the name field"
+  - "Typical workflow: sec_cik_lookup(company name) → get CIK → sec_company_concept or sec_submissions"
+  - "sec_cik_lookup returns Atom XML; the other two return JSON"
+  - "Pass CIK as plain digits (e.g. 320193); the system zero-pads automatically"

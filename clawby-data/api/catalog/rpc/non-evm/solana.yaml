@@ -1,0 +1,265 @@
+# ============================================================================
+# Solana RPC — solana
+# Call: POST /api/rpc   body {"chain":"solana","method":"<method>","params":[...]}
+# ============================================================================
+chain: "solana"
+type: Solana
+slug: solana
+status: ok
+how_to_call: 'POST /api/rpc  {"chain":"solana","method":"<method>","params":[...]}'
+notes:
+  - "Addresses are base-58-encoded 32-byte public keys; the native currency unit is lamports (1 SOL = 1,000,000,000 lamports)"
+  - "Three commitment levels: finalized (irreversible) > confirmed (supermajority vote) > processed (latest, may be skipped); confirmed is recommended for sensitive read/write scenarios"
+  - "SPL Token queries require a mint public key or programId; token balances must be converted using decimals"
+  - "The message parameter for getFeeForMessage is base-64 encoded; transaction data for sendTransaction must also be base-64 or base-58 encoded"
+  - "Nodes retain only about 16 hours of historical slot data by default; slots outside this range will return 'slot was skipped' or 'block not available'"
+methods:
+  - name: getAccountInfo
+    summary: "Returns detailed info for the specified account (lamports balance, owner program, data, etc.)"
+    params: "[pubkey(base-58), {commitment?, encoding?, dataSlice?, minContextSlot?}]"
+    example: {"chain":"solana","method":"getAccountInfo","params":["vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg",{"encoding":"base58"}]}
+
+  - name: getBalance
+    summary: "Returns the account's SOL balance (lamports)"
+    params: "[pubkey(base-58), {commitment?, minContextSlot?}]"
+    example: {"chain":"solana","method":"getBalance","params":["83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri"]}
+
+  - name: getBlock
+    summary: "Returns block details for the specified slot (transaction list, rewards, timestamps, etc.)"
+    params: "[slot(u64), {commitment?, encoding?, transactionDetails?, maxSupportedTransactionVersion?, rewards?}]"
+    example: {"chain":"solana","method":"getBlock","params":[430,{"encoding":"json","transactionDetails":"full","maxSupportedTransactionVersion":0,"rewards":false}]}
+
+  - name: getBlockHeight
+    summary: "Returns the current maximum block height"
+    params: "[{commitment?, minContextSlot?}]"
+    example: {"chain":"solana","method":"getBlockHeight","params":[]}
+
+  - name: getBlockProduction
+    summary: "Returns block production/skip statistics per validator for the current epoch"
+    params: "[{commitment?, identity?, range?: {firstSlot, lastSlot}}]"
+    example: {"chain":"solana","method":"getBlockProduction","params":[]}
+
+  - name: getBlockCommitment
+    summary: "Returns the commitment status of the specified block (total confirmation votes)"
+    params: "[slot(u64)]"
+    example: {"chain":"solana","method":"getBlockCommitment","params":[5]}
+
+  - name: getBlocks
+    summary: "Returns a list of confirmed blocks between two slots (up to 500,000)"
+    params: "[startSlot(u64), endSlot?(u64), {commitment?}]"
+    example: {"chain":"solana","method":"getBlocks","params":[5,10]}
+
+  - name: getBlocksWithLimit
+    summary: "Returns a specified number of confirmed blocks starting from the given slot"
+    params: "[startSlot(u64), limit(u64 ≤500000), {commitment?}]"
+    example: {"chain":"solana","method":"getBlocksWithLimit","params":[5,3]}
+
+  - name: getBlockTime
+    summary: "Returns the production time of the specified block (Unix timestamp, seconds)"
+    params: "[slot(u64)]"
+    example: {"chain":"solana","method":"getBlockTime","params":[5]}
+
+  - name: getClusterNodes
+    summary: "Returns info for all nodes in the cluster (pubkey, gossip/tpu address, version)"
+    params: "none"
+    example: {"chain":"solana","method":"getClusterNodes","params":[]}
+
+  - name: getEpochInfo
+    summary: "Returns current epoch info (epoch number, slot position, block height, etc.)"
+    params: "[{commitment?, minContextSlot?}]"
+    example: {"chain":"solana","method":"getEpochInfo","params":[]}
+
+  - name: getEpochSchedule
+    summary: "Returns epoch schedule configuration (slots per epoch, warmup parameters, etc.)"
+    params: "none"
+    example: {"chain":"solana","method":"getEpochSchedule","params":[]}
+
+  - name: getFeeForMessage
+    summary: "Returns the estimated fee for a base-64 encoded Message (lamports)"
+    params: "[message(base-64 encoded Message), {commitment?}]"
+    example: {"chain":"solana","method":"getFeeForMessage","params":["AQABAgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEBAQAA",{"commitment":"processed"}]}
+
+  - name: getFirstAvailableBlock
+    summary: "Returns the slot number of the earliest available block in the node's ledger"
+    params: "none"
+    example: {"chain":"solana","method":"getFirstAvailableBlock","params":[]}
+
+  - name: getGenesisHash
+    summary: "Returns the hash of the genesis block"
+    params: "none"
+    example: {"chain":"solana","method":"getGenesisHash","params":[]}
+
+  - name: getHealth
+    summary: "Returns the node health status (ok means healthy)"
+    params: "none"
+    example: {"chain":"solana","method":"getHealth","params":[]}
+
+  - name: getHighestSnapshotSlot
+    summary: "Returns the node's highest snapshot slot number (full and incremental)"
+    params: "none"
+    example: {"chain":"solana","method":"getHighestSnapshotSlot","params":[]}
+
+  - name: getIdentity
+    summary: "Returns the identity public key of the current node"
+    params: "none"
+    example: {"chain":"solana","method":"getIdentity","params":[]}
+
+  - name: getInflationGovernor
+    summary: "Returns current inflation governance parameters (initial/final inflation rate, schedule, etc.)"
+    params: "[{commitment?}]"
+    example: {"chain":"solana","method":"getInflationGovernor","params":[]}
+
+  - name: getInflationRate
+    summary: "Returns the inflation rate for the current epoch (total/validator/foundation breakdown)"
+    params: "none"
+    example: {"chain":"solana","method":"getInflationRate","params":[]}
+
+  - name: getInflationReward
+    summary: "Returns the inflation rewards received by a set of accounts in a given epoch (lamports)"
+    params: "[addresses(array of base-58 strings), {commitment?, epoch?, minContextSlot?}]"
+    example: {"chain":"solana","method":"getInflationReward","params":[["6dmNQ5jwLeLk5REvio1JcMshcbvkYMwy26sJ8pbkvStu","BGsqMegLpV6n6Ve4eMkedmH6yQbTMJDLnS1kJn3aMaWD"]]}
+
+  - name: getLargestAccounts
+    summary: "Returns the top 20 accounts by SOL balance"
+    params: "[{commitment?, filter?: circulating|nonCirculating}]"
+    example: {"chain":"solana","method":"getLargestAccounts","params":[]}
+
+  - name: getLatestBlockhash
+    summary: "Returns the latest blockhash and the last valid block height at which it expires"
+    params: "[{commitment?, minContextSlot?}]"
+    example: {"chain":"solana","method":"getLatestBlockhash","params":[{"commitment":"processed"}]}
+
+  - name: getLeaderSchedule
+    summary: "Returns the validator leader schedule (slot → validator pubkey mapping)"
+    params: "[slot?(u64), {commitment?, identity?}]"
+    example: {"chain":"solana","method":"getLeaderSchedule","params":[]}
+
+  - name: getMaxRetransmitSlot
+    summary: "Returns the maximum slot tracked by the node from retransmit shreds"
+    params: "none"
+    example: {"chain":"solana","method":"getMaxRetransmitSlot","params":[]}
+
+  - name: getMaxShredInsertSlot
+    summary: "Returns the maximum slot tracked by the node from shred insertion"
+    params: "none"
+    example: {"chain":"solana","method":"getMaxShredInsertSlot","params":[]}
+
+  - name: getMinimumBalanceForRentExemption
+    summary: "Returns the minimum lamports required for an account to be rent-exempt"
+    params: "[accountDataLength(usize), {commitment?}]"
+    example: {"chain":"solana","method":"getMinimumBalanceForRentExemption","params":[50]}
+
+  - name: getMultipleAccounts
+    summary: "Returns info for multiple accounts in a single request"
+    params: "[pubkeys(array of base-58 strings), {commitment?, minContextSlot?, dataSlice?, encoding?}]"
+    example: {"chain":"solana","method":"getMultipleAccounts","params":[["vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg","4fYNw3dojWmQ4dXtSGE9epjRGy9GHtrsukkXB8sr4cEi"],{"dataSlice":{"offset":0,"length":0}}]}
+
+  - name: getProgramAccounts
+    summary: "Returns all accounts owned by the specified program"
+    params: "[programId(base-58), {commitment?, encoding?, dataSlice?, filters?, withContext?, minContextSlot?}]"
+    example: {"chain":"solana","method":"getProgramAccounts","params":["4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T"]}
+
+  - name: getRecentPerformanceSamples
+    summary: "Returns recent performance sample data (TPS, slot count, etc.)"
+    params: "[limit?(usize ≤720)]"
+    example: {"chain":"solana","method":"getRecentPerformanceSamples","params":[4]}
+
+  - name: getSignaturesForAddress
+    summary: "Returns a list of historical transaction signatures associated with an address"
+    params: "[address(base-58), {limit?, before?, until?, commitment?, minContextSlot?}]"
+    example: {"chain":"solana","method":"getSignaturesForAddress","params":["Vote111111111111111111111111111111111111111",{"limit":10}]}
+
+  - name: getSignatureStatuses
+    summary: "Returns the status of a batch of transaction signatures (confirmation count, errors, etc.)"
+    params: "[signatures(array of base-58 tx sig strings), {searchTransactionHistory?}]"
+    example: {"chain":"solana","method":"getSignatureStatuses","params":[["5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLiRezerX52zyGZi5SGyd9kMLNFHHoYAoHXeFBN3JTnX"],{"searchTransactionHistory":true}]}
+
+  - name: getSlot
+    summary: "Returns the latest processed slot number"
+    params: "[{commitment?, minContextSlot?}]"
+    example: {"chain":"solana","method":"getSlot","params":[]}
+
+  - name: getSlotLeader
+    summary: "Returns the leader validator public key for the current slot"
+    params: "[{commitment?, minContextSlot?}]"
+    example: {"chain":"solana","method":"getSlotLeader","params":[]}
+
+  - name: getSlotLeaders
+    summary: "Returns the list of leader validator public keys in the specified slot range"
+    params: "[startSlot?(u64), limit?(u64 ≤5000)]"
+    example: {"chain":"solana","method":"getSlotLeaders","params":[100,10]}
+
+  - name: getSupply
+    summary: "Returns SOL supply info (circulating, non-circulating, total)"
+    params: "[{commitment?, excludeNonCirculatingAccountsList?}]"
+    example: {"chain":"solana","method":"getSupply","params":[]}
+
+  - name: getTokenAccountBalance
+    summary: "Returns the token balance of an SPL Token account"
+    params: "[tokenAccountPubkey(base-58), {commitment?}]"
+    example: {"chain":"solana","method":"getTokenAccountBalance","params":["7fUAJdStEuGbc3sM84cKRL6yYaaSstyLSU4ve5oovLS7"]}
+
+  - name: getTokenAccountsByDelegate
+    summary: "Returns all SPL Token accounts authorized by the specified delegate"
+    params: "[delegatePubkey(base-58), {mint|programId}(object), {commitment?, encoding?, dataSlice?, minContextSlot?}]"
+    example: {"chain":"solana","method":"getTokenAccountsByDelegate","params":["4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T",{"programId":"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},{"encoding":"jsonParsed"}]}
+
+  - name: getTokenAccountsByOwner
+    summary: "Returns all SPL Token accounts for the specified owner"
+    params: "[ownerPubkey(base-58), {mint|programId}(object), {commitment?, encoding?, dataSlice?, minContextSlot?}]"
+    example: {"chain":"solana","method":"getTokenAccountsByOwner","params":["4Qkev8aNZcqFNSRhQzwyLMFSsi94jHqE8WNVTJzTP99F",{"mint":"3wyAj7Rt1TWVPZVteFJPLa26JmLvdb1CAKEFZm3NY75E"},{"encoding":"jsonParsed"}]}
+
+  - name: getTokenLargestAccounts
+    summary: "Returns the top 20 accounts by balance for the given SPL Token Mint"
+    params: "[mintPubkey(base-58), {commitment?}]"
+    example: {"chain":"solana","method":"getTokenLargestAccounts","params":["So11111111111111111111111111111111111111112"]}
+
+  - name: getTokenSupply
+    summary: "Returns the total supply of the given SPL Token Mint"
+    params: "[mintPubkey(base-58), {commitment?}]"
+    example: {"chain":"solana","method":"getTokenSupply","params":["So11111111111111111111111111111111111111112"]}
+
+  - name: getTransaction
+    summary: "Returns details of a confirmed transaction (metadata, instructions, balance changes, etc.)"
+    params: "[signature(base-58 tx sig), {encoding?, commitment?, maxSupportedTransactionVersion?}]"
+    example: {"chain":"solana","method":"getTransaction","params":["jS5UBJWbrxL9DM86LoGznZtqg8q8rP3xPmMv77s7F7qdCwQFg7cchxWHdRSw5X7Bmuvy6dTaejMcgjv2XJQ9dfD",{"encoding":"json","maxSupportedTransactionVersion":0}]}
+
+  - name: getTransactionCount
+    summary: "Returns the total historical transaction count for the current ledger"
+    params: "[{commitment?, minContextSlot?}]"
+    example: {"chain":"solana","method":"getTransactionCount","params":[]}
+
+  - name: getVersion
+    summary: "Returns the Solana core version running on the node"
+    params: "none"
+    example: {"chain":"solana","method":"getVersion","params":[]}
+
+  - name: getVoteAccounts
+    summary: "Returns info and stake amounts for all vote accounts in the current bank"
+    params: "[{commitment?, votePubkey?, keepUnstakedDelinquents?, delinquentSlotDistance?}]"
+    example: {"chain":"solana","method":"getVoteAccounts","params":[]}
+
+  - name: isBlockhashValid
+    summary: "Checks whether a blockhash is still valid (not expired)"
+    params: "[blockhash(base-58), {commitment?, minContextSlot?}]"
+    example: {"chain":"solana","method":"isBlockhashValid","params":["Fv8Be2iVvuSbWr3M5krNf5UT4TwwwtyY14jHBZXiatdv",{"commitment":"processed"}]}
+
+  - name: minimumLedgerSlot
+    summary: "Returns the minimum slot recorded in the node's ledger"
+    params: "none"
+    example: {"chain":"solana","method":"minimumLedgerSlot","params":[]}
+
+  - name: requestAirdrop
+    summary: "Requests an airdrop of lamports to the specified account (devnet/testnet only)"
+    params: "[pubkey(base-58), lamports(u64), {commitment?}]"
+    example: {"chain":"solana","method":"requestAirdrop","params":["83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri",1000000000]}
+
+  - name: sendTransaction
+    summary: "Broadcasts a signed transaction to the cluster (does not wait for confirmation)"
+    params: "[signedTransaction(base-58 or base-64 encoded), {skipPreflight?, preflightCommitment?, encoding?, maxRetries?, minContextSlot?}]"
+    example: {"chain":"solana","method":"sendTransaction","params":["4hXTCkRzt9WyecNzV1XPgCDfGAZzQKNxLXgynz5QDuWWPSAZBZSHptvWRL3BjCvzUXRdKvHL2b7yGrRQcWyaqsaBCncVG7BFggS8w9snUts67BSh3EqKpXLUm5UMHfD7ZBe9GhARjbNQMLJ1QD3Spr6oMTBU6EhdB4RD8CP2xUxr2u3d6fos36PD98XS6oX8TQjLpsMwncs5DAMiD4nNnR8NBfyghGCWvCVifVwvA8B8TJxE1aiyiv2L429BCWfyzAme5sZW8rDb14NeCQHhZbtNqfXhcp2tAnaAT"]}
+
+  - name: simulateTransaction
+    summary: "Simulates a transaction (not broadcast to chain); returns logs, account changes, fee, etc."
+    params: "[transaction(base-64 encoded), {sigVerify?, commitment?, encoding?, replaceRecentBlockhash?, accounts?, minContextSlot?}]"
+    example: {"chain":"solana","method":"simulateTransaction","params":["AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAEDArczbMia1tLmq7zz4DinMNN0pJ1JtLdqIJPUw3YrGCzYAMHBsgN27lcgB6H2WQvFgyZuJYHa46puOQo9yQ8CVQbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCp20C7Wj2aiuk5TReAXo+VTVg8QTHjs0UjNMMKCvpzZ+ABAgEBARU=",{"encoding":"base64"}]}

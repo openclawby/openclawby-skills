@@ -1,0 +1,80 @@
+# ============================================================================
+# Equities — Short Data
+# Usage: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Short Data"
+
+gotchas_for_all:
+  - "⚠️ symbol format: stocks use US:TICKER (e.g. US:AAPL / US:SPY)"
+  - "time params timestamp_gte / timestamp_lt accept YYYY-MM-DD or Unix seconds"
+  - "Cost-to-borrow path includes /ib/ — this is an Interactive Brokers-specific endpoint"
+
+interfaces:
+  - name: "Short volume for a given stock"
+    summary: "daily short volume for a given stock, broken down by exchange"
+    params:
+      - {name: symbol,    required: true,  format: "US:TICKER",                                              example: "US:SPY"}
+      - {name: mode,      required: false, format: "V=absolute volume / T=% of total volume / E=% of exchange volume", example: "V"}
+      - {name: ordering,  required: false, format: "date|-date",                                             example: "-date"}
+      - {name: page,      required: false, format: "integer"}
+      - {name: page_size, required: false, format: "integer, max 1000"}
+      - {name: format,    required: false, format: "json|csv"}
+    gotchas:
+      - "⚠️ response field abbreviations: rt=total volume, st=short volume, lt=long volume, fs=OTC, fse=OTC exempt; keys like xnas-baty are exchange MIC codes"
+    example:
+      name: "Short volume for a given stock"
+      params: {symbol: "US:SPY"}
+
+  - name: "Short Interest for a given stock"
+    summary: "bi-weekly short interest report for a given stock (FINRA reported data)"
+    params:
+      - {name: symbol,    required: true,  format: "US:TICKER", example: "US:SPY"}
+      - {name: ordering,  required: false, format: "date|-date", example: "-date"}
+      - {name: page,      required: false, format: "integer"}
+      - {name: page_size, required: false, format: "integer, max 1000"}
+      - {name: format,    required: false, format: "json|csv"}
+    example:
+      name: "Short Interest for a given stock"
+      params: {symbol: "US:SPY"}
+
+  - name: "Daily Short Interest for a given stock"
+    summary: "daily short interest for a given stock (higher frequency, updated daily)"
+    params:
+      - {name: symbol,    required: true,  format: "US:TICKER", example: "US:SPY"}
+      - {name: ordering,  required: false, format: "date|-date", example: "-date"}
+      - {name: page,      required: false, format: "integer"}
+      - {name: page_size, required: false, format: "integer, max 1000"}
+      - {name: format,    required: false, format: "json|csv"}
+    example:
+      name: "Daily Short Interest for a given stock"
+      params: {symbol: "US:SPY"}
+
+  - name: "Cost-to-borrow from Interactive Brokers"
+    summary: "Interactive Brokers borrow rate history (cost to short, annualized %)"
+    params:
+      - {name: symbol,        required: true,  format: "US:TICKER",                       example: "US:AAPL"}
+      - {name: timestamp_gte, required: false, format: "YYYY-MM-DD or Unix seconds, start"}
+      - {name: timestamp_lt,  required: false, format: "YYYY-MM-DD or Unix seconds, end"}
+      - {name: ordering,      required: false, format: "timestamp|-timestamp",             example: "-timestamp"}
+      - {name: page,          required: false, format: "integer"}
+      - {name: page_size,     required: false, format: "integer, max 1000"}
+      - {name: format,        required: false, format: "json|csv"}
+    gotchas:
+      - "⚠️ this is an IB-specific endpoint with /ib/ in the path; a high borrow rate (>50%) typically indicates the stock is hard to short"
+    example:
+      name: "Cost-to-borrow from Interactive Brokers"
+      params: {symbol: "US:AAPL"}
+
+  - name: "FTDs for a given stock"
+    summary: "Failure-to-Deliver (FTD) records for a given stock"
+    params:
+      - {name: symbol,    required: true,  format: "US:TICKER", example: "US:AAPL"}
+      - {name: ordering,  required: false, format: "date|-date", example: "-date"}
+      - {name: page,      required: false, format: "integer"}
+      - {name: page_size, required: false, format: "integer, max 1000"}
+      - {name: format,    required: false, format: "json|csv"}
+    gotchas:
+      - "response fields: date=settlement date, t=trade date, t_35=T+35 date, fails=shares failed to deliver, noti=notional value (fails×price), change=change in fails"
+    example:
+      name: "FTDs for a given stock"
+      params: {symbol: "US:AAPL"}

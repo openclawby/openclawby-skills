@@ -1,0 +1,25 @@
+# ============================================================================
+# Address Intel — Risk Score / AML
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# Data: address labels / AML data
+# ============================================================================
+category: "Risk Score / AML (Address Risk Score)"
+
+interfaces:
+  - name: "address_risk_score"
+    summary: "AML/KYT risk score for an on-chain address or transaction. Returns score (3-100), risk_level, risk breakdown, and related events."
+    params:
+      - {name: coin,    required: true,  format: "chain ID string", example: "ETH"}
+      - {name: address, required: false, format: "on-chain address (one of address or txid required)", example: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
+      - {name: txid,    required: false, format: "transaction hash (one of address or txid required)", example: "0xabc123..."}
+    gotchas:
+      - "⚠️ At least one of address or txid is required; coin is always required."
+      - "score range 3-100: 3=very low risk, 100=very high risk. risk_level maps to Low / Moderate / High / Severe."
+      - "The same address returns the same score across different chains (scoring is cross-chain consistent)."
+      - "Response fields: score / risk_level / detail_list / hacking_event / risk_detail (entity / risk_type / exposure_type / hop_num / volume / percent) / risk_report_url."
+      - "risk_type enum: sanctioned_entity / illicit_activity / mixer / gambling / risk_exchange / bridge."
+      - "⚠️ coin must be the chain ID: ETH / BNB / SOL / SUI / BTC / TRX / POL-Polygon / ETH-Base / ETH-Arbitrum, etc.; Base chain uses ETH-Base, not bare ETH."
+      - "EVM addresses (0x) are automatically lowercased; SOL / SUI addresses are case-sensitive, pass as-is."
+    example:
+      name: "address_risk_score"
+      params: {coin: "ETH", address: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}

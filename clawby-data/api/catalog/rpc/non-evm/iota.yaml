@@ -1,0 +1,230 @@
+# ============================================================================
+# Move JSON-RPC — iota
+# Call: POST /api/rpc   body {"chain":"iota","method":"<method>","params":[...]}
+# ============================================================================
+chain: "iota"                  # chain param for /api/rpc
+type: non-EVM
+slug: "iota"
+status: unverified             # ⚠️ not verified on the current key
+api_style: JSON-RPC
+how_to_call: 'POST /api/rpc  {"chain":"iota","method":"<method>","params":[...]}'
+notes:
+  - "IOTA is a decentralized digital asset management and smart contract platform based on the Move language (IOTA Mainnet)"
+  - "Uses a custom JSON-RPC protocol; namespaces: iota_* (chain read/write) / iotax_* (extended queries) / unsafe_* (transaction building)"
+  - "The unsafe_* methods create unsigned transaction base64 data; sign locally and submit via iota_executeTransactionBlock"
+  - "⚠️ not verified on the current key; availability depends on the plan"
+methods:
+  # ---------- Coin Query ----------
+  - name: iotax_getAllBalances
+    summary: "Returns a summary of all token type balances held by the address"
+    params: "[owner(IotaAddress)]"
+    example: {"chain":"iota","method":"iotax_getAllBalances","params":["0x94f1a597b4e8f709a396f7f6b1482bdcd65a673d111e49286c527fab7c2d0961"]}
+  - name: iotax_getAllCoins
+    summary: "Returns all Coin objects held by the address (paginated)"
+    params: "[owner(IotaAddress), cursor?(ObjectID), limit?(uint)]"
+    example: {"chain":"iota","method":"iotax_getAllCoins","params":["0xOWNER"]}
+  - name: iotax_getBalance
+    summary: "Returns the balance of the specified token type for the address"
+    params: "[owner(IotaAddress), coinType(string)]"
+    example: {"chain":"iota","method":"iotax_getBalance","params":["0xOWNER", "0x2::iota::IOTA"]}
+  - name: iotax_getCirculatingSupply
+    summary: "Returns the circulating supply of the specified token"
+    params: "[coinType(string)]"
+    example: {"chain":"iota","method":"iotax_getCirculatingSupply","params":["0x2::iota::IOTA"]}
+  - name: iotax_getCoinMetadata
+    summary: "Returns token metadata (name, symbol, decimals, description, icon)"
+    params: "[coinType(string)]"
+    example: {"chain":"iota","method":"iotax_getCoinMetadata","params":["0x2::iota::IOTA"]}
+  - name: iotax_getCoins
+    summary: "Returns the list of Coin objects of the specified type held by the address (paginated)"
+    params: "[owner(IotaAddress), coinType?(string), cursor?(ObjectID), limit?(uint)]"
+    example: {"chain":"iota","method":"iotax_getCoins","params":["0xOWNER", "0x2::iota::IOTA"]}
+  - name: iotax_getTotalSupply
+    summary: "Returns the total supply of the specified token"
+    params: "[coinType(string)]"
+    example: {"chain":"iota","method":"iotax_getTotalSupply","params":["0x2::iota::IOTA"]}
+  # ---------- Governance Read ----------
+  - name: iotax_getCommitteeInfo
+    summary: "Returns committee info for the specified epoch"
+    params: "[epoch?(uint64)] — omit to return the current epoch"
+    example: {"chain":"iota","method":"iotax_getCommitteeInfo","params":[]}
+  - name: iotax_getLatestIotaSystemState
+    summary: "Returns the latest IOTA system state (validators, epoch, staking, etc.)"
+    params: "none"
+    example: {"chain":"iota","method":"iotax_getLatestIotaSystemState","params":[]}
+  - name: iotax_getLatestIotaSystemStateV2
+    summary: "Returns the latest IOTA system state (v2 format)"
+    params: "none"
+    example: {"chain":"iota","method":"iotax_getLatestIotaSystemStateV2","params":[]}
+  - name: iotax_getReferenceGasPrice
+    summary: "Returns the current reference gas price"
+    params: "none"
+    example: {"chain":"iota","method":"iotax_getReferenceGasPrice","params":[]}
+  - name: iotax_getStakes
+    summary: "Returns all staking info for the address"
+    params: "[owner(IotaAddress)]"
+    example: {"chain":"iota","method":"iotax_getStakes","params":["0xOWNER"]}
+  - name: iotax_getStakesByIds
+    summary: "Returns staking info by a list of stake object IDs"
+    params: "[stakedIotaIds([ObjectID])]"
+    example: {"chain":"iota","method":"iotax_getStakesByIds","params":[["0xOBJECT_ID"]]}
+  - name: iotax_getTimelockedStakes
+    summary: "Returns all timelocked stakes for the address"
+    params: "[owner(IotaAddress)]"
+    example: {"chain":"iota","method":"iotax_getTimelockedStakes","params":["0xOWNER"]}
+  - name: iotax_getTimelockedStakesByIds
+    summary: "Returns timelocked stakes by a list of object IDs"
+    params: "[timelockedStakedIotaIds([ObjectID])]"
+    example: {"chain":"iota","method":"iotax_getTimelockedStakesByIds","params":[["0xOBJECT_ID"]]}
+  - name: iotax_getValidatorsApy
+    summary: "Returns the APY for each validator"
+    params: "none"
+    example: {"chain":"iota","method":"iotax_getValidatorsApy","params":[]}
+  # ---------- Move Utils ----------
+  - name: iota_getMoveFunctionArgTypes
+    summary: "Returns the parameter type list of a Move function"
+    params: "[package(ObjectID), module(string), function(string)]"
+    example: {"chain":"iota","method":"iota_getMoveFunctionArgTypes","params":["0xPKG", "module_name", "func_name"]}
+  - name: iota_getNormalizedMoveFunction
+    summary: "Returns the normalized representation of a Move function (visibility, parameters, return types)"
+    params: "[package(ObjectID), module(string), function(string)]"
+    example: {"chain":"iota","method":"iota_getNormalizedMoveFunction","params":["0xPKG", "module_name", "func_name"]}
+  - name: iota_getNormalizedMoveModule
+    summary: "Returns the normalized representation of a Move module"
+    params: "[package(ObjectID), module(string)]"
+    example: {"chain":"iota","method":"iota_getNormalizedMoveModule","params":["0xPKG", "module_name"]}
+  - name: iota_getNormalizedMoveModulesByPackage
+    summary: "Returns the normalized representation of all Move modules in the package"
+    params: "[package(ObjectID)]"
+    example: {"chain":"iota","method":"iota_getNormalizedMoveModulesByPackage","params":["0xPKG"]}
+  - name: iota_getNormalizedMoveStruct
+    summary: "Returns the normalized representation of a Move struct"
+    params: "[package(ObjectID), module(string), struct(string)]"
+    example: {"chain":"iota","method":"iota_getNormalizedMoveStruct","params":["0xPKG", "module_name", "StructName"]}
+  # ---------- Read ----------
+  - name: iota_getChainIdentifier
+    summary: "Returns the unique identifier for the chain"
+    params: "none"
+    example: {"chain":"iota","method":"iota_getChainIdentifier","params":[]}
+  - name: iota_getCheckpoint
+    summary: "Returns checkpoint data by sequence number"
+    params: "[checkpointId(uint64 or string)]"
+    example: {"chain":"iota","method":"iota_getCheckpoint","params":["1000"]}
+  - name: iota_getCheckpoints
+    summary: "Returns the list of checkpoints (paginated)"
+    params: "[cursor?(uint64), limit?(uint), descendingOrder?(bool)]"
+    example: {"chain":"iota","method":"iota_getCheckpoints","params":[null, 10, false]}
+  - name: iota_getEvents
+    summary: "Returns the event list by transaction digest"
+    params: "[digest(TransactionDigest)]"
+    example: {"chain":"iota","method":"iota_getEvents","params":["0xTX_DIGEST"]}
+  - name: iota_getLatestCheckpointSequenceNumber
+    summary: "Returns the latest checkpoint sequence number"
+    params: "none"
+    example: {"chain":"iota","method":"iota_getLatestCheckpointSequenceNumber","params":[]}
+  - name: iota_getObject
+    summary: "Returns on-chain object data by ID"
+    params: "[objectId(ObjectID), options?({showType,showOwner,showContent,showDisplay,showBcs,showStorageRebate})]"
+    example: {"chain":"iota","method":"iota_getObject","params":["0xOBJECT_ID", {"showContent": true}]}
+  - name: iota_getProtocolConfig
+    summary: "Returns the current protocol configuration parameters"
+    params: "[version?(uint64)] — omit to return the current version"
+    example: {"chain":"iota","method":"iota_getProtocolConfig","params":[]}
+  - name: iota_getTotalTransactionBlocks
+    summary: "Returns the total number of transaction blocks on-chain"
+    params: "none"
+    example: {"chain":"iota","method":"iota_getTotalTransactionBlocks","params":[]}
+  - name: iota_getTransactionBlock
+    summary: "Returns transaction block details by digest"
+    params: "[digest(TransactionDigest), options?({showInput,showEffects,showEvents,showObjectChanges,showBalanceChanges})]"
+    example: {"chain":"iota","method":"iota_getTransactionBlock","params":["0xTX_DIGEST", {"showEffects": true}]}
+  - name: iota_multiGetObjects
+    summary: "Returns multiple on-chain objects by ID in batch"
+    params: "[[objectId,...](ObjectID[]), options?]"
+    example: {"chain":"iota","method":"iota_multiGetObjects","params":[["0xOBJ1","0xOBJ2"], {"showContent": true}]}
+  - name: iota_multiGetTransactionBlocks
+    summary: "Returns multiple transaction blocks by digest in batch"
+    params: "[[digest,...], options?]"
+    example: {"chain":"iota","method":"iota_multiGetTransactionBlocks","params":[["0xDIGEST1","0xDIGEST2"], {"showEffects": true}]}
+  - name: iota_tryGetPastObject
+    summary: "Returns a historical version of an object (if it exists)"
+    params: "[objectId(ObjectID), version(uint64), options?]"
+    example: {"chain":"iota","method":"iota_tryGetPastObject","params":["0xOBJECT_ID", 5, {"showContent": true}]}
+  - name: iota_tryMultiGetPastObjects
+    summary: "Returns historical versions of multiple objects in batch"
+    params: "[[{objectId, version},...], options?]"
+    example: {"chain":"iota","method":"iota_tryMultiGetPastObjects","params":[[{"objectId":"0xOBJ","version":5}], {"showContent": true}]}
+  # ---------- Transaction Builder (unsafe_*) ----------
+  - name: unsafe_batchTransaction
+    summary: "Builds a batch transaction (returns unsigned base64 transaction data)"
+    params: "[signer(IotaAddress), params([{transactionBytes,type}]), gas?(ObjectID), gasBudget(uint64)]"
+    example: {"chain":"iota","method":"unsafe_batchTransaction","params":["0xSIGNER", [], null, 1000000]}
+  - name: unsafe_mergeCoins
+    summary: "Builds an unsigned transaction to merge multiple Coins"
+    params: "[signer(IotaAddress), primaryCoin(ObjectID), coinToMerge(ObjectID), gas?(ObjectID), gasBudget(uint64)]"
+    example: {"chain":"iota","method":"unsafe_mergeCoins","params":["0xSIGNER","0xCOIN1","0xCOIN2",null,1000000]}
+  - name: unsafe_moveCall
+    summary: "Builds an unsigned transaction to call a Move function"
+    params: "[signer, packageObjectId, module, function, typeArguments, arguments, gas?, gasBudget]"
+    example: {"chain":"iota","method":"unsafe_moveCall","params":["0xSIGNER","0xPKG","mod","func",[],[],null,1000000]}
+  - name: unsafe_pay
+    summary: "Builds an unsigned transaction to transfer Coins to multiple recipients"
+    params: "[signer, inputCoins([ObjectID]), recipients([IotaAddress]), amounts([uint64]), gas?, gasBudget]"
+    example: {"chain":"iota","method":"unsafe_pay","params":["0xSIGNER",["0xCOIN"],["0xRECIP"],[1000],null,1000000]}
+  - name: unsafe_payAllIota
+    summary: "Builds an unsigned transaction to transfer all IOTA to a single recipient"
+    params: "[signer, inputCoins([ObjectID]), recipient, gasBudget]"
+    example: {"chain":"iota","method":"unsafe_payAllIota","params":["0xSIGNER",["0xCOIN"],"0xRECIP",1000000]}
+  - name: unsafe_payIota
+    summary: "Builds an unsigned transaction to transfer IOTA to multiple recipients"
+    params: "[signer, inputCoins([ObjectID]), recipients([IotaAddress]), amounts([uint64]), gasBudget]"
+    example: {"chain":"iota","method":"unsafe_payIota","params":["0xSIGNER",["0xCOIN"],["0xRECIP"],[1000],1000000]}
+  - name: unsafe_publish
+    summary: "Builds an unsigned transaction to publish a Move module package"
+    params: "[sender, compiledModules([base64]), dependencies([ObjectID]), gas?, gasBudget]"
+    example: {"chain":"iota","method":"unsafe_publish","params":["0xSENDER",["BASE64_MODULE"],[],null,50000000]}
+  - name: unsafe_requestAddStake
+    summary: "Builds an unsigned transaction to add a stake"
+    params: "[signer, coins([ObjectID]), amount?(uint64), validator(IotaAddress), gas?, gasBudget]"
+    example: {"chain":"iota","method":"unsafe_requestAddStake","params":["0xSIGNER",["0xCOIN"],1000000000,"0xVALIDATOR",null,1000000]}
+  - name: unsafe_requestAddTimelockedStake
+    summary: "Builds an unsigned transaction to add a timelocked stake"
+    params: "[signer, timelockObject(ObjectID), validator(IotaAddress), gas?, gasBudget]"
+    example: {"chain":"iota","method":"unsafe_requestAddTimelockedStake","params":["0xSIGNER","0xTL_OBJ","0xVALIDATOR",null,1000000]}
+  - name: unsafe_requestWithdrawStake
+    summary: "Builds an unsigned transaction to withdraw a stake from the validator pool"
+    params: "[signer, stakedIota(ObjectID), gas?, gasBudget]"
+    example: {"chain":"iota","method":"unsafe_requestWithdrawStake","params":["0xSIGNER","0xSTAKE_OBJ",null,1000000]}
+  - name: unsafe_requestWithdrawTimelockedStake
+    summary: "Builds an unsigned transaction to withdraw a timelocked stake"
+    params: "[signer, timelockedStakedIota(ObjectID), gas?, gasBudget]"
+    example: {"chain":"iota","method":"unsafe_requestWithdrawTimelockedStake","params":["0xSIGNER","0xTL_STAKE",null,1000000]}
+  - name: unsafe_splitCoin
+    summary: "Builds an unsigned transaction to split a Coin into the specified amounts"
+    params: "[signer, coin(ObjectID), splitAmounts([uint64]), gas?, gasBudget]"
+    example: {"chain":"iota","method":"unsafe_splitCoin","params":["0xSIGNER","0xCOIN",[500000,500000],null,1000000]}
+  - name: unsafe_splitCoinEqual
+    summary: "Builds an unsigned transaction to split a Coin into N equal parts"
+    params: "[signer, coin(ObjectID), splitCount(uint64), gas?, gasBudget]"
+    example: {"chain":"iota","method":"unsafe_splitCoinEqual","params":["0xSIGNER","0xCOIN",3,null,1000000]}
+  - name: unsafe_transferIota
+    summary: "Builds an unsigned transaction to transfer IOTA"
+    params: "[signer, iotaObjectId(ObjectID), gasBudget, recipient, amount?(uint64)]"
+    example: {"chain":"iota","method":"unsafe_transferIota","params":["0xSIGNER","0xIOTA_OBJ",1000000,"0xRECIP",100000000]}
+  - name: unsafe_transferObject
+    summary: "Builds an unsigned transaction to transfer an on-chain object"
+    params: "[signer, objectId(ObjectID), gas?, gasBudget, recipient]"
+    example: {"chain":"iota","method":"unsafe_transferObject","params":["0xSIGNER","0xOBJ",null,1000000,"0xRECIP"]}
+  # ---------- Write ----------
+  - name: iota_devInspectTransactionBlock
+    summary: "Simulates transaction block execution and returns debug info (does not submit on-chain)"
+    params: "[senderAddress, txBytes(base64), gasPrice?(uint64), epoch?(uint64)]"
+    example: {"chain":"iota","method":"iota_devInspectTransactionBlock","params":["0xSENDER","BASE64_TX"]}
+  - name: iota_dryRunTransactionBlock
+    summary: "Simulates transaction block execution and returns effects (does not submit on-chain)"
+    params: "[txBytes(base64)]"
+    example: {"chain":"iota","method":"iota_dryRunTransactionBlock","params":["BASE64_TX"]}
+  - name: iota_executeTransactionBlock
+    summary: "Signs and submits a transaction block on-chain"
+    params: "[txBytes(base64), signatures([base64]), options?, requestType?]"
+    example: {"chain":"iota","method":"iota_executeTransactionBlock","params":["BASE64_TX",["BASE64_SIG"],{"showEffects":true},"WaitForLocalExecution"]}

@@ -1,0 +1,90 @@
+# ============================================================================
+# Perps — Market-wide Data (Mid-prices / Metadata / Funding / Order Book / Candles)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Perpetual Futures — Market-wide Data"
+note: >
+  All interfaces below are perpetual futures market-level data. No user address required.
+  All timestamps are milliseconds (13-digit Unix ms), not seconds.
+
+interfaces:
+  - name: "hyperliquid_all_mids"
+    summary: "Current mid-price snapshot for all markets (perps + spot)"
+    params: []
+    gotchas:
+      - "No params needed. Returns a {coin: midPrice} map; coin is a perp symbol (BTC/ETH…) or spot @index."
+    example:
+      name: "hyperliquid_all_mids"
+      params: {}
+
+  - name: "hyperliquid_perp_meta"
+    summary: "Perp contract metadata (name / precision / max leverage)"
+    params: []
+    gotchas:
+      - "No params needed. The name field in universe[] is the coin value used by other interfaces."
+    example:
+      name: "hyperliquid_perp_meta"
+      params: {}
+
+  - name: "hyperliquid_perp_contexts"
+    summary: "Real-time per-asset context for all perps: mark price / oracle price / funding rate / open interest / 24h volume"
+    params: []
+    gotchas:
+      - "No params needed. Returns [meta, assetCtxs[]], both arrays aligned by universe order."
+      - "Key fields: markPx (mark price), oraclePx (oracle), funding (current rate), openInterest, dayNtlVlm (daily notional volume)."
+    example:
+      name: "hyperliquid_perp_contexts"
+      params: {}
+
+  - name: "hyperliquid_l2_book"
+    summary: "Real-time L2 order book (bid/ask levels) for a perp contract"
+    params:
+      - {name: coin,      required: true,  format: "coin symbol", example: "BTC"}
+      - {name: nSigFigs,  required: false, format: "integer 2-5, controls price aggregation precision"}
+      - {name: mantissa,  required: false, format: "integer, mantissa aggregation mode"}
+    gotchas:
+      - "coin is required, e.g. BTC / ETH / SOL."
+      - "Returns {coin, time, levels:[bids, asks]}; each level is {px, sz, n}."
+    example:
+      name: "hyperliquid_l2_book"
+      params: {coin: "BTC"}
+
+  - name: "hyperliquid_candles"
+    summary: "OHLCV candle history for a perp contract"
+    params:
+      - name: req
+        required: true
+        format: "object {coin, interval, startTime(ms), endTime(ms optional)}"
+        note: "req is a nested object — do not flatten into top-level params"
+        example: '{"coin":"BTC","interval":"1h","startTime":1735689600000}'
+    gotchas:
+      - "⚠️ The param is req, whose value is a nested object: {coin, interval, startTime(ms), endTime(ms)}. Do not pass coin/interval as top-level params — that will error."
+      - "Valid interval values: 1m | 5m | 15m | 1h | 4h | 1d | 1w."
+      - "startTime / endTime are milliseconds (13-digit), not seconds."
+      - "Candle fields: t (open time ms), T (close time ms), o/h/l/c (open/high/low/close), v (volume), n (trade count)."
+    example:
+      name: "hyperliquid_candles"
+      params:
+        req: {coin: "BTC", interval: "1h", startTime: 1735689600000}
+
+  - name: "hyperliquid_funding_history"
+    summary: "Historical funding rate records for a perp contract"
+    params:
+      - {name: coin,      required: true,  format: "coin symbol", example: "BTC"}
+      - {name: startTime, required: true,  format: "millisecond timestamp (13-digit)", example: 1735689600000}
+      - {name: endTime,   required: false, format: "millisecond timestamp (13-digit); omit to return through latest"}
+    gotchas:
+      - "coin and startTime are both required; startTime is milliseconds, not seconds."
+      - "Returns [{coin, fundingRate, premium, time}]."
+    example:
+      name: "hyperliquid_funding_history"
+      params: {coin: "BTC", startTime: 1735689600000}
+
+  - name: "hyperliquid_predicted_fundings"
+    summary: "Predicted next-period funding rates for all assets (cross-venue comparison)"
+    params: []
+    gotchas:
+      - "No params needed. Returns per-asset predicted funding rates across venues (HlPerp / BinPerp, etc.), useful for arbitrage reference."
+    example:
+      name: "hyperliquid_predicted_fundings"
+      params: {}

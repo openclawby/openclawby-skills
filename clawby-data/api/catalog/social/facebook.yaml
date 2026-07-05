@@ -1,0 +1,78 @@
+# ============================================================================
+# Social — Facebook
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Social — Facebook"
+
+gotchas_for_all:
+  - "Path-style params (post_id / id / profile_id / tag) must exist; use facebook_search to retrieve them first"
+
+interfaces:
+  - name: "facebook_search"
+    summary: "Search Facebook by keyword / phrase / hashtag"
+    params:
+      - {name: query, required: true, example: "bitcoin", note: "keyword, phrase, or hashtag"}
+      - {name: count, required: false, format: "int, default 10"}
+      - {name: cursor, required: false, note: "pagination cursor from the previous response"}
+    gotchas:
+      - "⚠️ query is required; missing it returns 422"
+      - "Returns ad library posts; fields include {id, url, text, createTime, author}"
+    example:
+      name: "facebook_search"
+      params: {query: "bitcoin"}
+
+  - name: "facebook_post"
+    summary: "Fetch a single Facebook post by ID"
+    params:
+      - {name: id, required: true, example: "123456789", note: "real post id"}
+    gotchas:
+      - "⚠️ id is required (path param); use facebook_search first to get the post id"
+    example:
+      name: "facebook_post"
+      params: {id: "123456789"}
+
+  - name: "facebook_comments"
+    summary: "Fetch the comment list for a Facebook post"
+    params:
+      - {name: post_id, required: true, example: "123456789", note: "real post id"}
+      - {name: count, required: false, format: "int, default 20"}
+      - {name: cursor, required: false, note: "pagination cursor"}
+    gotchas:
+      - "⚠️ post_id is required (path param); use facebook_search / facebook_post to get it first"
+    example:
+      name: "facebook_comments"
+      params: {post_id: "123456789"}
+
+  - name: "facebook_profile"
+    summary: "Fetch a Facebook profile or page"
+    params:
+      - {name: profile_id, required: true, example: "zuck", note: "profile/page id or username"}
+    gotchas:
+      - "⚠️ profile_id is required (path param)"
+    example:
+      name: "facebook_profile"
+      params: {profile_id: "zuck"}
+
+  - name: "facebook_profile_posts"
+    summary: "Fetch posts from a Facebook profile or page"
+    params:
+      - {name: profile_id, required: true, example: "zuck", note: "profile/page id or username"}
+      - {name: count, required: false, format: "int, default 20"}
+      - {name: cursor, required: false, note: "pagination cursor"}
+    gotchas:
+      - "⚠️ profile_id is required (path param); the param name is profile_id, not id"
+    example:
+      name: "facebook_profile_posts"
+      params: {profile_id: "zuck"}
+
+  - name: "facebook_hashtag"
+    summary: "Fetch Facebook posts by hashtag"
+    params:
+      - {name: tag, required: true, example: "bitcoin", note: "hashtag, without #"}
+      - {name: count, required: false, format: "int, default 20"}
+      - {name: cursor, required: false, note: "pagination cursor"}
+    gotchas:
+      - "⚠️ tag is required (path param); omit the # symbol"
+    example:
+      name: "facebook_hashtag"
+      params: {tag: "bitcoin"}

@@ -1,0 +1,30 @@
+# ============================================================================
+# DEX Trading Data — New Launches / Launchpad
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "New launches (trenches) + launchpad issuance stats"
+
+interfaces:
+  - name: "dex_new_launches"
+    summary: "New launches / trenches: three categories of new tokens — newly created, near graduation, and graduated (bonded)"
+    params:
+      - {name: chain,             required: true,  format: "chain identifier", example: "sol", note: "sol / bsc / base / eth"}
+      - {name: type,              required: false, format: "type array", example: ["new_creation", "completed"], note: "new_creation / near_completion / completed (defaults to all three)"}
+      - {name: launchpad_platform,required: false, format: "launchpad platform array (default: all)", example: ["Pump.fun"], note: "sol: e.g. Pump.fun / letsbonk / bags; bsc: e.g. fourmeme / flap; base: e.g. clanker"}
+      - {name: limit,             required: false, format: "max results per type (max 80)", example: 30}
+    gotchas:
+      - "chain is required; omitting type/platform returns all three categories for all platforms on that chain"
+      - "In the response, data.pump corresponds to near_completion (the upstream always uses the key name pump); also data.new_creation / data.completed"
+      - "Each entry has the same structure as items in the dex_trending ranking"
+    example:
+      name: "dex_new_launches"
+      params: {chain: "sol", type: ["new_creation", "completed"], limit: 30}
+
+  - name: "dex_launchpad_stats"
+    summary: "Token issuance counts per launchpad (grouped by platform)"
+    params: []
+    gotchas:
+      - "No parameters; returns an array, each item: {launchpad, token_count}"
+    example:
+      name: "dex_launchpad_stats"
+      params: {}

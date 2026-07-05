@@ -1,0 +1,48 @@
+# ============================================================================
+# DEX — Search & Profiles (Search & Profiles)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "DEX Search & Token Profiles"
+
+interfaces:
+  - name: "dexscreener_search"
+    summary: "Cross-chain DEX pair search by token name / symbol / contract address"
+    params:
+      - {name: q, required: true, format: "keyword: token name / symbol / contract address", example: "WBTC", note: "can also pass a token contract address for exact matching"}
+    gotchas:
+      - "q is the only parameter — no chainId needed; results are aggregated across all chains"
+      - "Returns a pairs[] array; each entry includes chainId / dexId / baseToken / quoteToken / priceUsd / liquidity.usd / volume / priceChange / fdv / marketCap"
+      - "Results may match multiple tokens with the same name (different chains or pools); for exact matching, use a contract address as q"
+    example:
+      name: "dexscreener_search"
+      params: {q: "WBTC"}
+
+  - name: "dexscreener_token_profiles"
+    summary: "Recently listed token profiles (description / social links)"
+    params: []
+    gotchas:
+      - "No parameters; returns recently indexed token profiles (chainId / tokenAddress / description / links)"
+      - "This is the official index list — not all on-chain tokens; new tokens appear only after they are indexed"
+    example:
+      name: "dexscreener_token_profiles"
+      params: {}
+
+  - name: "dexscreener_token_boosts_latest"
+    summary: "Most recently boosted tokens"
+    params: []
+    gotchas:
+      - "No parameters; returns recently boosted tokens (chainId / tokenAddress / amount / totalAmount / description)"
+      - "Boost is a paid promotion — being listed does not indicate project quality"
+    example:
+      name: "dexscreener_token_boosts_latest"
+      params: {}
+
+  - name: "dexscreener_token_boosts_top"
+    summary: "Top tokens by current boost volume"
+    params: []
+    gotchas:
+      - "No parameters; returns tokens ranked by total boost volume, descending by active boost amount"
+      - "Difference from dexscreener_token_boosts_latest: latest is chronological, top is ranked by boost volume"
+    example:
+      name: "dexscreener_token_boosts_top"
+      params: {}

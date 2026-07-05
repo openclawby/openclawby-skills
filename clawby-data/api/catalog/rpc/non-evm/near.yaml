@@ -1,0 +1,130 @@
+# ============================================================================
+# NEAR RPC — near
+# Call: POST /api/rpc   body {"chain":"near","method":"<method>","params":{...}}
+# ============================================================================
+chain: "near"
+type: NEAR
+slug: near
+status: ok
+how_to_call: 'POST /api/rpc  {"chain":"near","method":"<method>","params":{...}}'
+notes:
+  - "NEAR RPC params is an object, not an array (a few methods like gas_price/validators use arrays instead)"
+  - "The outer method is a generic verb (query/block/chunk/EXPERIMENTAL_changes, etc.); the actual operation type is specified by the request_type or changes_type field inside params"
+  - "Pass 'dontcare' for the id field; addresses are human-readable account names like example.testnet or example.near"
+  - "Two finality options: final (irreversible) / optimistic (latest); can also use block_id to specify a particular block height or hash"
+  - "Methods with EXPERIMENTAL_* prefix are experimental and may change with protocol versions"
+methods:
+  - name: "View access key"
+    summary: "Queries permission info for a single access key on an account (allowed contracts/methods, etc.)"
+    params: "request_type=view_access_key, finality or block_id, account_id, public_key(ed25519:...)"
+    example: {"chain":"near","method":"query","params":{"request_type":"view_access_key","finality":"final","account_id":"client.chainlink.testnet","public_key":"ed25519:H9k5eiU4xXS3M4z8HzKJSLaZdqGdGwBG49o7orNC4eZW"}}
+
+  - name: "View access key list"
+    summary: "Queries the full list of access keys on an account"
+    params: "request_type=view_access_key_list, finality or block_id, account_id"
+    example: {"chain":"near","method":"query","params":{"request_type":"view_access_key_list","finality":"final","account_id":"example.testnet"}}
+
+  - name: "View access key changes (single)"
+    summary: "Queries the change records for a single access key in the specified block"
+    params: "changes_type=single_access_key_changes, keys=[{account_id, public_key}], block_id or finality"
+    example: {"chain":"near","method":"EXPERIMENTAL_changes","params":{"changes_type":"single_access_key_changes","keys":[{"account_id":"example-acct.testnet","public_key":"ed25519:25KEc7t7MQohAJ4EDThd2vkksKkwangnuJFzcoiXj9oM"}],"block_id":17824853}}
+
+  - name: "View access key changes (all)"
+    summary: "Queries change records for all access keys on an account in the specified block"
+    params: "changes_type=all_access_key_changes, account_ids=[...], block_id or finality"
+    example: {"chain":"near","method":"EXPERIMENTAL_changes","params":{"changes_type":"all_access_key_changes","account_ids":["example-acct.testnet"],"block_id":"4kvqE1PsA6ic1orAdDbozkKEJV4a3BBQHBAF9iBFNh"}}
+
+  - name: "View account"
+    summary: "Queries basic account info (balance, staked amount, storage usage, etc.)"
+    params: "request_type=view_account, finality or block_id, account_id"
+    example: {"chain":"near","method":"query","params":{"request_type":"view_account","finality":"final","account_id":"nearkat.testnet"}}
+
+  - name: "View account changes"
+    summary: "Queries account state change records in the specified block"
+    params: "changes_type=account_changes, account_ids=[...], block_id or finality"
+    example: {"chain":"near","method":"EXPERIMENTAL_changes","params":{"changes_type":"account_changes","account_ids":["your_account.testnet"],"block_id":19450732}}
+
+  - name: "View contract code"
+    summary: "Queries the Wasm bytecode of the contract deployed on an account"
+    params: "request_type=view_code, finality or block_id, account_id"
+    example: {"chain":"near","method":"query","params":{"request_type":"view_code","finality":"final","account_id":"guest-book.testnet"}}
+
+  - name: "View contract state"
+    summary: "Queries the contract state (key-value pairs); can be filtered using prefix_base64"
+    params: "request_type=view_state, finality or block_id, account_id, prefix_base64 (base64-encoded key prefix)"
+    example: {"chain":"near","method":"query","params":{"request_type":"view_state","finality":"final","account_id":"guest-book.testnet","prefix_base64":""}}
+
+  - name: "View contract state changes"
+    summary: "Queries contract state key-value change records in the specified block"
+    params: "changes_type=data_changes, account_ids=[...], key_prefix_base64, block_id or finality"
+    example: {"chain":"near","method":"EXPERIMENTAL_changes","params":{"changes_type":"data_changes","account_ids":["guest-book.testnet"],"key_prefix_base64":"","block_id":19450732}}
+
+  - name: "View contract code changes"
+    summary: "Queries contract code deployment change records in the specified block"
+    params: "changes_type=contract_code_changes, account_ids=[...], block_id or finality"
+    example: {"chain":"near","method":"EXPERIMENTAL_changes","params":{"changes_type":"contract_code_changes","account_ids":["dev-1602714453032-7566969"],"block_id":20046655}}
+
+  - name: "Call a contract function"
+    summary: "Calls a contract's view function in read-only mode"
+    params: "request_type=call_function, finality or block_id, account_id, method_name, args_base64 (base64-encoded JSON arguments)"
+    example: {"chain":"near","method":"query","params":{"request_type":"call_function","finality":"final","account_id":"guest-book.testnet","method_name":"getMessages","args_base64":"e30="}}
+
+  - name: "Block details"
+    summary: "Queries block details by block height or block hash"
+    params: "block_id (integer height or block hash string) or finality"
+    example: {"chain":"near","method":"block","params":{"finality":"final"}}
+
+  - name: "Changes in block"
+    summary: "Queries all changes within a specified block (accounts, contracts, access keys, etc.)"
+    params: "finality or block_id"
+    example: {"chain":"near","method":"EXPERIMENTAL_changes_in_block","params":{"finality":"final"}}
+
+  - name: "Chunk details"
+    summary: "Queries details of a chunk (shard), including the transaction list"
+    params: "chunk_id (hash string) or {block_id, shard_id}"
+    example: {"chain":"near","method":"chunk","params":{"chunk_id":"EBM2qg5cGr47EjMPtH88uvmXHDHqmWike1NRghHTKEj"}}
+
+  - name: "Gas price"
+    summary: "Queries the gas price for a specified block (yoctoNEAR)"
+    params: "[block_id] — pass null for the latest block"
+    example: {"chain":"near","method":"gas_price","params":[17824011]}
+
+  - name: "Genesis config"
+    summary: "Returns genesis configuration parameters (genesis_height, total supply, etc.)"
+    params: "none"
+    example: {"chain":"near","method":"EXPERIMENTAL_genesis_config","params":[]}
+
+  - name: "Protocol config"
+    summary: "Returns protocol configuration parameters for the specified block (max gas limit, storage fees, etc.)"
+    params: "finality or block_id"
+    example: {"chain":"near","method":"EXPERIMENTAL_protocol_config","params":{"block_id":17824011}}
+
+  - name: "Validation status"
+    summary: "Queries the list of active validators in the current epoch and their stake/reward info"
+    params: "[epoch_id | block_id | null (latest)]"
+    example: {"chain":"near","method":"validators","params":[null]}
+
+  - name: "Send transaction (async)"
+    summary: "Broadcasts a signed transaction and immediately returns the transaction hash (does not wait for confirmation)"
+    params: "[signedTx (base64-encoded SignedTransaction)]"
+    example: {"chain":"near","method":"broadcast_tx_async","params":["DgAAAHNlbmRlci50ZXN0bmV0AOrmAai64SZOv9e/naX4W15pJx0GAap35wTT1T/DwcbbDwAAAAAAAAAQAAAAcmVjZWl2ZXIudGVzdG5ldNMnL7URB1cxPOu3G8jTqlEwlcasagIbKlAJlF5ywVFLAQAAAAMAAACh7czOG8LTAAAAAAAAAGQcnDqmZGc5pVgr2PLfE0T5OLCkIRcJYIhU4pMaib0="]}
+
+  - name: "Send transaction (await)"
+    summary: "Broadcasts a signed transaction and waits for the final execution result (up to 10-second timeout)"
+    params: "[signedTx (base64-encoded SignedTransaction)]"
+    example: {"chain":"near","method":"broadcast_tx_commit","params":["DgAAAHNlbmRlci50ZXN0bmV0AOrmAai64SZOv9e/naX4W15pJx0GAap35wTT1T/DwcbbDwAAAAAAAAAQAAAAcmVjZWl2ZXIudGVzdG5ldNMnL7URB1cxPOu3G8jTqlEwlcasagIbKlAJlF5ywVFLAQAAAAMAAACh7czOG8LTAAAAAAAAAGQcnDqmZGc5pVgr2PLfE0T5OLCkIRcJYIhU4pMaib0="]}
+
+  - name: "Transaction status"
+    summary: "Queries the final execution result of a transaction by hash"
+    params: "[txHash(base58), sender_account_id]"
+    example: {"chain":"near","method":"tx","params":["6zgh2u9DqHHiXzdy9ouTP7oGky2T4nugqzqt9wJZwNFm","sender.testnet"]}
+
+  - name: "Transaction status with receipts"
+    summary: "Queries transaction status and all receipt details by transaction hash"
+    params: "[txHash(base58), sender_account_id]"
+    example: {"chain":"near","method":"EXPERIMENTAL_tx_status","params":["HEgnVQZfs9uJzrqTob4g2Xmebqodq9waZvApSkrbcAhd","bowen"]}
+
+  - name: "Receipt by ID"
+    summary: "Queries receipt details by receipt ID (excludes execution result)"
+    params: "receipt_id"
+    example: {"chain":"near","method":"EXPERIMENTAL_receipt","params":{"receipt_id":"2EbembRPJhREPtmHCrGv3Xtdm3xoc5BMVYHm3b2kjvMY"}}

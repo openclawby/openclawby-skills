@@ -1,0 +1,83 @@
+# Executable connectors registry (trade / transaction execution).
+#
+# LAZY INSTALL: do NOT install these up front — data queries never need them.
+# Only when the user first asks to EXECUTE on a venue: run that venue's `check`;
+# if the tool is missing, tell the user what will be installed, then run its
+# `install`. Install one venue at a time, never all. See update-protocol.md Step A.
+# `kind: cli` = a global command-line tool. `kind: sdk` = a per-project library.
+# Both install on demand only.
+#
+# SECURITY: files in this directory are downloaded on update WITHOUT signature or
+# checksum verification. Before running anything here that places a real order or
+# moves funds, the agent MUST confirm with the user first.
+# Secrets (exchange API keys, wallet private keys) live ONLY in environment
+# variables or the local/ directory — never in this folder.
+version: 8
+executors:
+  - name: binance
+    path: binance/                 # subfolder under exec/
+    entry: binance.md              # guide the agent reads; drives the `binance-cli` tool
+    tool: "binance-cli (npm: @binance/binance-cli)"
+    kind: cli
+    check: "binance-cli --version"
+    install: "npm install -g @binance/binance-cli"
+    auth: "env BINANCE_API_KEY / BINANCE_SECRET_KEY (+ BINANCE_API_ENV prod|testnet|demo), or profiles"
+    risk: high                     # high = moves real money → CONFIRM with user per action
+    description: >-
+      Binance trade execution — Spot, USDS-M / COIN-M Futures, Margin, Convert, Options,
+      Earn, Wallet — via the official binance-cli. Runs locally with the user's own keys;
+      not routed through Clawby.
+  - name: bitget
+    path: bitget/                  # subfolder under exec/
+    entry: bitget.md               # guide the agent reads; drives the `bgc` tool
+    tool: "bgc (npm: bitget-client)"
+    kind: cli
+    check: "bgc --version"
+    install: "npm install -g bitget-client"
+    auth: "env BITGET_API_KEY / BITGET_SECRET_KEY / BITGET_PASSPHRASE"
+    risk: high                     # high = moves real money → CONFIRM with user per action
+    description: >-
+      Bitget trade execution — Spot, USDT/Coin Futures, Margin, Copy-trading, Convert,
+      Earn, P2P — via the official bgc CLI. Runs locally with the user's own keys;
+      not routed through Clawby. Supports --paper-trading (demo) and --read-only.
+  - name: okx
+    path: okx/                     # subfolder under exec/
+    entry: okx.md                  # guide the agent reads; drives the `okx` tool
+    tool: "okx (npm: @okx_ai/okx-trade-cli)"
+    kind: cli
+    check: "okx --version"
+    install: "npm install -g @okx_ai/okx-trade-cli"
+    auth: "okx auth login, or env OKX_API_KEY / OKX_SECRET_KEY / OKX_PASSPHRASE"
+    risk: high                     # high = moves real money → CONFIRM with user per action
+    description: >-
+      OKX execution & analytics — Spot, Perp Swap, Futures, Options, Earn, Bots, plus
+      market data, smart-money analytics and news/sentiment — via the official okx CLI.
+      Runs locally with the user's own keys; not routed through Clawby. Supports --demo.
+  - name: polymarket
+    path: polymarket/              # subfolder under exec/
+    entry: polymarket.md           # guide the agent reads; drives the clob-client SDK
+    tool: "@polymarket/clob-client (TS) or py-clob-client (Python)"
+    kind: sdk                      # per-project library; install on demand, not on first run
+    install: "npm install @polymarket/clob-client ethers@5.8.0   # (Python: pip install py-clob-client)"
+    auth: "env PRIVATE_KEY (Polygon wallet) + signatureType/funder; SDK derives L1/L2 creds"
+    risk: high                     # high = moves real money → CONFIRM with user per action
+    description: >-
+      Polymarket CLOB execution — place / cancel limit & market orders (GTC/GTD/FOK/FAK),
+      batch, post-only, plus CTF / gasless / bridge — via the official clob-client SDK.
+      Signs with the user's own wallet key locally; not routed through Clawby.
+      Read-only odds/order books stay in the Clawby data relay (polymarket_* interfaces).
+  - name: gmgn
+    path: gmgn/                    # subfolder under exec/
+    entry: gmgn.md                 # guide the agent reads; drives the `gmgn-cli` tool
+    tool: "gmgn-cli (npm: gmgn-cli)"
+    kind: cli
+    check: "gmgn-cli --version"
+    install: "npm install -g gmgn-cli"
+    auth: "env GMGN_API_KEY (all); GMGN_PRIVATE_KEY (signing key) required for swap / orders / cooking create / holdings / follow-wallet"
+    risk: high                     # high = moves real money → CONFIRM with user per action
+    description: >-
+      On-chain DEX / memecoin execution — swap, multi-wallet swap, limit & strategy
+      (TP/SL) orders, and token launch/create on Solana / BSC / Base / Ethereum — via the
+      official gmgn-cli. Signs locally with the user's own key; not routed through Clawby.
+      Read-only DEX/memecoin queries stay in the Clawby data relay (dex_* interfaces);
+      only use gmgn-cli's own query subcommands when the user explicitly asks for it.

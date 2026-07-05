@@ -1,0 +1,71 @@
+# ============================================================================
+# Non-EVM RPC — sui
+# Call: POST /api/rpc   body {"chain":"sui","method":"<method>","params":[...]}
+# ============================================================================
+chain: "sui"
+type: "Sui"
+slug: "sui"
+status: ok
+how_to_call: 'POST /api/rpc  {"chain":"sui","method":"<method>","params":[...]}'
+notes:
+  - "Sui addresses are 0x + 64 hex digits (32 bytes); e.g. 0x1a2b...cd (66 characters total)"
+  - "coinType format is 0xPKG::module::COIN; native SUI = 0x2::sui::SUI"
+  - "Object ID is 0x + 64 hex digits; transaction digest is a base58 string"
+  - "suix_* prefix denotes Sui extension methods; sui_* prefix denotes core methods"
+  - "Pagination: most list methods support cursor (objectId/digest of the last item on the previous page) + limit parameters"
+  - "The options object controls the verbosity of returned fields (showContent/showOwner/showType etc. boolean fields)"
+methods:
+  - name: suix_getBalance
+    summary: "Returns the balance of a specific coinType held by the given address (totalBalance + coinObjectCount)"
+    params: "[owner_address, coinType?] — omit coinType to query the native SUI balance"
+    example: {"chain":"sui","method":"suix_getBalance","params":["0xOWNER_ADDRESS","0x2::sui::SUI"]}
+
+  - name: suix_getAllBalances
+    summary: "Returns all coin types held by the given address and their respective balances"
+    params: "[owner_address]"
+    example: {"chain":"sui","method":"suix_getAllBalances","params":["0xOWNER_ADDRESS"]}
+
+  - name: suix_getCoinMetadata
+    summary: "Returns coin metadata: name/symbol/decimals/description/iconUrl"
+    params: "[coinType] — e.g. '0x2::sui::SUI'"
+    example: {"chain":"sui","method":"suix_getCoinMetadata","params":["0x2::sui::SUI"]}
+
+  - name: suix_getTotalSupply
+    summary: "Returns the total supply of the specified coin (value string, in the coin's smallest unit)"
+    params: "[coinType]"
+    example: {"chain":"sui","method":"suix_getTotalSupply","params":["0x2::sui::SUI"]}
+
+  - name: suix_getCoins
+    summary: "Returns the list of coin objects of a specific coinType held by the given address (includes coinObjectId/balance); supports pagination"
+    params: "[owner_address, coinType?, cursor?, limit?]"
+    example: {"chain":"sui","method":"suix_getCoins","params":["0xOWNER_ADDRESS","0x2::sui::SUI",null,10]}
+
+  - name: sui_getObject
+    summary: "Returns object details by Object ID; options controls which fields to return (content/owner/type/storageRebate, etc.)"
+    params: "[objectId, options?] — options: {showContent?, showOwner?, showType?, showBcs?, showStorageRebate?, showDisplay?}"
+    example: {"chain":"sui","method":"sui_getObject","params":["0xOBJECT_ID",{"showContent":true,"showOwner":true,"showType":true}]}
+
+  - name: sui_getTransactionBlock
+    summary: "Returns transaction block details by transaction digest (sender/inputs/transaction body/effects/events, etc.)"
+    params: "[digest(base58), options?] — options: {showInput?, showEffects?, showEvents?, showObjectChanges?, showBalanceChanges?}"
+    example: {"chain":"sui","method":"sui_getTransactionBlock","params":["TX_DIGEST_BASE58",{"showInput":true,"showEffects":true,"showEvents":true}]}
+
+  - name: suix_queryEvents
+    summary: "Queries historical events by filter; supports pagination (cursor/limit/descending_order)"
+    params: "[eventFilter, cursor?, limit?, descending_order?] — eventFilter e.g. {MoveModule:{package:'0xPKG',module:'name'}} or {MoveEventType:'0xPKG::mod::EventName'}"
+    example: {"chain":"sui","method":"suix_queryEvents","params":[{"MoveEventType":"0x2::coin::CoinBalanceChange"},null,10,true]}
+
+  - name: sui_getLatestCheckpointSequenceNumber
+    summary: "Returns the sequence number of the latest checkpoint (string)"
+    params: "none"
+    example: {"chain":"sui","method":"sui_getLatestCheckpointSequenceNumber","params":[]}
+
+  - name: suix_getOwnedObjects
+    summary: "Returns the list of objects owned by the given address; supports query filtering (by type/owner) and cursor/limit pagination"
+    params: "[owner_address, query?, cursor?, limit?] — query e.g. {filter:{StructType:'0xPKG::mod::Type'}, options:{showType:true}}"
+    example: {"chain":"sui","method":"suix_getOwnedObjects","params":["0xOWNER_ADDRESS",{"options":{"showType":true,"showContent":false}},null,10]}
+
+  - name: sui_getChainIdentifier
+    summary: "Returns the chain's unique identifier (4-byte hex string, i.e. the first 4 bytes of the genesis checkpoint digest)"
+    params: "none"
+    example: {"chain":"sui","method":"sui_getChainIdentifier","params":[]}

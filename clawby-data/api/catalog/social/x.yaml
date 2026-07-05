@@ -1,0 +1,123 @@
+# ============================================================================
+# Social — X / Twitter
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Social — X / Twitter"
+
+gotchas_for_all:
+  - "Handle params (user / username) have no @"
+  - "Path-style params (id / post_id) must exist; use x_search to retrieve them first"
+
+interfaces:
+  - name: "x_search"
+    summary: "Search X posts or users by keyword / phrase / @handle / #hashtag"
+    params:
+      - {name: query, required: true, example: "bitcoin", note: "keyword, phrase, @handle, or #tag"}
+      - {name: sort, required: false, example: "Top", note: "Top | Latest, default Top"}
+      - {name: user, required: false, note: "filter to a specific author handle (no @)"}
+      - {name: start_date, required: false, format: "YYYY-MM-DD"}
+      - {name: end_date, required: false, format: "YYYY-MM-DD"}
+      - {name: lang, required: false, example: "en"}
+      - {name: verified, required: false, format: "true | false"}
+      - {name: blue_verified, required: false, format: "true | false"}
+      - {name: is_quote, required: false, format: "true | false"}
+      - {name: is_video, required: false, format: "true | false"}
+      - {name: is_image, required: false, format: "true | false"}
+      - {name: min_retweets, required: false, format: "int"}
+      - {name: min_replies, required: false, format: "int"}
+      - {name: min_likes, required: false, format: "int"}
+      - {name: count, required: false, format: "1-100, default 20"}
+    gotchas:
+      - "⚠️ query is required; missing it returns 422"
+    example:
+      name: "x_search"
+      params: {query: "bitcoin"}
+
+  - name: "x_post"
+    summary: "Fetch a single X post by tweet ID"
+    params:
+      - {name: id, required: true, example: "1234567890123456789", note: "tweet id"}
+    gotchas:
+      - "⚠️ id is required; use x_search first to get the tweet id — wrong or nonexistent id returns empty"
+    example:
+      name: "x_post"
+      params: {id: "1234567890123456789"}
+
+  - name: "x_post_retweeters"
+    summary: "Fetch users who retweeted an X post"
+    params:
+      - {name: id, required: true, example: "1234567890123456789", note: "tweet id"}
+      - {name: cursor, required: false, note: "pagination cursor from the previous response"}
+    gotchas:
+      - "⚠️ id is required (tweet id, not user id)"
+    example:
+      name: "x_post_retweeters"
+      params: {id: "1234567890123456789"}
+
+  - name: "x_user_posts"
+    summary: "Fetch recent X posts by username"
+    params:
+      - {name: username, required: true, example: "elonmusk", note: "handle, no @"}
+      - {name: cursor, required: false, note: "pagination cursor"}
+    gotchas:
+      - "⚠️ param name is username (not user); no @"
+    example:
+      name: "x_user_posts"
+      params: {username: "elonmusk"}
+
+  - name: "x_user_posts_search"
+    summary: "Search a specific X user's posts by keyword"
+    params:
+      - {name: user, required: true, example: "elonmusk", note: "handle, no @"}
+      - {name: query, required: false, note: "keyword filter"}
+      - {name: count, required: false, format: "int, default 10"}
+    gotchas:
+      - "⚠️ param name is user (not username); no @"
+    example:
+      name: "x_user_posts_search"
+      params: {user: "elonmusk", query: "tesla"}
+
+  - name: "x_replies"
+    summary: "Fetch tweets and replies posted by an X user"
+    params:
+      - {name: user, required: true, example: "elonmusk", note: "handle, no @"}
+      - {name: count, required: false, format: "int, default 10"}
+      - {name: query, required: false, note: "keyword filter"}
+    gotchas:
+      - "⚠️ param name is user (not username); no @"
+    example:
+      name: "x_replies"
+      params: {user: "elonmusk"}
+
+  - name: "x_post_replies"
+    summary: "Fetch replies to an X post"
+    params:
+      - {name: post_id, required: true, example: "1234567890123456789", note: "tweet id"}
+      - {name: count, required: false, format: "int, default 10"}
+      - {name: query, required: false, note: "keyword filter"}
+    gotchas:
+      - "⚠️ post_id is required; param name is post_id, not id"
+    example:
+      name: "x_post_replies"
+      params: {post_id: "1234567890123456789"}
+
+  - name: "x_trends"
+    summary: "Fetch trending X topics for a region"
+    params:
+      - {name: woeid, required: true, example: 1, note: "Where-On-Earth id, 1=global"}
+      - {name: count, required: false, format: "int, default 30, minimum 30"}
+    gotchas:
+      - "⚠️ woeid is required; count minimum is 30 — values below 30 are ignored"
+    example:
+      name: "x_trends"
+      params: {woeid: 1}
+
+  - name: "x_posts_by_urls"
+    summary: "Fetch X posts in bulk by tweet URL"
+    params:
+      - {name: urls, required: true, example: "https://x.com/elonmusk/status/1234567890123456789", note: "comma-separated tweet URLs; multiple supported"}
+    gotchas:
+      - "⚠️ urls is required; separate multiple URLs with commas, no spaces"
+    example:
+      name: "x_posts_by_urls"
+      params: {urls: "https://x.com/elonmusk/status/1234567890123456789"}

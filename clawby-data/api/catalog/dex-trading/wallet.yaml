@@ -1,0 +1,77 @@
+# ============================================================================
+# DEX Trading Data — Wallets / Smart Money (Wallet & Smart Money)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Wallet P&L / Activity / Balances / Token Creation History + KOL / Smart Money Rankings"
+
+interfaces:
+  - name: "dex_wallet_stats"
+    summary: "Wallet trading stats / P&L for a period: realized P&L, trade counts, cost basis, win rate, etc."
+    params:
+      - {name: chain,          required: true,  format: "chain identifier", example: "sol", note: "sol / bsc / base"}
+      - {name: wallet_address, required: true,  format: "wallet address", example: "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9"}
+      - {name: period,         required: false, format: "period", example: "7d", note: "1d / 7d / 30d"}
+    gotchas:
+      - "wallet_address is a wallet address, not a token address"
+      - "Returns realized_profit / realized_profit_pnl / buy / sell / bought_cost etc."
+    example:
+      name: "dex_wallet_stats"
+      params: {chain: "sol", wallet_address: "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9", period: "7d"}
+
+  - name: "dex_wallet_activity"
+    summary: "Wallet trading activity (recent buys / sells / LP changes / transfers)"
+    params:
+      - {name: chain,          required: true,  format: "chain identifier", example: "sol", note: "sol / bsc / base"}
+      - {name: wallet_address, required: true,  format: "wallet address", example: "..."}
+      - {name: token_address,  required: false, format: "filter to a specific token", example: "..."}
+      - {name: limit,          required: false, format: "page size", example: 20}
+    gotchas:
+      - "Returns activities + next (pagination cursor); pass next as cursor for the next page"
+    example:
+      name: "dex_wallet_activity"
+      params: {chain: "sol", wallet_address: "<wallet>", limit: 20}
+
+  - name: "dex_wallet_balance"
+    summary: "Wallet token balances"
+    params:
+      - {name: chain,          required: true,  format: "chain identifier", example: "sol", note: "sol / bsc / base"}
+      - {name: wallet_address, required: true,  format: "wallet address", example: "..."}
+      - {name: token_address,  required: false, format: "filter to a single token balance", example: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"}
+    gotchas:
+      - "Returns a balances array; passing token_address limits results to that token"
+    example:
+      name: "dex_wallet_balance"
+      params: {chain: "sol", wallet_address: "<wallet>", token_address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"}
+
+  - name: "dex_wallet_created_tokens"
+    summary: "Tokens created by a wallet (dev profile: launch count, listing rate, ATH market cap, suspected rugs)"
+    params:
+      - {name: chain,          required: true,  format: "chain identifier", example: "sol", note: "sol / bsc / base"}
+      - {name: wallet_address, required: true,  format: "developer wallet address", example: "..."}
+    gotchas:
+      - "Useful for identifying serial launchers / rug dev addresses; returns tokens + open_ratio + creator_ath_info"
+    example:
+      name: "dex_wallet_created_tokens"
+      params: {chain: "sol", wallet_address: "<dev_wallet>"}
+
+  - name: "dex_kol_wallets"
+    summary: "KOL wallet rankings (recent KOL trade records / wallets)"
+    params:
+      - {name: chain, required: false, format: "chain identifier (default sol)", example: "sol", note: "sol / bsc / base"}
+      - {name: limit, required: false, format: "count (1–200, default 100)", example: 20}
+    gotchas:
+      - "Returns data.list; useful for copy-trading or sentiment reference"
+    example:
+      name: "dex_kol_wallets"
+      params: {chain: "sol", limit: 20}
+
+  - name: "dex_smart_money"
+    summary: "Smart money wallet rankings (recently high win-rate / high-profit wallet trades)"
+    params:
+      - {name: chain, required: false, format: "chain identifier (default sol)", example: "sol", note: "sol / bsc / base"}
+      - {name: limit, required: false, format: "count (1–200, default 100)", example: 20}
+    gotchas:
+      - "Returns data.list; combine with dex_wallet_stats / dex_wallet_activity to dig deeper into smart money addresses"
+    example:
+      name: "dex_smart_money"
+      params: {chain: "sol", limit: 20}

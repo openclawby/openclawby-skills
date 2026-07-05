@@ -1,0 +1,155 @@
+# ============================================================================
+# Derivatives — Liquidation
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Liquidation"
+
+gotchas_for_all:
+  - "⚠️ Single-pair endpoints (futures_liquidation_history / heatmap_model* / map / order) use exchange + symbol=BTCUSDT (trading pair format)"
+  - "⚠️ Aggregate endpoints (aggregated_history / aggregated_heatmap* / aggregated_map) use exchange_list (comma-separated) + symbol=BTC (coin name format)"
+  - "⚠️ heatmap and map endpoints require the range param (e.g. 3d/7d/30d/3m/6m/1y); liquidation_exchange_list range is 1h/4h/12h/24h"
+  - "⚠️ Response is {code, data}; code='0' means success"
+
+interfaces:
+  - name: "futures_liquidation_history"
+    summary: "Per-pair liquidation history OHLC"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT", note: "⚠️ use trading pair format"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_liquidation_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_liquidation_aggregated_history"
+    summary: "Aggregate liquidation history OHLC across exchanges (by coin)"
+    params:
+      - {name: exchange_list, required: true, format: "comma-separated exchange names", example: "Binance,OKX", note: "⚠️ exchange_list, not exchange"}
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ use coin name BTC"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_liquidation_aggregated_history"
+      params: {exchange_list: "Binance,OKX", symbol: "BTC", interval: "1h"}
+
+  - name: "futures_liquidation_coin_list"
+    summary: "Liquidation volume snapshot for all coins on a given exchange"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+    example:
+      name: "futures_liquidation_coin_list"
+      params: {exchange: "Binance"}
+
+  - name: "futures_liquidation_exchange_list"
+    summary: "Liquidation volume snapshot across exchanges for a given coin"
+    params:
+      - {name: range, required: true, format: "1h/4h/12h/24h", example: "24h"}
+      - {name: symbol, required: false, format: "coin name", example: "BTC"}
+    gotchas:
+      - "⚠️ range is required; values are 1h/4h/12h/24h (time window, not interval)"
+    example:
+      name: "futures_liquidation_exchange_list"
+      params: {range: "24h"}
+
+  - name: "futures_liquidation_order"
+    summary: "Individual liquidation order detail"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: min_liquidation_amount, required: true, format: "minimum liquidation amount (USD number)", example: 100000}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ min_liquidation_amount is required to filter small liquidations; recommended 100000+"
+    example:
+      name: "futures_liquidation_order"
+      params: {exchange: "Binance", symbol: "BTCUSDT", min_liquidation_amount: 100000}
+
+  - name: "futures_liquidation_heatmap_model1"
+    summary: "Per-pair liquidation heatmap (model 1)"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: range, required: true, format: "time range string", example: "3m", note: "e.g. 3d/7d/30d/3m/6m/1y"}
+    example:
+      name: "futures_liquidation_heatmap_model1"
+      params: {exchange: "Binance", symbol: "BTCUSDT", range: "3m"}
+
+  - name: "futures_liquidation_heatmap_model2"
+    summary: "Per-pair liquidation heatmap (model 2)"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: range, required: true, format: "time range string", example: "3m"}
+    example:
+      name: "futures_liquidation_heatmap_model2"
+      params: {exchange: "Binance", symbol: "BTCUSDT", range: "3m"}
+
+  - name: "futures_liquidation_heatmap_model3"
+    summary: "Per-pair liquidation heatmap (model 3)"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: range, required: true, format: "time range string", example: "3m"}
+    example:
+      name: "futures_liquidation_heatmap_model3"
+      params: {exchange: "Binance", symbol: "BTCUSDT", range: "3m"}
+
+  - name: "futures_liquidation_aggregated_heatmap_model1"
+    summary: "Aggregate liquidation heatmap across exchanges (model 1, by coin)"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ use coin name BTC"}
+      - {name: range, required: true, format: "time range string", example: "3m"}
+    example:
+      name: "futures_liquidation_aggregated_heatmap_model1"
+      params: {symbol: "BTC", range: "3m"}
+
+  - name: "futures_liquidation_aggregated_heatmap_model2"
+    summary: "Aggregate liquidation heatmap across exchanges (model 2)"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: range, required: true, format: "time range string", example: "3m"}
+    example:
+      name: "futures_liquidation_aggregated_heatmap_model2"
+      params: {symbol: "BTC", range: "3m"}
+
+  - name: "futures_liquidation_aggregated_heatmap_model3"
+    summary: "Aggregate liquidation heatmap across exchanges (model 3)"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: range, required: true, format: "time range string", example: "3m"}
+    example:
+      name: "futures_liquidation_aggregated_heatmap_model3"
+      params: {symbol: "BTC", range: "3m"}
+
+  - name: "futures_liquidation_map"
+    summary: "Per-pair liquidation map (price x position distribution)"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: range, required: true, format: "time range string", example: "7d"}
+    example:
+      name: "futures_liquidation_map"
+      params: {exchange: "Binance", symbol: "BTCUSDT", range: "7d"}
+
+  - name: "futures_liquidation_aggregated_map"
+    summary: "Aggregate liquidation map across exchanges (by coin)"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: range, required: true, format: "time range string", example: "7d"}
+    example:
+      name: "futures_liquidation_aggregated_map"
+      params: {symbol: "BTC", range: "7d"}
+
+  - name: "futures_liquidation_max_pain"
+    summary: "Liquidation Max Pain price analysis"
+    params:
+      - {name: range, required: false, format: "time range string", example: "7d"}
+    example:
+      name: "futures_liquidation_max_pain"
+      params: {}

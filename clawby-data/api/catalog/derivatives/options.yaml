@@ -1,0 +1,54 @@
+# ============================================================================
+# Derivatives — Options
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Options"
+
+gotchas_for_all:
+  - "⚠️ All options endpoints use coin name format (BTC / ETH), not pair format BTCUSDT"
+  - "⚠️ option_max_pain requires the exchange param (e.g. Deribit)"
+  - "⚠️ option_exchange_oi_history's unit param is required (usd / coin)"
+  - "⚠️ Response is {code, data}; success only when code='0'"
+
+interfaces:
+  - name: "option_max_pain"
+    summary: "Options max pain price analysis for a given exchange and coin"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: exchange, required: true, format: "options exchange name", example: "Deribit", note: "common values: Deribit / OKX / Binance"}
+    gotchas:
+      - "⚠️ Options exchanges differ from futures exchanges; Deribit is most common"
+    example:
+      name: "option_max_pain"
+      params: {symbol: "BTC", exchange: "Deribit"}
+
+  - name: "option_info"
+    summary: "Options market overview for a given coin (IV, PCR, total OI, etc.)"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+    example:
+      name: "option_info"
+      params: {symbol: "BTC"}
+
+  - name: "option_exchange_oi_history"
+    summary: "Options OI history across exchanges"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: unit, required: true, format: "usd/coin", example: "usd", note: "⚠️ required"}
+      - {name: range, required: true, format: "time range string", example: "7d", note: "required, e.g. 1d/7d/30d"}
+    gotchas:
+      - "⚠️ both unit and range are required"
+    example:
+      name: "option_exchange_oi_history"
+      params: {symbol: "BTC", unit: "usd", range: "7d"}
+
+  - name: "option_exchange_vol_history"
+    summary: "Options volume history across exchanges"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: unit, required: true, format: "usd/coin", example: "usd", note: "⚠️ required"}
+    gotchas:
+      - "⚠️ unit is a required param"
+    example:
+      name: "option_exchange_vol_history"
+      params: {symbol: "BTC", unit: "usd"}

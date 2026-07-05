@@ -1,0 +1,39 @@
+# ============================================================================
+# Equities & Markets — Quotes
+# Usage: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Quotes (stock / crypto / forex)"
+note: >
+  Quotes are delayed 30 minutes by default. For real-time stock data use the screener endpoint in screener.yaml.
+
+interfaces:
+  - name: "Quote for a given stock"
+    summary: "latest quote for a given stock (price / change / change%)"
+    params:
+      - {name: symbol, required: true, format: "US:TICKER", example: "US:AAPL"}
+    gotchas:
+      - "data is delayed 30 minutes; use screener for real-time"
+    example:
+      name: "Quote for a given stock"
+      params: {symbol: "US:AAPL"}
+
+  - name: "Quote for a given crypto"
+    summary: "latest quote for a given crypto pair"
+    params:
+      - {name: symbol, required: true, format: "BASE:USD (crypto format)", example: "BTC:USD"}
+      - {name: exchange, required: false, example: "COINBASE", note: "omit for composite price"}
+    gotchas:
+      - "⚠️ symbol must use crypto format BTC:USD. Using stock format US:AAPL returns an empty array!"
+    example:
+      name: "Quote for a given crypto"
+      params: {symbol: "BTC:USD"}
+
+  - name: "Quote for a given forex"
+    summary: "latest quote for a given forex pair"
+    params:
+      - {name: symbol, required: true, format: "BASE:USD (forex format)", example: "EUR:USD"}
+    gotchas:
+      - "⚠️ use EUR:USD / GBP:USD style, not US:xxx, and no slash"
+    example:
+      name: "Quote for a given forex"
+      params: {symbol: "EUR:USD"}

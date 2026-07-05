@@ -1,0 +1,129 @@
+# ============================================================================
+# Derivatives — Master Index (_index)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# All 157 interfaces are fully documented in subcategory YAML files under this directory
+# ============================================================================
+category: "Derivatives — Master Index"
+total_interfaces: 157
+
+# ── Common rules & frequent gotchas ──────────────────────────────────────────────────────
+gotchas_for_all:
+  - "⚠️ Response format is {code, data}; code='0' means success; non-0 typically indicates a parameter error or insufficient plan tier"
+  - "⚠️ symbol has two dimensions: aggregate/coin-level endpoints use BTC (coin name only); single-exchange/pair-level endpoints use BTCUSDT (trading pair). Swapping them causes 'pair does not exist' error"
+  - "⚠️ Common interval values: 1h / 4h / 1d"
+  - "⚠️ exchange is case-sensitive; common values: Binance, OKX, Bybit, Deribit"
+  - "⚠️ exchange_list is a comma-separated string, e.g. 'Binance,OKX'; not an array"
+  - "⚠️ ETF endpoints use the ticker param (e.g. IBIT / GBTC), not symbol"
+  - "⚠️ grayscale_premium_history: symbol takes the crypto coin name (BTC), not the ETF ticker"
+  - "⚠️ borrow_interest_rate_history: symbol uses the coin name BTC, not the trading pair (exception!)"
+  - "⚠️ coinbase_premium_index only needs interval; do not pass symbol or exchange"
+  - "⚠️ limit is required for some endpoints (e.g. futures_price_history / futures_orderbook_history); don't omit it"
+  - "⚠️ futures_orderbook_large_limit_order_history and equivalent spot endpoints require start_time + end_time + state as mandatory params"
+  - "⚠️ Hyperliquid endpoints do not take exchange; symbol uses coin name BTC"
+
+# ── Subcategory file list ─────────────────────────────────────────────────────────────
+subcategories:
+  - file: "etf.yaml"
+    label: "ETF"
+    count: 16
+    summary: >
+      Bitcoin/Ethereum/Solana/XRP spot ETF listings, fund flows, AUM, premium/discount history,
+      ETF price OHLC, Grayscale trust holdings & premiums, Hong Kong ETF flows
+    key_params: "ticker (e.g. IBIT/GBTC) is the ETF-specific param"
+
+  - file: "funding.yaml"
+    label: "Funding Rate"
+    count: 6
+    summary: >
+      Per-pair funding rate OHLC history, OI-weighted/volume-weighted aggregate funding rate,
+      cross-exchange current funding rate snapshot, cumulative funding rate rankings, arbitrage opportunities
+    key_params: "Single pair: exchange+symbol=BTCUSDT+interval; aggregate: symbol=BTC+interval"
+
+  - file: "open-interest.yaml"
+    label: "Open Interest (OI)"
+    count: 6
+    summary: >
+      Per-pair OI OHLC history, aggregate OI history, stablecoin-margin OI,
+      coin-margined OI, per-exchange OI snapshots, OI trend breakdown by exchange
+    key_params: "Single pair: exchange+BTCUSDT; aggregate: exchange_list+BTC; optional unit=usd/coin"
+
+  - file: "liquidation.yaml"
+    label: "Liquidation"
+    count: 14
+    summary: >
+      Per-pair/aggregate liquidation OHLC history, coin/exchange liquidation snapshots, individual liquidation orders,
+      3-model liquidation heatmaps (per-pair/aggregate), liquidation maps (per-pair/aggregate), Max Pain
+    key_params: "Heatmap/map endpoints require range (e.g. 3m/7d); single pair uses BTCUSDT; aggregate uses exchange_list+BTC"
+
+  - file: "long-short.yaml"
+    label: "Long/Short Ratio"
+    count: 7
+    summary: >
+      Global long/short account ratio history, top trader long/short account/position ratio history,
+      net long/short position history (v1/v2), Hyperliquid global long/short ratio, Bitfinex margin long/short
+    key_params: "Most use exchange+BTCUSDT+interval; Hyperliquid/Bitfinex endpoints use symbol=BTC"
+
+  - file: "taker-volume.yaml"
+    label: "Taker Volume / CVD / Net Flow"
+    count: 9
+    summary: >
+      Per-exchange taker volume snapshots, per-pair/aggregate taker volume history, footprint volume,
+      per-pair/aggregate CVD history, futures net flow list/detail, futures-to-spot volume ratio
+    key_params: "Snapshot endpoints use range; history endpoints use interval; aggregate endpoints use exchange_list"
+
+  - file: "orderbook.yaml"
+    label: "Futures Orderbook"
+    count: 5
+    summary: >
+      Per-pair/aggregate orderbook bid/ask history, orderbook heatmap history (limit required),
+      current large-order snapshot, historical large orders (start_time+end_time+state required)
+    key_params: "Single pair: exchange+BTCUSDT; aggregate: exchange_list+BTC"
+
+  - file: "price-ohlc.yaml"
+    label: "Futures Price OHLC"
+    count: 2
+    summary: "Futures price OHLC history (limit required), all-coin price change snapshot"
+    key_params: "exchange+BTCUSDT+interval+limit (required)"
+
+  - file: "indicators.yaml"
+    label: "Market Indicators"
+    count: 48
+    summary: >
+      Technical indicators: RSI / MA / EMA / BOLL / MACD / ATR / Basis / whale index / CGDI / CDRI (with _list snapshots);
+      macro/cycle indicators: AHR999 / Puell / Stock-to-Flow / Pi Cycle / rainbow chart / fear & greed /
+      altcoin season / BTC dominance / M2 comparison etc.;
+      on-chain: SOPR (short/long-term) / realized price / RHODL / NUPL / active addresses etc.;
+      other: Coinbase premium index / borrow rate
+    key_params: "Technical indicators require exchange+BTCUSDT+interval; macro/on-chain index_* take no params"
+
+  - file: "options.yaml"
+    label: "Options"
+    count: 4
+    summary: "Options Max Pain, market overview (IV/PCR/OI), per-exchange OI history, per-exchange volume history"
+    key_params: "symbol=BTC (coin name); option_max_pain requires exchange=Deribit; unit=usd/coin"
+
+  - file: "spot.yaml"
+    label: "Spot"
+    count: 17
+    summary: >
+      Spot orderbook bid/ask history (per-pair/aggregate), orderbook heatmap, large orders (current/historical),
+      taker volume history (per-pair/aggregate), footprint, CVD (per-pair/aggregate),
+      net flow list/detail, supported list, market snapshot, price OHLC
+    key_params: "Single pair: exchange+BTCUSDT; aggregate: exchange_list+BTC"
+
+  - file: "onchain.yaml"
+    label: "On-chain / Hyperliquid / Whale"
+    count: 14
+    summary: >
+      Hyperliquid: whale alerts/position snapshots/holdings by coin/wallet positions/PnL distribution/user positions;
+      on-chain: exchange asset transparency list/reserve details/balance list/balance history;
+      token unlock list/vesting schedule; ERC-20 transfer records; on-chain whale large transfers
+    key_params: "Hyperliquid endpoints take no exchange; exchange_assets requires exchange name"
+
+  - file: "markets.yaml"
+    label: "Exchanges / Markets / News"
+    count: 9
+    summary: >
+      Futures supported coins/exchanges/pairs lists, market snapshot (all coins/single coin),
+      delisted pairs list, exchange rankings, economic calendar, crypto news
+    key_params: "Most take no params or all optional; futures_pairs_markets requires symbol=BTC (coin name)"

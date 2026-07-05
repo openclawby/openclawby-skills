@@ -1,0 +1,432 @@
+# ============================================================================
+# Derivatives — Market Indicators (Indicators / Indices)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Market Indicators (Indicators / Indices)"
+
+gotchas_for_all:
+  - "⚠️ Technical indicator endpoints (RSI/MA/EMA/BOLL/MACD/ATR/basis/whale_index) require exchange + symbol=BTCUSDT (trading pair) + interval"
+  - "⚠️ Macro/on-chain index_* endpoints require no params; call them directly"
+  - "⚠️ coinbase_premium_index only needs interval (no exchange/symbol)"
+  - "⚠️ borrow_interest_rate_history: symbol uses coin name BTC, not trading pair BTCUSDT"
+  - "⚠️ Common interval values: 1h / 4h / 1d"
+  - "⚠️ Response is {code, data}; code='0' means success"
+
+interfaces:
+  # ── Technical indicators (futures trading-pair level) ──────────────────────────────────────────────
+
+  - name: "futures_rsi_list"
+    summary: "RSI snapshot list for all futures coins (no params required)"
+    params: []
+    example:
+      name: "futures_rsi_list"
+      params: {}
+
+  - name: "futures_indicators_rsi"
+    summary: "Per-pair RSI indicator history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT", note: "⚠️ use trading pair format"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: window, required: false, format: "integer, RSI period", example: 14}
+      - {name: series_type, required: false, format: "close/open/high/low", example: "close"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_indicators_rsi"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_indicators_ma"
+    summary: "Per-pair moving average (MA) history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: window, required: false, format: "integer, MA period", example: 20}
+      - {name: series_type, required: false, format: "close/open/high/low", example: "close"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_indicators_ma"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_ma_list"
+    summary: "MA snapshot list for all futures coins (no params required)"
+    params: []
+    example:
+      name: "futures_ma_list"
+      params: {}
+
+  - name: "futures_indicators_ema"
+    summary: "Per-pair exponential moving average (EMA) history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: window, required: false, format: "integer, EMA period", example: 20}
+      - {name: series_type, required: false, format: "close/open/high/low", example: "close"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_indicators_ema"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_ema_list"
+    summary: "EMA snapshot list for all futures coins (no params required)"
+    params: []
+    example:
+      name: "futures_ema_list"
+      params: {}
+
+  - name: "futures_indicators_boll"
+    summary: "Per-pair Bollinger Bands history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: window, required: false, format: "integer, BOLL period", example: 20}
+      - {name: mult, required: false, format: "number, standard deviation multiplier", example: 2}
+      - {name: series_type, required: false, format: "close/open/high/low", example: "close"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_indicators_boll"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_indicators_macd"
+    summary: "Per-pair MACD indicator history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: fast_window, required: false, format: "integer, fast-line period", example: 12}
+      - {name: slow_window, required: false, format: "integer, slow-line period", example: 26}
+      - {name: signal_window, required: false, format: "integer, signal-line period", example: 9}
+      - {name: series_type, required: false, format: "close/open/high/low", example: "close"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_indicators_macd"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_macd_list"
+    summary: "MACD snapshot list for all futures coins (no params required)"
+    params: []
+    example:
+      name: "futures_macd_list"
+      params: {}
+
+  - name: "futures_basis_history"
+    summary: "Futures basis history (Basis = futures price - spot price)"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_basis_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_whale_index_history"
+    summary: "Whale index history (large-trader behavior index for a trading pair)"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_whale_index_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_cgdi_index_history"
+    summary: "Crypto derivatives global index (CGDI) history (no params required)"
+    params: []
+    example:
+      name: "futures_cgdi_index_history"
+      params: {}
+
+  - name: "futures_cdri_index_history"
+    summary: "Crypto derivatives risk index (CDRI) history (no params required)"
+    params: []
+    example:
+      name: "futures_cdri_index_history"
+      params: {}
+
+  - name: "futures_indicators_avg_true_range"
+    summary: "Per-pair Average True Range (ATR) history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: window, required: false, format: "integer, ATR period", example: 14}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "futures_indicators_avg_true_range"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "futures_avg_true_range_list"
+    summary: "ATR snapshot list for all futures coins (no params required)"
+    params: []
+    example:
+      name: "futures_avg_true_range_list"
+      params: {}
+
+  # ── Macro / on-chain / market-cycle indicators (all require no params) ─────────────────────────────────
+
+  - name: "index_ahr999"
+    summary: "AHR999 Bitcoin DCA reference index history"
+    params: []
+    example:
+      name: "index_ahr999"
+      params: {}
+
+  - name: "bull_market_peak_indicator"
+    summary: "Bull market peak composite indicator data"
+    params: []
+    example:
+      name: "bull_market_peak_indicator"
+      params: {}
+
+  - name: "index_puell_multiple"
+    summary: "Puell Multiple miner revenue ratio index history"
+    params: []
+    example:
+      name: "index_puell_multiple"
+      params: {}
+
+  - name: "index_stock_flow"
+    summary: "Bitcoin Stock-to-Flow model data"
+    params: []
+    example:
+      name: "index_stock_flow"
+      params: {}
+
+  - name: "index_pi_cycle_indicator"
+    summary: "Pi Cycle Top indicator history"
+    params: []
+    example:
+      name: "index_pi_cycle_indicator"
+      params: {}
+
+  - name: "index_golden_ratio_multiplier"
+    summary: "Golden Ratio Multiplier data"
+    params: []
+    example:
+      name: "index_golden_ratio_multiplier"
+      params: {}
+
+  - name: "index_bitcoin_profitable_days"
+    summary: "Bitcoin profitable holding days indicator"
+    params: []
+    example:
+      name: "index_bitcoin_profitable_days"
+      params: {}
+
+  - name: "index_bitcoin_rainbow_chart"
+    summary: "Bitcoin rainbow chart data"
+    params: []
+    example:
+      name: "index_bitcoin_rainbow_chart"
+      params: {}
+
+  - name: "index_fear_greed_history"
+    summary: "Crypto market fear & greed index history"
+    params: []
+    example:
+      name: "index_fear_greed_history"
+      params: {}
+
+  - name: "index_stablecoin_marketcap_history"
+    summary: "Total stablecoin market cap history"
+    params: []
+    example:
+      name: "index_stablecoin_marketcap_history"
+      params: {}
+
+  - name: "index_bitcoin_bubble_index"
+    summary: "Bitcoin bubble index history"
+    params: []
+    example:
+      name: "index_bitcoin_bubble_index"
+      params: {}
+
+  - name: "index_2_year_ma_multiplier"
+    summary: "Bitcoin 2-year moving average multiplier data"
+    params: []
+    example:
+      name: "index_2_year_ma_multiplier"
+      params: {}
+
+  - name: "index_200_week_moving_average_heatmap"
+    summary: "Bitcoin 200-week moving average heatmap data"
+    params: []
+    example:
+      name: "index_200_week_moving_average_heatmap"
+      params: {}
+
+  - name: "index_altcoin_season"
+    summary: "Altcoin Season Index"
+    params: []
+    example:
+      name: "index_altcoin_season"
+      params: {}
+
+  - name: "index_bitcoin_sth_sopr"
+    summary: "Bitcoin short-term holder SOPR (realized profit/loss ratio)"
+    params: []
+    example:
+      name: "index_bitcoin_sth_sopr"
+      params: {}
+
+  - name: "index_bitcoin_lth_sopr"
+    summary: "Bitcoin long-term holder SOPR (realized profit/loss ratio)"
+    params: []
+    example:
+      name: "index_bitcoin_lth_sopr"
+      params: {}
+
+  - name: "index_bitcoin_sth_realized_price"
+    summary: "Bitcoin short-term holder realized price history"
+    params: []
+    example:
+      name: "index_bitcoin_sth_realized_price"
+      params: {}
+
+  - name: "index_bitcoin_lth_realized_price"
+    summary: "Bitcoin long-term holder realized price history"
+    params: []
+    example:
+      name: "index_bitcoin_lth_realized_price"
+      params: {}
+
+  - name: "index_bitcoin_short_term_holder_supply"
+    summary: "Bitcoin short-term holder supply history"
+    params: []
+    example:
+      name: "index_bitcoin_short_term_holder_supply"
+      params: {}
+
+  - name: "index_bitcoin_long_term_holder_supply"
+    summary: "Bitcoin long-term holder supply history"
+    params: []
+    example:
+      name: "index_bitcoin_long_term_holder_supply"
+      params: {}
+
+  - name: "index_bitcoin_rhodl_ratio"
+    summary: "Bitcoin RHODL ratio history (realized HODL wave ratio)"
+    params: []
+    example:
+      name: "index_bitcoin_rhodl_ratio"
+      params: {}
+
+  - name: "index_bitcoin_reserve_risk"
+    summary: "Bitcoin reserve risk index history"
+    params: []
+    example:
+      name: "index_bitcoin_reserve_risk"
+      params: {}
+
+  - name: "index_bitcoin_active_addresses"
+    summary: "Bitcoin active address count history"
+    params: []
+    example:
+      name: "index_bitcoin_active_addresses"
+      params: {}
+
+  - name: "index_bitcoin_new_addresses"
+    summary: "Bitcoin new address count history"
+    params: []
+    example:
+      name: "index_bitcoin_new_addresses"
+      params: {}
+
+  - name: "index_bitcoin_net_unrealized_profit_loss"
+    summary: "Bitcoin NUPL (net unrealized profit/loss) history"
+    params: []
+    example:
+      name: "index_bitcoin_net_unrealized_profit_loss"
+      params: {}
+
+  - name: "index_bitcoin_correlation"
+    summary: "Bitcoin correlation data with other assets"
+    params: []
+    example:
+      name: "index_bitcoin_correlation"
+      params: {}
+
+  - name: "index_bitcoin_macro_oscillator"
+    summary: "Bitcoin macro oscillator (BMO) history"
+    params: []
+    example:
+      name: "index_bitcoin_macro_oscillator"
+      params: {}
+
+  - name: "index_option_vs_futures_oi_ratio"
+    summary: "Options vs futures open interest ratio history"
+    params: []
+    example:
+      name: "index_option_vs_futures_oi_ratio"
+      params: {}
+
+  - name: "index_bitcoin_vs_global_m2_growth"
+    summary: "Bitcoin price vs global M2 money supply and growth rate"
+    params: []
+    example:
+      name: "index_bitcoin_vs_global_m2_growth"
+      params: {}
+
+  - name: "index_bitcoin_vs_us_m2_growth"
+    summary: "Bitcoin price vs US M2 money supply and growth rate"
+    params: []
+    example:
+      name: "index_bitcoin_vs_us_m2_growth"
+      params: {}
+
+  - name: "index_bitcoin_dominance"
+    summary: "Bitcoin market cap dominance (BTC Dominance) history"
+    params: []
+    example:
+      name: "index_bitcoin_dominance"
+      params: {}
+
+  # ── Special indicators (with params) ────────────────────────────────────────────────────────
+
+  - name: "coinbase_premium_index"
+    summary: "Coinbase premium index history (BTC price spread between Coinbase and other exchanges)"
+    params:
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h", note: "⚠️ no symbol or exchange needed"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ Only pass interval; symbol and exchange are not needed"
+    example:
+      name: "coinbase_premium_index"
+      params: {interval: "1h"}
+
+  - name: "borrow_interest_rate_history"
+    summary: "Borrow interest rate history for a coin on a given exchange"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ use coin name BTC, not trading pair BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ symbol uses coin name BTC, not trading pair BTCUSDT (opposite of most futures endpoints)"
+    example:
+      name: "borrow_interest_rate_history"
+      params: {exchange: "Binance", symbol: "BTC", interval: "1h"}

@@ -1,0 +1,90 @@
+# ============================================================================
+# Derivatives — Exchanges / Markets / News (Markets / Supported / Misc)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Exchanges / Markets / News"
+
+gotchas_for_all:
+  - "⚠️ Most endpoints take no params, or all params are optional"
+  - "⚠️ futures_pairs_markets: symbol uses coin name format BTC, not trading pair"
+  - "⚠️ calendar_economic_data: the language param affects the response language (e.g. zh-CN / en)"
+  - "⚠️ Response is {code, data}; code='0' means success"
+
+interfaces:
+  - name: "futures_supported_coins"
+    summary: "List of supported futures coins"
+    params: []
+    example:
+      name: "futures_supported_coins"
+      params: {}
+
+  - name: "futures_supported_exchanges"
+    summary: "List of supported futures exchanges"
+    params: []
+    example:
+      name: "futures_supported_exchanges"
+      params: {}
+
+  - name: "futures_supported_exchange_pairs"
+    summary: "List of supported exchange/pair combinations for futures, filterable by exchange"
+    params:
+      - {name: exchange, required: false, format: "exchange name", example: "Binance"}
+    example:
+      name: "futures_supported_exchange_pairs"
+      params: {}
+
+  - name: "futures_coins_markets"
+    summary: "Full market snapshot for all futures coins (price, OI, change, etc.)"
+    params:
+      - {name: exchange_list, required: false, format: "comma-separated exchange names", example: "Binance,OKX"}
+      - {name: per_page, required: false, format: "integer, results per page"}
+      - {name: page, required: false, format: "integer, page number"}
+    example:
+      name: "futures_coins_markets"
+      params: {}
+
+  - name: "futures_pairs_markets"
+    summary: "Market data for all trading pairs of a given coin"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ use coin name BTC, not trading pair BTCUSDT"}
+    gotchas:
+      - "⚠️ symbol uses coin name BTC, not trading pair format"
+    example:
+      name: "futures_pairs_markets"
+      params: {symbol: "BTC"}
+
+  - name: "futures_delisted_exchange_pairs"
+    summary: "List of delisted futures trading pairs"
+    params: []
+    example:
+      name: "futures_delisted_exchange_pairs"
+      params: {}
+
+  - name: "futures_exchange_rank"
+    summary: "Futures exchange rankings (by OI, volume, etc.)"
+    params: []
+    example:
+      name: "futures_exchange_rank"
+      params: {}
+
+  - name: "calendar_economic_data"
+    summary: "Economic/financial calendar events (e.g. CPI, central bank meetings, etc.)"
+    params:
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+      - {name: language, required: false, format: "language code", example: "zh-CN", note: "affects the response language, e.g. zh-CN / en"}
+    example:
+      name: "calendar_economic_data"
+      params: {}
+
+  - name: "article_list"
+    summary: "Crypto industry news article list"
+    params:
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+      - {name: language, required: false, format: "language code", example: "zh-CN"}
+      - {name: page, required: false, format: "integer, page number"}
+      - {name: per_page, required: false, format: "integer, results per page"}
+    example:
+      name: "article_list"
+      params: {}

@@ -1,0 +1,56 @@
+# ============================================================================
+# Address Intel — Address Labels / Attribution
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# Data: address labels / AML data
+# ============================================================================
+category: "Address Labels & Attribution"
+note: >
+  Three variants for different query strategies:
+  fast=local label cache only (instant, zero upstream cost, may return no_data);
+  deep=real-time upstream query then cache (use when fast returns no_data);
+  no suffix=auto (local first, falls back to upstream automatically).
+  Most addresses have no label — no_data is a normal result, not an error.
+
+gotchas_for_all:
+  - "⚠️ coin is the chain ID, not a token symbol. Common values: ETH / BNB / SOL / SUI / BTC / TRX / TON / LTC / DOGE / BCH / POL-Polygon / ETH-Base / ETH-Arbitrum / ETH-Optimism / AVAX-Avalanche / HYPE(HyperEVM). Full list: call chain_status."
+  - "⚠️ Base chain uses ETH-Base, Polygon uses POL-Polygon — suffix is mandatory, never use bare ETH or POL."
+  - "EVM addresses (0x prefix) are automatically lowercased; Solana (base58) / SUI addresses are case-sensitive, pass as-is."
+
+interfaces:
+  - name: "address_labels"
+    summary: "Address label & attribution lookup (auto mode: checks local cache first, falls back to upstream on miss)"
+    params:
+      - {name: coin,    required: true,  format: "chain ID string", example: "ETH"}
+      - {name: address, required: true,  format: "on-chain address",     example: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
+    gotchas:
+      - "Auto mode: returns local cache immediately if available; otherwise queries upstream and writes cache. Speed between fast and deep."
+      - "no_data=true means the address has no record in the label database — this is normal."
+      - "Use this interface when you don't need to explicitly control fast/deep mode."
+    example:
+      name: "address_labels"
+      params: {coin: "ETH", address: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
+
+  - name: "address_labels_fast"
+    summary: "Address label lookup (fast mode: local label cache only, instant response, no upstream quota used)"
+    params:
+      - {name: coin,    required: true,  format: "chain ID string", example: "SOL"}
+      - {name: address, required: true,  format: "on-chain address",     example: "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1"}
+    gotchas:
+      - "⚠️ Queries local cache only; if no_data=true is returned, there is no local label for this address — use address_labels_deep to trigger a real-time upstream lookup."
+      - "Best for bulk screening or latency-sensitive use cases (upstream quota not consumed)."
+    example:
+      name: "address_labels_fast"
+      params: {coin: "SOL", address: "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1"}
+
+  - name: "address_labels_deep"
+    summary: "Address label lookup (deep mode: real-time upstream query with result caching, for when fast returns no_data)"
+    params:
+      - {name: coin,    required: true,  format: "chain ID string", example: "SUI"}
+      - {name: address, required: true,  format: "on-chain address",     example: "0xac5bceec1b789ff840d7d4e6ce4ce61c90d190a7f8c4f4ddf0bff6ee2413c33c"}
+    gotchas:
+      - "Every call queries upstream in real time, consuming upstream quota; response is slower than fast (several seconds)."
+      - "Recommended: use fast first; only switch to deep when fast returns no_data."
+      - "SUI addresses (0x + 64 hex) are case-sensitive; always pass them as-is."
+    example:
+      name: "address_labels_deep"
+      params: {coin: "SUI", address: "0xac5bceec1b789ff840d7d4e6ce4ce61c90d190a7f8c4f4ddf0bff6ee2413c33c"}

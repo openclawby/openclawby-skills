@@ -1,0 +1,70 @@
+# ============================================================================
+# Non-EVM RPC — kusama
+# Call: POST /api/rpc   body {"chain":"kusama","method":"<method>","params":[...]}
+# ============================================================================
+chain: "kusama"
+type: "Kusama(Substrate)"
+slug: "kusama"
+status: ok
+how_to_call: 'POST /api/rpc  {"chain":"kusama","method":"<method>","params":[...]}'
+notes:
+  - "Kusama is Polkadot's canary network, sharing the same Substrate JSON-RPC interface"
+  - "Addresses use SS58 encoding (Kusama prefix = 2); blockHash is a 32-byte 0x hex string"
+  - "state_getStorage keys must be derived from pallet + storage item using polkadot.js or the subkey tool"
+  - "grandpa_proveFinality may be restricted on public nodes; recommend polling with chain_getFinalizedHead instead"
+  - "Substrate has additional methods (author_*, payment_*, state_call, etc.); the current node exposes only these 11"
+methods:
+  - name: chain_getBlock
+    summary: "Returns the header + extrinsics of the specified block; omit params to return the latest finalized block"
+    params: "[blockHash?] — 32-byte 0x hex; optional"
+    example: {"chain":"kusama","method":"chain_getBlock","params":[]}
+
+  - name: chain_getBlockHash
+    summary: "Returns the block hash by block number"
+    params: "[blockNumber?] — 0x-prefixed hex string; optional"
+    example: {"chain":"kusama","method":"chain_getBlockHash","params":["0xb48f90"]}
+
+  - name: chain_getHeader
+    summary: "Returns the header of the specified block (parent hash, block number, stateRoot, extrinsicsRoot, digest)"
+    params: "[blockHash?] — 32-byte 0x hex; optional"
+    example: {"chain":"kusama","method":"chain_getHeader","params":[]}
+
+  - name: chain_getFinalizedHead
+    summary: "Returns the hash of the last finalized block in the canonical chain"
+    params: "none"
+    example: {"chain":"kusama","method":"chain_getFinalizedHead","params":[]}
+
+  - name: state_getStorage
+    summary: "Reads on-chain state storage value by storage key (SCALE-encoded hex); an optional block hash can target historical blocks"
+    params: "[storageKey(hex), blockHash?] — key required; blockHash optional"
+    example: {"chain":"kusama","method":"state_getStorage","params":["0xf0c365c3cf59d671eb72da0e7a4113c49f1f0515f462cdcf84e0f1d6045dfcbb"]}
+
+  - name: state_getStorageHash
+    summary: "Returns the hash of the storage value for the given key at the specified block"
+    params: "[storageKey(hex), blockHash?]"
+    example: {"chain":"kusama","method":"state_getStorageHash","params":["0xf0c365c3cf59d671eb72da0e7a4113c49f1f0515f462cdcf84e0f1d6045dfcbb"]}
+
+  - name: state_getStorageSize
+    summary: "Returns the storage size (bytes, u64) for the given storage key"
+    params: "[storageKey(hex), blockHash?]"
+    example: {"chain":"kusama","method":"state_getStorageSize","params":["0xf0c365c3cf59d671eb72da0e7a4113c49f1f0515f462cdcf84e0f1d6045dfcbb"]}
+
+  - name: grandpa_proveFinality
+    summary: "Returns the GRANDPA finalization proof (Justification) for the specified block number"
+    params: "[blockNumber(integer)] — decimal integer"
+    example: {"chain":"kusama","method":"grandpa_proveFinality","params":[11833440]}
+
+  - name: grandpa_roundState
+    summary: "Returns the current best GRANDPA round state and background rounds (validator vote weight, missing voters)"
+    params: "none"
+    example: {"chain":"kusama","method":"grandpa_roundState","params":[]}
+
+  - name: system_chain
+    summary: "Returns the chain name string (e.g. 'Kusama')"
+    params: "none"
+    example: {"chain":"kusama","method":"system_chain","params":[]}
+
+  - name: system_chainType
+    summary: "Returns the chain type string (e.g. 'Live')"
+    params: "none"
+    example: {"chain":"kusama","method":"system_chainType","params":[]}

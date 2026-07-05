@@ -1,0 +1,233 @@
+# ============================================================================
+# XRP Ledger RPC — xrp
+# Call: POST /api/rpc   body {"chain":"xrp","method":"<method>","params":[{...}]}
+# ============================================================================
+chain: "xrp"
+type: XRPL
+slug: xrp_mainnet
+status: ok
+how_to_call: 'POST /api/rpc  {"chain":"xrp","method":"<method>","params":[{...}]}'
+notes:
+  - "XRP Ledger JSON-RPC; params is an array, typically containing one config object; pass [] or [{}] for methods with no parameters"
+  - "Address format is a classic address starting with r (base58check); currency unit is drops (1 XRP = 1,000,000 drops)"
+  - "ledger_index shortcut strings: validated (consensus-finalized) / closed (closed but not yet validated) / current (latest open)"
+  - "Methods marked (Clio) are Clio server-specific or include Clio extension fields; Clio returns only validated ledger data by default"
+  - "Transaction finality is guaranteed by consensus; validated=true means irreversible"
+methods:
+  # ── Account ────────────────────────────────────────────────────────────────
+  - name: account_channels
+    summary: "Returns all payment channels for which the account is the source"
+    params: "[{account, destination_account?, ledger_index?}]"
+    example: {"chain":"xrp","method":"account_channels","params":[{"account":"rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn","destination_account":"ra5nK24KXen9AHvsdFTKHSANinZseWnPcX","ledger_index":"validated"}]}
+
+  - name: account_currencies
+    summary: "Returns the list of currencies an account can send or receive"
+    params: "[{account, account_index?, ledger_index?}]"
+    example: {"chain":"xrp","method":"account_currencies","params":[{"account":"r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59","account_index":0,"ledger_index":"validated"}]}
+
+  - name: account_info
+    summary: "Returns basic account info (XRP balance, sequence number, flags, offer queue, etc.)"
+    params: "[{account, ledger_index?, ledger_hash?, strict?, queue?}]"
+    example: {"chain":"xrp","method":"account_info","params":[{"account":"rG1QQv2nh2gr7RCZ1P8YYcBUKCCN633jCn","ledger_index":"current","queue":true}]}
+
+  - name: account_lines
+    summary: "Returns the account's Trust Lines list, including IOU balances"
+    params: "[{account, ledger_index?, ledger_hash?, peer?, limit?, marker?, api_version?}]"
+    example: {"chain":"xrp","method":"account_lines","params":[{"account":"r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59","api_version":2}]}
+
+  - name: account_nfts
+    summary: "Returns all NFTs (Non-Fungible Tokens) held by the account"
+    params: "[{account, ledger_index?, ledger_hash?, limit?, marker?}]"
+    example: {"chain":"xrp","method":"account_nfts","params":[{"account":"rpoYSH7mntUSWF41gD7RhJQzrNHxogAb6W"}]}
+
+  - name: account_objects
+    summary: "Returns ledger objects owned by the account (offers, trust lines, payment channels, etc.)"
+    params: "[{account, type?, deletion_blockers_only?, ledger_index?, limit?, marker?}]"
+    example: {"chain":"xrp","method":"account_objects","params":[{"account":"r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59","ledger_index":"validated","type":"state","deletion_blockers_only":false,"limit":10}]}
+
+  - name: account_offers
+    summary: "Returns all DEX offers (Offers) placed by the account"
+    params: "[{account, ledger_index?, ledger_hash?, limit?, marker?, taker?}]"
+    example: {"chain":"xrp","method":"account_offers","params":[{"account":"rpP2JgiMyTF5jR5hLG3xHCPi1knBb1v9cM"}]}
+
+  - name: account_tx
+    summary: "Returns the account's historical transaction list (paginated)"
+    params: "[{account, ledger_index_min?, ledger_index_max?, binary?, forward?, limit?, marker?, api_version?}]"
+    example: {"chain":"xrp","method":"account_tx","params":[{"account":"rLNaPoKeeBjZe2qs6x52yVPZpZ8td4dc6w","binary":false,"forward":false,"ledger_index_max":-1,"ledger_index_min":-1,"limit":2,"api_version":2}]}
+
+  - name: gateway_balances
+    summary: "Returns the total IOU issuance by the gateway account and balances held by each hot wallet"
+    params: "[{account, ledger_index?, hotwallet?, strict?}]"
+    example: {"chain":"xrp","method":"gateway_balances","params":[{"account":"rMwjYedjc7qqtKYVLiAccJSmCwih4LnE2q","hotwallet":["rKm4uWpg9tfwbVSeATv4KxDe6mpE9yPkgJ","ra7JkEzrgeKHdzKgo4EUUVBnxggY4z37kt"],"ledger_index":"validated","strict":true}]}
+
+  - name: noripple_check
+    summary: "Checks whether the account's NoRipple flag configuration follows gateway best practices"
+    params: "[{account, role, ledger_index?, transactions?, limit?}]"
+    example: {"chain":"xrp","method":"noripple_check","params":[{"account":"r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59","ledger_index":"current","limit":2,"role":"gateway","transactions":true}]}
+
+  # ── Ledger ─────────────────────────────────────────────────────────────────
+  - name: ledger
+    summary: "Returns header info for the specified ledger version (optionally includes transaction list)"
+    params: "[{ledger_index?, ledger_hash?, transactions?, expand?, owner_funds?, binary?, diff?}]"
+    example: {"chain":"xrp","method":"ledger","params":[{"ledger_index":"validated","transactions":false,"expand":false,"owner_funds":false}]}
+
+  - name: ledger_closed
+    summary: "Returns the unique identifier of the most recently closed but not yet validated ledger"
+    params: "[{}]"
+    example: {"chain":"xrp","method":"ledger_closed","params":[{}]}
+
+  - name: ledger_current
+    summary: "Returns the ledger_index of the current in-progress (open) ledger"
+    params: "[{}]"
+    example: {"chain":"xrp","method":"ledger_current","params":[{}]}
+
+  - name: ledger_data
+    summary: "Returns raw data for all ledger objects in the specified ledger (paginated)"
+    params: "[{ledger_hash?, ledger_index?, binary?, limit?, marker?, type?}]"
+    example: {"chain":"xrp","method":"ledger_data","params":[{"binary":true,"ledger_hash":"842B57C1CC0613299A686D3E9F310EC0422C84D3911E5056389AA7E5808A93C8","limit":5}]}
+
+  - name: ledger_entry
+    summary: "Returns raw data for a single object in the ledger (queryable by index or object type)"
+    params: "[{index?, account_root?, offer?, ripple_state?, directory?, escrow?, payment_channel?, check?, deposit_preauth?, ticket?, ledger_index?}]"
+    example: {"chain":"xrp","method":"ledger_entry","params":[{"index":"7DB0788C020F02780A673DC74757F23823FA3014C1866E72CC4CD8B226CD6EF4","ledger_index":"validated"}]}
+
+  # ── Transaction ────────────────────────────────────────────────────────────
+  - name: submit
+    summary: "Broadcasts a signed transaction (submits tx_blob hex)"
+    params: "[{tx_blob, fail_hard?}]"
+    example: {"chain":"xrp","method":"submit","params":[{"tx_blob":"1200002280000000240000000361D4838D7EA4C6800000000000000000000000000055534400000000004B4E9C06F24296074F7BC48F92A97916C6DC5EA968400000000000000A732103AB40A0490F9B7ED8DF29D246BF2D6269820A0EE7742ACDD457BEA7C7D0931EDB74473045022100D184EB4AE5956FF600E7536EE459345C7BBCF097A84CC61A93B9AF7197EDB98702201CEA8009B7BEEBAA2AACC0359B41C427C1C5B550A4CA4B80CF2174AF2D6D5DCE81144B4E9C06F24296074F7BC48F92A97916C6DC5EA983143E9D4A2B8AA0780F682D136F7A56D6724EF53754"}]}
+
+  - name: submit_multisigned
+    summary: "Broadcasts a multi-signed transaction (submits tx_json with a Signers array)"
+    params: "[{tx_json, fail_hard?}]"
+    example: {"chain":"xrp","method":"submit_multisigned","params":[{"tx_json":{"Account":"rEuLyBCvcw4CFmzv8RepSiAoNgF8tTGJQC","Fee":"30000","Flags":262144,"LimitAmount":{"currency":"USD","issuer":"rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh","value":"0"},"Sequence":4,"Signers":[{"Signer":{"Account":"rsA2LpzuawewSBQXkiju3YQTMzW13pAAdW","MultiSignature":"3044022049AA392BE0B09B99B60D9D5B4C2E539B2A8D6D7A3A35A1D35B7A70C0BCA7B24022058C2BF2C5CEE6D1E040ED944D0C22C76CD5BF0E09266EC8E06AE26F4F33726A","SigningPubKey":"0330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD020"}}],"TransactionType":"TrustSet"}}]}
+
+  - name: transaction_entry
+    summary: "Looks up a transaction in the specified ledger version (more precise than tx method)"
+    params: "[{tx_hash, ledger_index?, ledger_hash?}]"
+    example: {"chain":"xrp","method":"transaction_entry","params":[{"tx_hash":"C53ECF838647FA5A4C780377025FEC7999AB4182590510CA461444B207AB74A9","ledger_index":56865245}]}
+
+  - name: tx
+    summary: "Queries transaction details by transaction hash (searches across ledgers)"
+    params: "[{transaction, binary?, api_version?}]"
+    example: {"chain":"xrp","method":"tx","params":[{"transaction":"C53ECF838647FA5A4C780377025FEC7999AB4182590510CA461444B207AB74A9","binary":false,"api_version":2}]}
+
+  - name: tx_history
+    summary: "Returns a historical list of recently broadcast transactions (from the specified starting point)"
+    params: "[{start}]"
+    example: {"chain":"xrp","method":"tx_history","params":[{"start":0}]}
+
+  # ── Path / Order Book ──────────────────────────────────────────────────────
+  - name: amm_info
+    summary: "Returns AMM (Automated Market Maker) pool info (two assets, LP token, fee rate, etc.)"
+    params: "[{asset, asset2, amm_account?, ledger_index?}]"
+    example: {"chain":"xrp","method":"amm_info","params":[{"asset":{"currency":"XRP"},"asset2":{"currency":"TST","issuer":"rP9jPyP5kyvFRb6ZiRghAGw5u8SGAmU4bd"}}]}
+
+  - name: book_changes
+    summary: "Returns order book changes in the specified ledger"
+    params: "[{ledger_index?, ledger_hash?}]"
+    example: {"chain":"xrp","method":"book_changes","params":[{"ledger_index":88530953}]}
+
+  - name: book_offers
+    summary: "Returns the offer list in the order book for the specified currency pair"
+    params: "[{taker_gets, taker_pays, ledger_index?, taker?, limit?}]"
+    example: {"chain":"xrp","method":"book_offers","params":[{"taker":"r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59","taker_gets":{"currency":"XRP"},"taker_pays":{"currency":"USD","issuer":"rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B"},"limit":10}]}
+
+  - name: deposit_authorized
+    summary: "Checks whether the source account is authorized to send payments to the destination account"
+    params: "[{source_account, destination_account, credentials?, ledger_index?}]"
+    example: {"chain":"xrp","method":"deposit_authorized","params":[{"source_account":"rEhxGqkqPPSxQ3P25J66ft5TwpzV14k2de","destination_account":"rsUiUMpnrgxQp24dJYZDhmV4bE3aBtQyt8","ledger_index":"validated"}]}
+
+  - name: get_aggregate_price
+    summary: "Returns the aggregate price for an asset pair sourced through XRPL price oracles"
+    params: "[{base_asset, quote_asset, oracles, ledger_index?, trim?}]"
+    example: {"chain":"xrp","method":"get_aggregate_price","params":[{"ledger_index":"current","base_asset":"XRP","quote_asset":"USD","trim":20,"oracles":[{"account":"rNZ9m6AP9K7z3EVg6GhPMx36V4QmZKeWds","oracle_document_id":34}]}]}
+
+  - name: nft_buy_offers
+    summary: "Returns the buy offer list for the specified NFT"
+    params: "[{nft_id, ledger_index?, ledger_hash?, limit?, marker?}]"
+    example: {"chain":"xrp","method":"nft_buy_offers","params":[{"nft_id":"00090000D0B007439B080E9B05BF62403911301A7B1F0CFAA048C0A200000007","ledger_index":"validated"}]}
+
+  - name: nft_sell_offers
+    summary: "Returns the sell offer list for the specified NFT"
+    params: "[{nft_id, ledger_index?, ledger_hash?, limit?, marker?}]"
+    example: {"chain":"xrp","method":"nft_sell_offers","params":[{"nft_id":"00090000D0B007439B080E9B05BF62403911301A7B1F0CFAA048C0A200000007"}]}
+
+  - name: ripple_path_find
+    summary: "Returns available payment paths from the source account to the destination account"
+    params: "[{source_account, destination_account, destination_amount, source_currencies?}]"
+    example: {"chain":"xrp","method":"ripple_path_find","params":[{"destination_account":"r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59","destination_amount":{"currency":"USD","issuer":"rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B","value":"0.001"},"source_account":"r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59","source_currencies":[{"currency":"XRP"},{"currency":"USD"}]}]}
+
+  # ── Payment Channel ────────────────────────────────────────────────────────
+  - name: channel_verify
+    summary: "Verifies whether a payment channel authorization signature is valid"
+    params: "[{channel_id, amount, public_key, signature}]"
+    example: {"chain":"xrp","method":"channel_verify","params":[{"channel_id":"5DB01B7FFED6B67E6B0414DED11E051D2EE2B7619CE0EAA6286D67A3A4D5BDB3","signature":"304402204EF0AFB78AC23ED1C472E74F4299C0C21F1B21D07EFC0A3838A420F76D783A400220154FB11B6F54320666E4C36CA7F686C16A3A0456800BBC43746F34AF50290064","public_key":"aB44YfzW24VDEJQ2UuLPV2PvqcPCSoLnL7y5M1EzhdW4LnK5xMS3","amount":"1000000"}]}
+
+  # ── Server Info (rippled) ──────────────────────────────────────────────────
+  - name: fee
+    summary: "Returns current network transaction fee info (base fee, queue fee, etc.)"
+    params: "[{}]"
+    example: {"chain":"xrp","method":"fee","params":[{}]}
+
+  - name: feature
+    summary: "Returns the status and activation state of known Amendments"
+    params: "[{feature?}]"
+    example: {"chain":"xrp","method":"feature","params":[{"feature":"4C97EBA926031A7CF7D7B36FDE3ED66DDA5421192D63DE53FFB46E43B9DC8373"}]}
+
+  - name: manifest
+    summary: "Returns manifest info for the specified validator public key (signing key associations)"
+    params: "[{public_key}]"
+    example: {"chain":"xrp","method":"manifest","params":[{"public_key":"nHUFE9prPXPrHcG3SkwP1UzAQbSphqyQkQK9ATXLZsfkezhhda3p"}]}
+
+  - name: server_definitions
+    summary: "Returns type definitions for the rippled server (used to decode the binary protocol)"
+    params: "none"
+    example: {"chain":"xrp","method":"server_definitions","params":[]}
+
+  - name: "server_info (rippled)"
+    summary: "Returns rippled server status info (version, ledger range, fees, load, etc.)"
+    params: "[{counters?}]"
+    example: {"chain":"xrp","method":"server_info","params":[{"counters":false}]}
+
+  - name: server_state
+    summary: "Returns the server's current state as numeric info (similar to server_info but fields are raw numbers)"
+    params: "none"
+    example: {"chain":"xrp","method":"server_state","params":[]}
+
+  - name: "version (rippled)"
+    summary: "Returns the API version range supported by the rippled server"
+    params: "none"
+    example: {"chain":"xrp","method":"version","params":[]}
+
+  # ── Clio Only ──────────────────────────────────────────────────────────────
+  - name: "server_info (Clio)"
+    summary: "Returns Clio server status info (includes ETL source connection state, cache state, API call statistics, etc.)"
+    params: "none"
+    example: {"chain":"xrp","method":"server_info","params":[]}
+
+  - name: "ledger (Clio)"
+    summary: "Same as ledger method, but Clio returns validated ledger data by default and supports the diff parameter"
+    params: "[{ledger_index?, ledger_hash?, transactions?, expand?, owner_funds?, binary?, diff?}]"
+    example: {"chain":"xrp","method":"ledger","params":[{"ledger_index":"validated","transactions":false,"expand":false,"owner_funds":false,"diff":false}]}
+
+  - name: mpt_holders
+    summary: "Returns all holders and balances for the specified MPT issuance (MPTokenIssuance) (Clio only)"
+    params: "[{mpt_issuance_id, ledger_index?, ledger_hash?, marker?, limit?}]"
+    example: {"chain":"xrp","method":"mpt_holders","params":[{"mpt_issuance_id":"0024D204E07DDDFBCD83B1649C07FE27FD536A3A32E6FDD8","ledger_index":"validated"}]}
+
+  - name: "version (Clio)"
+    summary: "Returns the API version range supported by the Clio server"
+    params: "none"
+    example: {"chain":"xrp","method":"version","params":[]}
+
+  # ── Utility ────────────────────────────────────────────────────────────────
+  - name: ping
+    summary: "Connectivity test; returns an empty success response; useful for measuring round-trip latency"
+    params: "none"
+    example: {"chain":"xrp","method":"ping","params":[]}
+
+  - name: random
+    summary: "Returns a random 256-bit hex value generated by the server; can be used as a client-side entropy source"
+    params: "none"
+    example: {"chain":"xrp","method":"random","params":[]}

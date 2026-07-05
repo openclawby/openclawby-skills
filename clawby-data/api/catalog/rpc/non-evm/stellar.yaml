@@ -1,0 +1,106 @@
+# ============================================================================
+# Stellar Horizon REST + Soroban JSON-RPC — stellar
+# ⚠️ Primary interface is the Horizon REST API, not standard EVM JSON-RPC
+# ============================================================================
+chain: "stellar"
+type: "Stellar(Horizon REST)"
+slug: stellar
+status: unverified             # not verified on the current key; availability depends on the plan
+api_style: REST
+how_to_call: 'POST /api/rpc  {"chain":"stellar","method":"<method>","params":[...]}'
+notes:
+  - "⚠️ This chain uses the Stellar Horizon REST API, not standard JSON-RPC; /api/rpc primarily proxies JSON-RPC so this chain may not work — the Horizon REST resource paths below are for reference"
+  - "⚠️ not verified on the current key; availability depends on the plan"
+  - "Stellar supports two interfaces: (1) Horizon REST — the primary on-chain data query interface, paths starting with /accounts, /ledgers, etc.; (2) Soroban JSON-RPC — smart contract interaction, method names like getTransaction / simulateTransaction; a true JSON-RPC but specific to Soroban contracts"
+  - "Soroban JSON-RPC method names are incompatible with EVM JSON-RPC and cannot be called via eth_* paths"
+endpoints_or_methods:
+  # Accounts
+  - path: "GET /accounts"
+    summary: "Lists all accounts filtered by signer/asset/liquidity_pool/sponsor"
+  - path: "GET /accounts/{account_id}"
+    summary: "Returns details for the specified account"
+  - path: "GET /accounts/{account_id}/transactions"
+    summary: "Returns transaction history for an account"
+  - path: "GET /accounts/{account_id}/operations"
+    summary: "Returns operation history for an account"
+  - path: "GET /accounts/{account_id}/payments"
+    summary: "Returns payment records for an account"
+  - path: "GET /accounts/{account_id}/effects"
+    summary: "Returns the effects list for an account"
+  - path: "GET /accounts/{account_id}/offers"
+    summary: "Returns the offer list for an account"
+  - path: "GET /accounts/{account_id}/trades"
+    summary: "Returns trade records for an account"
+  - path: "GET /accounts/{account_id}/data/{key}"
+    summary: "Returns the specified data entry for an account"
+  # Assets
+  - path: "GET /assets"
+    summary: "Lists all issued assets"
+  # Claimable Balances
+  - path: "GET /claimable_balances"
+    summary: "Lists all claimable balances"
+  - path: "GET /claimable_balances/{claimable_balance_id}"
+    summary: "Returns details for the specified claimable balance"
+  - path: "GET /claimable_balances/{claimable_balance_id}/transactions"
+    summary: "Returns transactions related to the specified claimable balance"
+  - path: "GET /claimable_balances/{claimable_balance_id}/operations"
+    summary: "Returns operations related to the specified claimable balance"
+  # Effects
+  - path: "GET /effects"
+    summary: "Lists all effects network-wide"
+  # Ledgers
+  - path: "GET /ledgers"
+    summary: "Lists all ledgers"
+  - path: "GET /ledgers/{sequence}"
+    summary: "Returns details for the ledger with the specified sequence number"
+  - path: "GET /ledgers/{sequence}/transactions"
+    summary: "Returns the transaction list for the specified ledger"
+  - path: "GET /ledgers/{sequence}/operations"
+    summary: "Returns the operation list for the specified ledger"
+  - path: "GET /ledgers/{sequence}/payments"
+    summary: "Returns the payment list for the specified ledger"
+  - path: "GET /ledgers/{sequence}/effects"
+    summary: "Returns the effects list for the specified ledger"
+  # Liquidity Pools
+  - path: "GET /liquidity_pools"
+    summary: "Lists all liquidity pools"
+  - path: "GET /liquidity_pools/{liquidity_pool_id}"
+    summary: "Returns details for the specified liquidity pool"
+  - path: "GET /liquidity_pools/{liquidity_pool_id}/effects"
+    summary: "Returns effects for the specified liquidity pool"
+  - path: "GET /liquidity_pools/{liquidity_pool_id}/trades"
+    summary: "Returns trade records for the specified liquidity pool"
+  - path: "GET /liquidity_pools/{liquidity_pool_id}/transactions"
+    summary: "Returns transactions for the specified liquidity pool"
+  - path: "GET /liquidity_pools/{liquidity_pool_id}/operations"
+    summary: "Returns operations for the specified liquidity pool"
+  # Offers
+  - path: "GET /offers"
+    summary: "Lists all offers"
+  - path: "GET /offers/{offer_id}"
+    summary: "Returns details for the specified offer"
+  - path: "GET /offers/{offer_id}/trades"
+    summary: "Returns trade records for the specified offer"
+  # Operations
+  - path: "GET /operations"
+    summary: "Lists all operations network-wide"
+  - path: "GET /operations/{id}"
+    summary: "Returns details for the specified operation"
+  - path: "GET /operations/{id}/effects"
+    summary: "Returns effects for the specified operation"
+  - path: "GET /payments"
+    summary: "Lists all payment operations network-wide"
+  # Trades
+  - path: "GET /trades"
+    summary: "Lists all trade records network-wide"
+  # Transactions
+  - path: "GET /transactions"
+    summary: "Lists all confirmed transactions"
+  - path: "POST /transactions"
+    summary: "Broadcasts a signed transaction (XDR format)"
+  - path: "GET /transactions/{transaction_hash}"
+    summary: "Returns details for the specified transaction by hash"
+  - path: "GET /transactions/{transaction_hash}/operations"
+    summary: "Returns the operation list for the specified transaction"
+  - path: "GET /transactions/{transaction_hash}/effects"
+    summary: "Returns the effects list for the specified transaction"

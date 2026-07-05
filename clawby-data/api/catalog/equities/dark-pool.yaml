@@ -1,0 +1,45 @@
+# ============================================================================
+# Equities & Markets — Dark Pool Data
+# Usage: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Dark Pool"
+
+gotchas_for_all:
+  - "⚠️ date (trading day, YYYY-MM-DD) is required; must be an actual trading day (not a weekend or holiday)"
+  - "symbol uses stock format US:TICKER (e.g. US:SPY)"
+
+interfaces:
+  - name: "Dark Pool Levels for a given stock"
+    summary: "dark pool price-level distribution for a given stock on a given trading day (volume and trade count per level)"
+    params:
+      - {name: symbol,   required: true, format: "US:TICKER", example: "US:SPY"}
+      - {name: date,     required: true, format: "YYYY-MM-DD", example: "2025-06-02"}
+      - {name: decimals, required: true, values: ["0", "1", "2"], example: "2", note: "price decimal places"}
+    gotchas:
+      - "⚠️ date and decimals are both required"
+    example:
+      name: "Dark Pool Levels for a given stock"
+      params: {symbol: "US:SPY", date: "2025-06-02", decimals: "2"}
+
+  - name: "Dark Pool Prints (trades) for a given stock"
+    summary: "dark pool prints (individual trades) for a given stock on a given trading day"
+    params:
+      - {name: symbol, required: true, format: "US:TICKER", example: "US:SPY"}
+      - {name: date,   required: true, format: "YYYY-MM-DD", example: "2025-06-02"}
+    gotchas:
+      - "⚠️ date is required; the exchange field in the response is an MIC code (ISO 20022)"
+    example:
+      name: "Dark Pool Prints (trades) for a given stock"
+      params: {symbol: "US:SPY", date: "2025-06-02"}
+
+  - name: "Dark Pool Prints (trades) summary for a given stock"
+    summary: "dark pool print summary for a given stock on a given trading day"
+    params:
+      - {name: symbol,        required: true, format: "US:TICKER", example: "US:SPY"}
+      - {name: date,          required: true, format: "YYYY-MM-DD", example: "2025-06-02"}
+      - {name: all_exchanges, required: false, type: boolean, note: "include trades from all exchanges"}
+    gotchas:
+      - "⚠️ empty response usually means no dark pool summary for that stock/date; try a more active stock or recent date, or add all_exchanges=true"
+    example:
+      name: "Dark Pool Prints (trades) summary for a given stock"
+      params: {symbol: "US:SPY", date: "2025-06-02", all_exchanges: true}

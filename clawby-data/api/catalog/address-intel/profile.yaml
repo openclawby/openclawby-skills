@@ -1,0 +1,83 @@
+# ============================================================================
+# Address Intel — Address Profile / Behavior Analysis
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# Data: address labels / AML data
+# ============================================================================
+category: "Address Profile & Behavior"
+note: >
+  All interfaces in this category require coin + address as mandatory params.
+  coin is the chain ID (ETH / BNB / SOL / SUI / BTC / TRX / POL-Polygon / ETH-Base / ETH-Arbitrum / ETH-Optimism / AVAX-Avalanche / TON / HYPE, etc.);
+  full list: call chain_status.
+
+gotchas_for_all:
+  - "⚠️ coin is the chain ID with suffix: Base=ETH-Base, Polygon=POL-Polygon, Arbitrum=ETH-Arbitrum, Optimism=ETH-Optimism — never use bare ETH for these chains."
+  - "EVM addresses (0x prefix) are automatically lowercased; Solana (base58) / SUI addresses are case-sensitive, pass as-is."
+
+interfaces:
+  - name: "address_overview"
+    summary: "Basic address profile: native balance, tx count, first/last active time, total sent/received amount."
+    params:
+      - {name: coin,    required: true, format: "chain ID string", example: "ETH"}
+      - {name: address, required: true, format: "on-chain address",     example: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
+    gotchas:
+      - "Returns native token balance (not USD); does not include ERC-20/SPL token balances."
+      - "first_seen / last_seen are Unix second timestamps."
+    example:
+      name: "address_overview"
+      params: {coin: "ETH", address: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
+
+  - name: "address_action"
+    summary: "Address behavior breakdown: in/out txs grouped by type (DEX / Exchange / Mixer / Transfer / Swap) with counts and ratios. Useful for quickly identifying mixer usage."
+    params:
+      - {name: coin,    required: true, format: "chain ID string", example: "BTC"}
+      - {name: address, required: true, format: "on-chain address",     example: "1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf Na"}
+    gotchas:
+      - "Returns received_txs and spent_txs groups, each containing count and proportion per behavior type."
+      - "High Mixer proportion is a strong signal of a high-risk address."
+    example:
+      name: "address_action"
+      params: {coin: "ETH", address: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
+
+  - name: "address_trace"
+    summary: "Address tracing profile: initial fund source (first_address), platform usage history (exchange/DEX/mixer/NFT), malicious event records, linked identity info."
+    params:
+      - {name: coin,    required: true, format: "chain ID string", example: "ETH"}
+      - {name: address, required: true, format: "on-chain address",     example: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
+    gotchas:
+      - "first_address is the source of the first funds received by this address (i.e., gas/seed funding); commonly used to trace the origin of funds."
+      - "malicious_event enum: phishing / ransom / stealing / laundering."
+      - "relation_info contains linked wallet / ENS / Twitter identity info (if any)."
+      - "use_platform contains usage count statistics per platform type."
+    example:
+      name: "address_trace"
+      params: {coin: "ETH", address: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
+
+  - name: "address_counterparty"
+    summary: "Top counterparties for an address: returns {name, amount(USD), percent} list sorted by fund flow descending."
+    params:
+      - {name: coin,    required: true, format: "chain ID string", example: "SOL"}
+      - {name: address, required: true, format: "on-chain address",     example: "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1"}
+    gotchas:
+      - "⚠️ Exchange hot-wallet addresses are not supported — these will error or return empty results."
+      - "amount is in USD (estimated); percent is the counterparty's share of total flow."
+    example:
+      name: "address_counterparty"
+      params: {coin: "SOL", address: "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1"}
+
+  - name: "transactions_investigation"
+    summary: "Address transaction investigation: paginated in/out transfer list with counterparty address, type label, tx hash, amount, and labels."
+    params:
+      - {name: coin,            required: true,  format: "chain ID string", example: "ETH"}
+      - {name: address,         required: true,  format: "on-chain address",     example: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
+      - {name: type,            required: false, format: "in / out / all", example: "all", note: "default all"}
+      - {name: page,            required: false, format: "integer, starting from 1",  example: 1,     note: "default 1"}
+      - {name: start_timestamp, required: false, format: "Unix seconds, filter start time"}
+      - {name: end_timestamp,   required: false, format: "Unix seconds, filter end time"}
+    gotchas:
+      - "Returns in_list / out_list plus page / total_pages pagination info."
+      - "Counterparty type enum (response value): 1=regular address / 2=malicious address / 3=entity/institution / 4=contract."
+      - "start_timestamp / end_timestamp are optional Unix second timestamps; omit to return all history."
+      - "For large result sets, use pagination (page param) combined with a time range to narrow results."
+    example:
+      name: "transactions_investigation"
+      params: {coin: "ETH", address: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3", type: "all", page: 1}

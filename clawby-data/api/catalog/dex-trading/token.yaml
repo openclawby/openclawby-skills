@@ -1,0 +1,82 @@
+# ============================================================================
+# DEX Trading Data — Single Token (Token)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "DEX Token Overview / Security / Pools / Holders / Traders / Candlesticks"
+
+interfaces:
+  - name: "dex_token_info"
+    summary: "Token overview: symbol / name / decimals / price / market cap / liquidity / pools / social links (real-time)"
+    params:
+      - {name: chain,   required: true, format: "chain identifier", example: "sol", note: "sol / bsc / base / eth / tron / monad / hyperevm"}
+      - {name: address, required: true, format: "token contract / mint address", example: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"}
+    gotchas:
+      - "address is the token contract address (mint address for SOL) — not a wallet address"
+      - "price / market_cap / liquidity are real-time; new tokens may have incomplete fields"
+    example:
+      name: "dex_token_info"
+      params: {chain: "sol", address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"}
+
+  - name: "dex_token_security"
+    summary: "Token security / risk audit: honeypot check, mint/freeze permissions, top-10 concentration, burn status, dev holdings"
+    params:
+      - {name: chain,   required: true, format: "chain identifier", example: "sol", note: "sol / bsc / base"}
+      - {name: address, required: true, format: "token contract / mint address", example: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"}
+    gotchas:
+      - "Run this before trading any low-cap token: check is_honeypot / renounced / top_10_holder_rate / burn status"
+      - "Fields vary slightly by chain (EVM and SOL risk items are not identical)"
+    example:
+      name: "dex_token_security"
+      params: {chain: "sol", address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"}
+
+  - name: "dex_token_pool"
+    summary: "Token's primary liquidity pool: pool address, quote token, liquidity, reserves, initial liquidity"
+    params:
+      - {name: chain,   required: true, format: "chain identifier", example: "sol", note: "sol / bsc / base"}
+      - {name: address, required: true, format: "token contract / mint address", example: "So11111111111111111111111111111111111111112"}
+    gotchas:
+      - "Returns info for the token's main pool (biggest pool); quote_symbol is the quote token (e.g. SOL/USDC)"
+    example:
+      name: "dex_token_pool"
+      params: {chain: "sol", address: "So11111111111111111111111111111111111111112"}
+
+  - name: "dex_token_holders"
+    summary: "Top token holders list (address / balance / share)"
+    params:
+      - {name: chain,   required: true, format: "chain identifier", example: "sol", note: "sol / bsc / base"}
+      - {name: address, required: true, format: "token contract / mint address", example: "..."}
+      - {name: limit,   required: false, format: "count (default 20, max 100)", example: 20}
+    gotchas:
+      - "Major large-cap tokens (e.g. USDC) may return an empty list; memecoin data is richer"
+      - "Returns data.list; useful for assessing whale/insider concentration"
+    example:
+      name: "dex_token_holders"
+      params: {chain: "sol", address: "<token_mint>", limit: 20}
+
+  - name: "dex_token_traders"
+    summary: "Top token traders (sorted by realized P&L, includes buys / sells / profit-loss)"
+    params:
+      - {name: chain,   required: true, format: "chain identifier", example: "sol", note: "sol / bsc / base"}
+      - {name: address, required: true, format: "token contract / mint address", example: "..."}
+      - {name: limit,   required: false, format: "count (default 20, max 100)", example: 20}
+    gotchas:
+      - "Useful for finding addresses that profited or lost on a token; returns data.list"
+      - "Major stablecoins may have no trader data"
+    example:
+      name: "dex_token_traders"
+      params: {chain: "sol", address: "<token_mint>", limit: 20}
+
+  - name: "dex_token_kline"
+    summary: "Token OHLC candlestick chart"
+    params:
+      - {name: chain,      required: true,  format: "chain identifier", example: "sol", note: "sol / bsc / base"}
+      - {name: address,    required: true,  format: "token contract / mint address", example: "..."}
+      - {name: resolution, required: true,  format: "interval", example: "1h", note: "30s / 1m / 5m / 15m / 1h / 4h / 1d"}
+      - {name: from,       required: false, format: "start time (Unix seconds)", example: 1700000000}
+      - {name: to,         required: false, format: "end time (Unix seconds)", example: 1700086400}
+    gotchas:
+      - "from/to are Unix seconds (not milliseconds); omit for the default recent range"
+      - "Returns data.list; each candle contains time / open / high / low / close / volume"
+    example:
+      name: "dex_token_kline"
+      params: {chain: "sol", address: "<token_mint>", resolution: "1h"}

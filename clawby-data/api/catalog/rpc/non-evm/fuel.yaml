@@ -1,0 +1,47 @@
+# ============================================================================
+# Fuel GraphQL API — fuel
+# Fuel is an execution layer for Ethereum rollups; its API is GraphQL (not JSON-RPC)
+# ============================================================================
+chain: "fuel"
+type: "Fuel(GraphQL)"
+slug: fuel
+status: unverified             # not verified on the current key; availability depends on the plan
+api_style: GraphQL
+how_to_call: 'POST /api/rpc  {"chain":"fuel","method":"<method>","params":[...]}'
+notes:
+  - "⚠️ This chain uses the Fuel GraphQL API, not standard JSON-RPC; /api/rpc primarily forwards JSON-RPC and does not apply to this chain — the GraphQL query/mutation names below are listed for reference"
+  - "⚠️ not verified on the current key; availability depends on the plan"
+  - "Fuel GraphQL endpoints accept POST {query, variables} requests directly; FuelVM uses a UTXO model with assets identified by assetId, unlike ERC-20"
+  - "Write operations (submitTransaction / dryRunTransaction) are GraphQL mutations that require a hex-encoded SignedTransaction"
+endpoints_or_methods:
+  # Queries — balances
+  - name: "getAddressAssetBalance"
+    summary: "Returns the balance of a specific assetId for the given address"
+  - name: "getAddressAssetBalances"
+    summary: "Returns all asset balances for the given address"
+  - name: "getContractAssetBalance"
+    summary: "Returns the balance of a specific assetId for the given contract"
+  - name: "getContractAssetBalances"
+    summary: "Returns all asset balances for the given contract"
+  # Queries — transactions
+  - name: "getTransactionsByOwner"
+    summary: "Returns all transactions for the specified address (including inputs, outputs, and status)"
+  - name: "getLatestTransactions"
+    summary: "Returns the most recent transactions on the network"
+  # Queries — blocks
+  - name: "getLatestBlocks"
+    summary: "Returns the most recent blocks on the network along with their transactions"
+  - name: "getLatestBlock"
+    summary: "Returns the id and height of the latest block"
+  - name: "getBlockByHeight"
+    summary: "Returns the block id by block height"
+  - name: "getBlockById"
+    summary: "Returns block details and transaction list by block id (hash)"
+  # Queries — messages
+  - name: "getMessagesByAddress"
+    summary: "Returns all cross-chain messages for the specified address (amount, sender, recipient, nonce)"
+  # Mutations — transaction execution
+  - name: "dryRunTransaction"
+    summary: "Simulates transaction execution (without broadcasting); returns receipt type and data"
+  - name: "submitTransaction"
+    summary: "Broadcasts a signed transaction to the network and returns the transaction id"

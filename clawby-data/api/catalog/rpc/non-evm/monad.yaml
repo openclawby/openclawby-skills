@@ -1,0 +1,126 @@
+# ============================================================================
+# EVM RPC — monad
+# Call: POST /api/rpc   body {"chain":"monad","method":"<method>","params":[...]}
+# ============================================================================
+chain: "monad"                 # chain parameter for /api/rpc
+type: EVM
+slug: "monad"
+status: unverified             # ⚠️ not verified on the current key
+api_style: JSON-RPC
+how_to_call: 'POST /api/rpc  {"chain":"monad","method":"<method>","params":[...]}'
+notes:
+  - "Monad is an EVM-compatible L1 (Chain ID: 10143 testnet) with 10,000 TPS, 500ms block times, and 1s finality"
+  - "Fully compatible with the Ethereum Cancun fork EVM execution environment; supports standard EVM JSON-RPC"
+  - "Also provides the Monad-specific method eth_sendRawTransactionSync (synchronous broadcast that waits for receipt)"
+  - "Standard EVM JSON-RPC; methods match Ethereum; block parameter accepts latest/earliest/pending or block number hex"
+  - "Methods requiring the node to hold a private key (eth_accounts, eth_sign, etc.) are not supported on public RPC"
+  - "⚠️ not verified on the current key; availability depends on the plan"
+methods:
+  - name: eth_blockNumber
+    summary: "Returns the latest block number (hex)"
+    params: "none"
+    example: {"chain":"monad","method":"eth_blockNumber","params":[]}
+  - name: eth_chainId
+    summary: "Returns the chain ID (hex)"
+    params: "none"
+    example: {"chain":"monad","method":"eth_chainId","params":[]}
+  - name: eth_gasPrice
+    summary: "Returns the current gas price (hex wei)"
+    params: "none"
+    example: {"chain":"monad","method":"eth_gasPrice","params":[]}
+  - name: eth_getBalance
+    summary: "Returns the account balance (hex wei)"
+    params: "[address, block] — block accepts latest/earliest/pending or block number hex"
+    example: {"chain":"monad","method":"eth_getBalance","params":["0xADDRESS", "latest"]}
+  - name: eth_getCode
+    summary: "Returns the contract bytecode at the given address"
+    params: "[address, block]"
+    example: {"chain":"monad","method":"eth_getCode","params":["0xCONTRACT", "latest"]}
+  - name: eth_getStorageAt
+    summary: "Returns the value at a contract storage slot"
+    params: "[address, position(hex), block]"
+    example: {"chain":"monad","method":"eth_getStorageAt","params":["0xCONTRACT", "0x0", "latest"]}
+  - name: eth_getTransactionCount
+    summary: "Returns the number of transactions sent from an address (nonce)"
+    params: "[address, block]"
+    example: {"chain":"monad","method":"eth_getTransactionCount","params":["0xADDRESS", "latest"]}
+  - name: eth_call
+    summary: "Executes a read-only contract call (not broadcast to chain); use for ERC-20 reads etc."
+    params: "[{to, data, from?, value?}, block]"
+    example: {"chain":"monad","method":"eth_call","params":[{"to":"0xCONTRACT","data":"0x18160ddd"}, "latest"]}
+  - name: eth_estimateGas
+    summary: "Estimates the gas required for a transaction"
+    params: "[{from?, to, data?, value?}]"
+    example: {"chain":"monad","method":"eth_estimateGas","params":[{"to":"0xADDRESS","value":"0x1"}]}
+  - name: eth_getLogs
+    summary: "Returns event logs matching filter criteria (e.g. Transfer events)"
+    params: "[{fromBlock, toBlock, address?, topics?}] — large block ranges may be restricted"
+    example: {"chain":"monad","method":"eth_getLogs","params":[{"fromBlock":"0x0","toBlock":"latest","address":"0xCONTRACT","topics":["0xddf252ad..."]}]}
+  - name: eth_getBlockByNumber
+    summary: "Returns a block by block number"
+    params: "[block, fullTx(bool)]"
+    example: {"chain":"monad","method":"eth_getBlockByNumber","params":["latest", false]}
+  - name: eth_getBlockByHash
+    summary: "Returns a block by block hash"
+    params: "[blockHash, fullTx(bool)]"
+    example: {"chain":"monad","method":"eth_getBlockByHash","params":["0xHASH", false]}
+  - name: eth_getBlockTransactionCountByNumber
+    summary: "Returns the number of transactions in a block by block number"
+    params: "[block]"
+    example: {"chain":"monad","method":"eth_getBlockTransactionCountByNumber","params":["latest"]}
+  - name: eth_getBlockTransactionCountByHash
+    summary: "Returns the number of transactions in a block by block hash"
+    params: "[blockHash]"
+    example: {"chain":"monad","method":"eth_getBlockTransactionCountByHash","params":["0xHASH"]}
+  - name: eth_getTransactionByHash
+    summary: "Returns transaction details by hash"
+    params: "[txHash]"
+    example: {"chain":"monad","method":"eth_getTransactionByHash","params":["0xTXHASH"]}
+  - name: eth_getTransactionByBlockNumberAndIndex
+    summary: "Returns a transaction by block number and index"
+    params: "[block, index(hex)]"
+    example: {"chain":"monad","method":"eth_getTransactionByBlockNumberAndIndex","params":["latest", "0x0"]}
+  - name: eth_getTransactionByBlockHashAndIndex
+    summary: "Returns a transaction by block hash and index"
+    params: "[blockHash, index(hex)]"
+    example: {"chain":"monad","method":"eth_getTransactionByBlockHashAndIndex","params":["0xHASH", "0x0"]}
+  - name: eth_getTransactionReceipt
+    summary: "Returns the transaction receipt (status / log / gas used)"
+    params: "[txHash]"
+    example: {"chain":"monad","method":"eth_getTransactionReceipt","params":["0xTXHASH"]}
+  - name: eth_sendRawTransaction
+    summary: "Broadcasts a signed transaction (sign locally then use this; returns txHash asynchronously)"
+    params: "[signedTxData(hex)]"
+    example: {"chain":"monad","method":"eth_sendRawTransaction","params":["0xSIGNEDTX"]}
+  - name: eth_sendRawTransactionSync
+    summary: "Monad-specific: synchronously broadcasts a signed transaction and waits for block confirmation; returns the transaction receipt directly"
+    params: "[signedTxData(hex), timeoutMs?(integer)] — timeoutMs is optional; must not exceed the node's maximum timeout"
+    example: {"chain":"monad","method":"eth_sendRawTransactionSync","params":["0xSIGNEDTX", 5000]}
+  - name: eth_syncing
+    summary: "Returns sync status (false = fully synced)"
+    params: "none"
+    example: {"chain":"monad","method":"eth_syncing","params":[]}
+  - name: eth_getUncleCountByBlockNumber
+    summary: "Returns the number of uncle blocks by block number"
+    params: "[block]"
+    example: {"chain":"monad","method":"eth_getUncleCountByBlockNumber","params":["latest"]}
+  - name: eth_getUncleCountByBlockHash
+    summary: "Returns the number of uncle blocks by block hash"
+    params: "[blockHash]"
+    example: {"chain":"monad","method":"eth_getUncleCountByBlockHash","params":["0xHASH"]}
+  - name: eth_getUncleByBlockNumberAndIndex
+    summary: "Returns an uncle block by block number and index"
+    params: "[block, index(hex)]"
+    example: {"chain":"monad","method":"eth_getUncleByBlockNumberAndIndex","params":["latest", "0x0"]}
+  - name: eth_getUncleByBlockHashAndIndex
+    summary: "Returns an uncle block by block hash and index"
+    params: "[blockHash, index(hex)]"
+    example: {"chain":"monad","method":"eth_getUncleByBlockHashAndIndex","params":["0xHASH", "0x0"]}
+  - name: net_version
+    summary: "Returns the network ID (Monad testnet: 10143)"
+    params: "none"
+    example: {"chain":"monad","method":"net_version","params":[]}
+  - name: web3_clientVersion
+    summary: "Returns the node client version"
+    params: "none"
+    example: {"chain":"monad","method":"web3_clientVersion","params":[]}

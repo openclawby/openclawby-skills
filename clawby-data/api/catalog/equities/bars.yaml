@@ -1,0 +1,64 @@
+# ============================================================================
+# Equities & Markets — OHLC Bars (stock · crypto · forex · option)
+# Usage: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "OHLC bars"
+
+# Shared required params for all endpoints in this category
+shared_required_params:
+  - {name: agg_type, required: true, values: [day], note: "aggregation period; currently only day is supported"}
+  - {name: start,    required: true, format: "Unix timestamp in seconds", example: 1717200000}
+shared_optional_params:
+  - {name: end, required: false, format: "Unix timestamp in seconds"}
+
+gotchas_for_all:
+  - "⚠️ agg_type and start are both required; omitting either returns 400 Invalid value"
+  - "⚠️ start/end are Unix seconds (10 digits), not milliseconds"
+  - "Day-bar volume accumulates from UTC 00:00 of that day"
+
+interfaces:
+  - name: "Crypto aggregate OHLC bars (k-line)"
+    summary: "OHLC bars for a crypto pair"
+    params:
+      - {name: symbol, required: true, format: "BASE:USD", example: "BTC:USD"}
+      - {name: exchange, required: false, example: "COINBASE"}
+      - "plus shared_required_params (agg_type, start)"
+    gotchas:
+      - "⚠️ use symbol BTC:USD, not US:xxx"
+    example:
+      name: "Crypto aggregate OHLC bars (k-line)"
+      params: {symbol: "BTC:USD", agg_type: "day", start: 1717200000}
+
+  - name: "Forex aggregate OHLC bars (k-line)"
+    summary: "OHLC bars for a forex pair (volume in lots; 1 lot = 100,000 units)"
+    params:
+      - {name: symbol, required: true, format: "BASE:USD", example: "EUR:USD"}
+      - "plus shared_required_params (agg_type, start)"
+    gotchas:
+      - "⚠️ use symbol EUR:USD"
+    example:
+      name: "Forex aggregate OHLC bars (k-line)"
+      params: {symbol: "EUR:USD", agg_type: "day", start: 1717200000}
+
+  - name: "Stock aggregate OHLC bars (k-line)"
+    summary: "OHLC bars for a stock"
+    params:
+      - {name: symbol, required: true, format: "US:TICKER", example: "US:AAPL"}
+      - "plus shared_required_params (agg_type, start)"
+    gotchas:
+      - "⚠️ agg_type=day and start are both required; omitting either returns 400"
+    example:
+      name: "Stock aggregate OHLC bars (k-line)"
+      params: {symbol: "US:AAPL", agg_type: "day", start: 1717200000}
+
+  - name: "Option aggregate OHLC bars (k-line)"
+    summary: "OHLC bars for a single option contract"
+    params:
+      - {name: symbol, required: true, format: "option contract code", example: "US:AAPL20240419C170"}
+      - "plus shared_required_params (agg_type, start)"
+    gotchas:
+      - "⚠️ symbol must be the full contract code (underlying+expiryYYYYMMDD+C/P+strike), not US:AAPL"
+      - "use 'List of option contracts' in reference.yaml to look up valid contract codes"
+    example:
+      name: "Option aggregate OHLC bars (k-line)"
+      params: {symbol: "US:AAPL20240419C170", agg_type: "day", start: 1717200000}

@@ -1,0 +1,73 @@
+# ============================================================================
+# DEX Trading Data — Market Rankings (Market)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "DEX Trending / Hot Searches / Signals / Swap Quotes / Gas"
+
+interfaces:
+  - name: "dex_trending"
+    summary: "Trending tokens: hot tokens sorted by interval (volume / price change / turnover, etc.)"
+    params:
+      - {name: chain,    required: true,  format: "chain identifier", example: "sol", note: "sol / bsc / base / eth"}
+      - {name: interval, required: true,  format: "interval", example: "1h", note: "1m / 5m / 1h / 6h / 24h"}
+      - {name: limit,    required: false, format: "count (default 100, max 100)", example: 20}
+      - {name: order_by, required: false, format: "sort field", example: "volume", note: "volume / swaps / liquidity / marketcap / holders / price / change / smart_degen_count etc."}
+      - {name: direction,required: false, format: "asc/desc (default desc)", example: "desc"}
+    gotchas:
+      - "Results are in data.rank (may be nested under multiple data wrappers — extract the rank array)"
+      - "Optional numeric filters: min_<metric>/max_<metric> (e.g. min_liquidity/max_marketcap) and min_created/max_created (durations like 6h/7d) — add as needed, the relay will translate them"
+      - "Filter tags via filter (e.g. not_honeypot / renounced / has_social); multiple values allowed"
+    example:
+      name: "dex_trending"
+      params: {chain: "sol", interval: "1h", limit: 20, order_by: "volume"}
+
+  - name: "dex_hot_searches"
+    summary: "Hot-search token rankings: most-searched tokens (supports multiple chains in one call)"
+    params:
+      - {name: params, required: true, format: "array, each item {interval, chain, limit?}", example: "see example below"}
+    gotchas:
+      - "body format: {\"params\": [{\"interval\":\"1h\",\"chain\":\"sol\",\"limit\":50}]}"
+      - "interval: 1m / 5m / 1h / 6h / 24h; chain does not accept all — for multiple chains, add separate entries to the array"
+      - "Returns blocks by (interval, chain), each containing tokens (same fields as dex_trending), sorted by search popularity"
+    example:
+      name: "dex_hot_searches"
+      params: {params: [{interval: "1h", chain: "sol", limit: 20}]}
+
+  - name: "dex_token_signals"
+    summary: "Token signals: price moves / smart money buys / large buys / DEX ads / CTO and other trigger events"
+    params:
+      - {name: chain,  required: true, format: "chain identifier", example: "sol", note: "sol / bsc"}
+      - {name: groups, required: true, format: "group array; each group may include signal_type[] / mc_min / mc_max etc.", example: "see example below"}
+    gotchas:
+      - "body format: {\"chain\":\"sol\",\"groups\":[{\"signal_type\":[12,14]}]}; each group returns at most 50 entries, ordered by trigger_at descending"
+      - "signal_type values 1–18: e.g. 6=price surge 7=new ATH 12=smart money buy 14=large buy 11=CTO 5=DexBoost; omit to get all"
+      - "mc_min/mc_max = market cap (USD) range filter at trigger time"
+    example:
+      name: "dex_token_signals"
+      params: {chain: "sol", groups: [{signal_type: [12, 14], mc_min: 50000}]}
+
+  - name: "dex_swap_quote"
+    summary: "Swap quote (read-only): estimate optimal route and expected output for a swap — no order submission or signing"
+    params:
+      - {name: chain,        required: true, format: "chain identifier", example: "sol", note: "sol / bsc / base"}
+      - {name: from_address, required: true, format: "wallet address", example: "<wallet>"}
+      - {name: input_token,  required: true, format: "sell token contract / mint", example: "So11111111111111111111111111111111111111112"}
+      - {name: output_token, required: true, format: "buy token contract / mint", example: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"}
+      - {name: input_amount, required: true, format: "sell amount (smallest unit, e.g. lamports)", example: "1000000000"}
+      - {name: slippage,     required: false, format: "slippage integer 0–100 (e.g. 30 = 30%)", example: 10}
+    gotchas:
+      - "input_amount is in the smallest unit (SOL uses lamports: 1 SOL = 1e9) — not a human-readable amount"
+      - "Returns output_amount / min_output_amount; this is an estimate — actual swaps require the executor (exec)"
+    example:
+      name: "dex_swap_quote"
+      params: {chain: "sol", from_address: "<wallet>", input_token: "So11111111111111111111111111111111111111112", output_token: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", input_amount: "1000000000", slippage: 10}
+
+  - name: "dex_gas_price"
+    summary: "On-chain gas / priority fee suggestions (low/avg/high) + native token USD price"
+    params:
+      - {name: chain, required: true, format: "chain identifier", example: "sol", note: "sol / bsc / base / eth"}
+    gotchas:
+      - "Returns low / average / high, suggest_base_fee, native_token_usd_price, and estimated confirmation time"
+    example:
+      name: "dex_gas_price"
+      params: {chain: "sol"}

@@ -1,0 +1,214 @@
+# ============================================================================
+# Bitcoin RPC — btc
+# Call: POST /api/rpc   body {"chain":"btc","method":"<method>","params":[...]}
+# ============================================================================
+chain: "btc"
+type: Bitcoin
+slug: btc
+status: ok
+how_to_call: 'POST /api/rpc  {"chain":"btc","method":"<method>","params":[...]}'
+notes:
+  - Standard Bitcoin Core JSON-RPC; amounts are in BTC (floating point)
+  - Block hashes are 64-character hex strings; txids are also 64-character hex
+  - PSBT (Partially Signed Bitcoin Transaction) methods are used for multi-sig/hardware wallet signing flows
+  - getmempoolancestors/getmempooldescendants are only valid for unconfirmed transactions
+  - sendrawtransaction/testmempoolaccept take a fully hex-encoded signed transaction
+methods:
+  # ── Blockchain ─────────────────────────────────────────────────────────────
+  - name: getbestblockhash
+    summary: "Returns the latest block hash on the longest chain"
+    params: "none"
+    example: {"chain":"btc","method":"getbestblockhash","params":[]}
+
+  - name: getblock
+    summary: "Returns detailed information about the specified block; verbosity=0 returns raw hex, 1 returns JSON, 2 includes full transactions"
+    params: "[blockhash(hex), verbosity?(0|1|2, default 1)]"
+    example: {"chain":"btc","method":"getblock","params":["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09",1]}
+
+  - name: getblockchaininfo
+    summary: "Returns blockchain state info (chain name, current height, difficulty, sync progress, etc.)"
+    params: "none"
+    example: {"chain":"btc","method":"getblockchaininfo","params":[]}
+
+  - name: getblockcount
+    summary: "Returns the block count (height) of the longest chain"
+    params: "none"
+    example: {"chain":"btc","method":"getblockcount","params":[]}
+
+  - name: getblockfilter
+    summary: "Returns the BIP157 compact block filter for the specified block"
+    params: "[blockhash(hex), filtertype?(\"basic\", default basic)]"
+    example: {"chain":"btc","method":"getblockfilter","params":["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09","basic"]}
+
+  - name: getblockhash
+    summary: "Returns the block hash at the specified height"
+    params: "[height(int)]"
+    example: {"chain":"btc","method":"getblockhash","params":[1000]}
+
+  - name: getblockheader
+    summary: "Returns the block header for the specified block"
+    params: "[blockhash(hex), verbose?(bool, default true)]"
+    example: {"chain":"btc","method":"getblockheader","params":["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09",true]}
+
+  - name: getblockstats
+    summary: "Returns statistics for the specified block (fee rate, size, UTXO changes, etc.)"
+    params: "[hash_or_height(hex or int), stats?(array, returns all if omitted)]"
+    example: {"chain":"btc","method":"getblockstats","params":["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09",["minfeerate","avgfeerate"]]}
+
+  - name: getchaintips
+    summary: "Returns the status of all known chain tips (height, fork status, etc.)"
+    params: "none"
+    example: {"chain":"btc","method":"getchaintips","params":[]}
+
+  - name: getchaintxstats
+    summary: "Returns transaction statistics for the specified window (TPS, total tx count, etc.)"
+    params: "[nblocks?(int, default ~30 days), blockhash?(hex)]"
+    example: {"chain":"btc","method":"getchaintxstats","params":[2016,"00000000000000000009f8e62c07e5e2b16ffada2e52e3ee0e0f1bf55ede44cc"]}
+
+  - name: getdifficulty
+    summary: "Returns the current mining difficulty (as a multiple of genesis difficulty)"
+    params: "none"
+    example: {"chain":"btc","method":"getdifficulty","params":[]}
+
+  - name: getmempoolancestors
+    summary: "Returns all ancestor transactions of the specified transaction in the mempool"
+    params: "[txid(hex), verbose?(bool)]"
+    example: {"chain":"btc","method":"getmempoolancestors","params":["mytxid",true]}
+
+  - name: getmempooldescendants
+    summary: "Returns all descendant transactions of the specified transaction in the mempool"
+    params: "[txid(hex), verbose?(bool)]"
+    example: {"chain":"btc","method":"getmempooldescendants","params":["mytxid",true]}
+
+  - name: getmempoolentry
+    summary: "Returns the mempool entry for the specified transaction (fee, ancestor count, etc.)"
+    params: "[txid(hex)]"
+    example: {"chain":"btc","method":"getmempoolentry","params":["mytxid"]}
+
+  - name: getmempoolinfo
+    summary: "Returns mempool status (tx count, bytes, minimum fee, etc.)"
+    params: "none"
+    example: {"chain":"btc","method":"getmempoolinfo","params":[]}
+
+  - name: getrawmempool
+    summary: "Returns the txid list of all transactions in the mempool (with details when verbose=true)"
+    params: "[verbose?(bool, default false)]"
+    example: {"chain":"btc","method":"getrawmempool","params":[true]}
+
+  - name: gettxout
+    summary: "Returns details of a UTXO (amount, script, confirmation count, etc.)"
+    params: "[txid(hex), n(vout index int), include_mempool?(bool)]"
+    example: {"chain":"btc","method":"gettxout","params":["txid",1,true]}
+
+  - name: gettxoutproof
+    summary: "Returns a Merkle proof that the specified transactions are included in a block"
+    params: "[txids(array of hex), blockhash?(hex)]"
+    example: {"chain":"btc","method":"gettxoutproof","params":[["txid1","txid2"]]}
+
+  - name: gettxoutsetinfo
+    summary: "Returns UTXO set statistics (total count, supply, block height, etc.)"
+    params: "none"
+    example: {"chain":"btc","method":"gettxoutsetinfo","params":[]}
+
+  # ── Raw Transactions ───────────────────────────────────────────────────────
+  - name: combinepsbt
+    summary: "Merges signatures from multiple PSBTs into a single combined PSBT"
+    params: "[txs(array of base64 PSBT strings)]"
+    example: {"chain":"btc","method":"combinepsbt","params":[["psbt1base64==","psbt2base64=="]]}
+
+  - name: combinerawtransaction
+    summary: "Combines multiple partially signed raw transactions"
+    params: "[txs(array of hex strings)]"
+    example: {"chain":"btc","method":"combinerawtransaction","params":[["rawtx1hex","rawtx2hex"]]}
+
+  - name: converttopsbt
+    summary: "Converts an existing raw transaction (hex) to PSBT format"
+    params: "[hexstring, permitsigdata?(bool), iswitness?(bool)]"
+    example: {"chain":"btc","method":"converttopsbt","params":["rawtxhex"]}
+
+  - name: createpsbt
+    summary: "Creates a new PSBT (without signatures)"
+    params: "[[{txid, vout, sequence?},...], [{address:amount},...], locktime?, replaceable?]"
+    example: {"chain":"btc","method":"createpsbt","params":[[{"txid":"mytxid","vout":0}],[{"bc1q...address":0.001}],0,false]}
+
+  - name: createrawtransaction
+    summary: "Creates an unsigned raw transaction (hex)"
+    params: "[[{txid, vout, sequence?},...], [{address:amount},...], locktime?, replaceable?]"
+    example: {"chain":"btc","method":"createrawtransaction","params":[[{"txid":"mytxid","vout":0}],[{"bc1q...address":0.001}]]}
+
+  - name: decodepsbt
+    summary: "Decodes a PSBT and returns its structured content (inputs, outputs, signature status, etc.)"
+    params: "[psbt(base64 string)]"
+    example: {"chain":"btc","method":"decodepsbt","params":["cHNidP8B..."]}
+
+  - name: decoderawtransaction
+    summary: "Decodes a raw transaction hex and returns a detailed JSON structure"
+    params: "[hexstring, iswitness?(bool)]"
+    example: {"chain":"btc","method":"decoderawtransaction","params":["0200000001..."]}
+
+  - name: decodescript
+    summary: "Decodes a hex-encoded script and returns script type, address, and other info"
+    params: "[hexstring]"
+    example: {"chain":"btc","method":"decodescript","params":["76a914..."]}
+
+  - name: finalizepsbt
+    summary: "Finalizes a PSBT: extracts the complete signature and optionally extracts the raw transaction"
+    params: "[psbt(base64), extract?(bool, default true)]"
+    example: {"chain":"btc","method":"finalizepsbt","params":["cHNidP8B..."]}
+
+  - name: getrawtransaction
+    summary: "Returns raw transaction data; returns decoded JSON when verbose=true"
+    params: "[txid(hex), verbose?(bool), blockhash?(hex)]"
+    example: {"chain":"btc","method":"getrawtransaction","params":["mytxid",true]}
+
+  - name: joinpsbts
+    summary: "Joins multiple unrelated PSBTs into a single multi-input PSBT"
+    params: "[txs(array of base64 PSBT strings)]"
+    example: {"chain":"btc","method":"joinpsbts","params":[["psbt1base64==","psbt2base64=="]]}
+
+  - name: sendrawtransaction
+    summary: "Broadcasts a signed raw transaction to the Bitcoin network"
+    params: "[hexstring, maxfeerate?(BTC/kB, default 0.10)]"
+    example: {"chain":"btc","method":"sendrawtransaction","params":["0200000001..."]}
+
+  - name: signrawtransactionwithkey
+    summary: "Signs a raw transaction with the provided private keys"
+    params: "[hexstring, privkeys(array of WIF strings), prevtxs?(array), sighashtype?]"
+    example: {"chain":"btc","method":"signrawtransactionwithkey","params":["0200000001...","","[\"privkeyWIF\"]"]}
+
+  - name: testmempoolaccept
+    summary: "Tests whether a set of raw transactions would be accepted by the mempool (without actually broadcasting)"
+    params: "[rawtxs(array of hex), maxfeerate?(BTC/kB)]"
+    example: {"chain":"btc","method":"testmempoolaccept","params":[["0200000001..."]]}
+
+  - name: utxoupdatepsbt
+    summary: "Updates PSBT input/output metadata using UTXO set information"
+    params: "[psbt(base64), descriptors?(array)]"
+    example: {"chain":"btc","method":"utxoupdatepsbt","params":["cHNidP8B..."]}
+
+  # ── Util ───────────────────────────────────────────────────────────────────
+  - name: createmultisig
+    summary: "Creates a multisig address and the corresponding redeemScript"
+    params: "[nrequired(int), keys(array of pubkeys), address_type?(\"legacy\"|\"p2sh-segwit\"|\"bech32\")]"
+    example: {"chain":"btc","method":"createmultisig","params":[2,["pubkey1hex","pubkey2hex"]]}
+
+  - name: deriveaddresses
+    summary: "Derives addresses from an output descriptor"
+    params: "[descriptor(string), range?(int or [start,end])]"
+    example: {"chain":"btc","method":"deriveaddresses","params":["wpkh([d34db33f/84'/0'/0']xpub6DJ2dNUysrn5Vt36jH2KLBT2i1auw1tTSSomg8PhqNiUtx8QX2SvC9nrHu81fT41fvDUnhMjEzQgXnQjYkx8OVnVMVFPHEHGZjvBkJh548G/0/*)#trd0mf0l",[0,2]]}
+
+  - name: estimatesmartfee
+    summary: "Estimates the fee rate (BTC/kB) needed to confirm a transaction within nblocks blocks"
+    params: "[nblocks(int), estimate_mode?(\"UNSET\"|\"ECONOMICAL\"|\"CONSERVATIVE\")]"
+    example: {"chain":"btc","method":"estimatesmartfee","params":[6,"CONSERVATIVE"]}
+
+  - name: verifymessage
+    summary: "Verifies whether a Bitcoin address signature over a message is valid"
+    params: "[address(base58check), signature(base64), message(string)]"
+    example: {"chain":"btc","method":"verifymessage","params":["1D1ZrZNe3JUo7ZycKEYQQiQAWd9y54F4XX","signature","my message"]}
+
+  # ── Wallet ─────────────────────────────────────────────────────────────────
+  - name: getaddressinfo
+    summary: "Returns detailed information about the specified address (script type, pubkey, whether it's in the local wallet, etc.)"
+    params: "[address(string)]"
+    example: {"chain":"btc","method":"getaddressinfo","params":["bc1q09vm5lfy0j5reeulh4x5752q25uqqvz34hufdl"]}

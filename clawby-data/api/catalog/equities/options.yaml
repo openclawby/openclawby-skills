@@ -1,0 +1,23 @@
+# ============================================================================
+# Equities — Options
+# Usage: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Options"
+
+note: >
+  Option OHLC bars are under "Option aggregate OHLC bars (k-line)" in bars.yaml;
+  option contract listing (valid expirations/strikes) is under "List of option contracts" in reference.yaml.
+
+interfaces:
+  - name: "Option chain summary (max pain, ITM/OTM)"
+    summary: "options chain summary for a given stock and expiration: Max Pain price and ITM/OTM open interest by strike"
+    params:
+      - {name: expiration, required: true,  format: "YYYY-MM-DD",  example: "2025-01-17"}
+      - {name: underlying, required: true,  format: "US:TICKER",   example: "US:SPY"}
+      - {name: format,     required: false, format: "json|csv"}
+    gotchas:
+      - "⚠️ expiration must be an actual valid expiration date for that underlying; use 'List of option contracts' in reference.yaml to confirm valid dates"
+      - "⚠️ underlying must use stock format US:SPY, not bare ticker SPY"
+    example:
+      name: "Option chain summary (max pain, ITM/OTM)"
+      params: {expiration: "2025-01-17", underlying: "US:SPY"}

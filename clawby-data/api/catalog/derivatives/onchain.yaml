@@ -1,0 +1,134 @@
+# ============================================================================
+# Derivatives — On-chain / Hyperliquid / Whale
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "On-chain / Hyperliquid / Whale"
+
+gotchas_for_all:
+  - "⚠️ Hyperliquid endpoints do not require the exchange param; use coin name BTC for symbol"
+  - "⚠️ exchange_assets's exchange is the on-chain exchange name (e.g. Binance), same meaning as futures exchange"
+  - "⚠️ coin_vesting symbol may require a project-specific ticker (confirm first if not a standard ticker like BTC)"
+  - "⚠️ exchange_chain_tx_list returns ERC-20 on-chain transfer records"
+  - "⚠️ Response is {code, data}; success only when code='0'"
+
+interfaces:
+  - name: "hyperliquid_whale_alert"
+    summary: "Hyperliquid whale large-position open/close alerts (real-time)"
+    params: []
+    example:
+      name: "hyperliquid_whale_alert"
+      params: {}
+
+  - name: "hyperliquid_whale_position"
+    summary: "Hyperliquid current whale position snapshot"
+    params: []
+    example:
+      name: "hyperliquid_whale_position"
+      params: {}
+
+  - name: "hyperliquid_position"
+    summary: "Hyperliquid position list for all wallets holding a given coin"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ use coin name BTC; no exchange param"}
+      - {name: current_page, required: false, format: "integer, page number", example: 1}
+    example:
+      name: "hyperliquid_position"
+      params: {symbol: "BTC"}
+
+  - name: "hyperliquid_user_position"
+    summary: "Hyperliquid position details for a specific wallet address"
+    params:
+      - {name: user_address, required: true, format: "wallet address (0x...)", example: "0xabc123..."}
+    gotchas:
+      - "⚠️ user_address is an on-chain wallet address, not a username"
+    example:
+      name: "hyperliquid_user_position"
+      params: {user_address: "0xabc123..."}
+
+  - name: "hyperliquid_wallet_position_distribution"
+    summary: "Hyperliquid global wallet position distribution stats"
+    params: []
+    example:
+      name: "hyperliquid_wallet_position_distribution"
+      params: {}
+
+  - name: "hyperliquid_wallet_pnl_distribution"
+    summary: "Hyperliquid global wallet PnL distribution stats"
+    params: []
+    example:
+      name: "hyperliquid_wallet_pnl_distribution"
+      params: {}
+
+  - name: "exchange_assets_transparency_list"
+    summary: "Exchange on-chain asset transparency list (publicly disclosed reserve assets per exchange)"
+    params: []
+    example:
+      name: "exchange_assets_transparency_list"
+      params: {}
+
+  - name: "exchange_assets"
+    summary: "On-chain reserve asset breakdown for a given exchange"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: per_page, required: false, format: "integer, items per page"}
+      - {name: page, required: false, format: "integer, page number"}
+    example:
+      name: "exchange_assets"
+      params: {exchange: "Binance"}
+
+  - name: "exchange_balance_list"
+    summary: "On-chain balance list per exchange for a given coin"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+    example:
+      name: "exchange_balance_list"
+      params: {symbol: "BTC"}
+
+  - name: "exchange_balance_chart"
+    summary: "Historical on-chain balance trend per exchange for a given coin (chart format)"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+    example:
+      name: "exchange_balance_chart"
+      params: {symbol: "BTC"}
+
+  - name: "coin_unlock_list"
+    summary: "Token unlock schedule list across projects"
+    params:
+      - {name: per_page, required: false, format: "integer, items per page"}
+      - {name: page, required: false, format: "integer, page number"}
+    example:
+      name: "coin_unlock_list"
+      params: {}
+
+  - name: "coin_vesting"
+    summary: "Token vesting/unlock schedule for a given project"
+    params:
+      - {name: symbol, required: true, format: "token symbol or project name", example: "BTC", note: "if not a standard ticker, confirm with coin_unlock_list first"}
+    example:
+      name: "coin_vesting"
+      params: {symbol: "BTC"}
+
+  - name: "exchange_chain_tx_list"
+    summary: "Exchange ERC-20 on-chain transfer records"
+    params:
+      - {name: symbol, required: false, format: "coin name", example: "USDT"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: min_usd, required: false, format: "minimum amount (USD)", example: 1000000}
+      - {name: per_page, required: false, format: "integer, items per page"}
+      - {name: page, required: false, format: "integer, page number"}
+    gotchas:
+      - "⚠️ This endpoint returns ERC-20 (Ethereum) on-chain transfers only; other chains are not covered"
+    example:
+      name: "exchange_chain_tx_list"
+      params: {min_usd: 1000000}
+
+  - name: "chain_v2_whale_transfer"
+    summary: "On-chain whale large-transfer records (v2)"
+    params:
+      - {name: symbol, required: false, format: "coin name", example: "BTC"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "chain_v2_whale_transfer"
+      params: {}

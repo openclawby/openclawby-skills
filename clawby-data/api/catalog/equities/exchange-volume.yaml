@@ -1,0 +1,55 @@
+# ============================================================================
+# Equities & Markets — Exchange Volume
+# Usage: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Exchange Volume"
+
+gotchas_for_all:
+  - "⚠️ stock symbol format: US:TICKER (e.g. US:AAPL / US:SPY)"
+  - "exchange fields in responses are MIC codes (e.g. xnas-ltse), not full exchange names"
+
+interfaces:
+  - name: "Exchange volume for a given stock"
+    summary: "daily historical volume for a given stock, broken down by exchange"
+    params:
+      - {name: symbol,    required: true,  format: "US:TICKER",     example: "US:SPY"}
+      - {name: ordering,  required: false, format: "date|-date",     example: "date"}
+      - {name: page,      required: false, format: "integer"}
+      - {name: page_size, required: false, format: "integer, max 1000"}
+      - {name: format,    required: false, format: "json|csv"}
+    example:
+      name: "Exchange volume for a given stock"
+      params: {symbol: "US:SPY"}
+
+  - name: "Historical exchange volume for a given stock at 30 minute intervals"
+    summary: "30-minute intraday historical volume for a given stock, broken down by exchange"
+    params:
+      - {name: symbol,    required: true,  format: "US:TICKER",         example: "US:AAPL"}
+      - {name: ordering,  required: false, format: "datetime|-datetime", example: "datetime"}
+      - {name: page,      required: false, format: "integer"}
+      - {name: page_size, required: false, format: "integer, max 1000"}
+      - {name: format,    required: false, format: "json|csv"}
+    gotchas:
+      - "⚠️ time fields in responses are in America/New_York timezone"
+    example:
+      name: "Historical exchange volume for a given stock at 30 minute intervals"
+      params: {symbol: "US:AAPL"}
+
+  - name: "Crypto level 2 snapshots"
+    summary: "per-minute order book depth snapshots for crypto (bids and asks within 10% of mid-price)"
+    params:
+      - {name: symbol,    required: true,  format: "BASE:USD",                                    example: "BTC:USD"}
+      - {name: exchange,  required: true,  format: "exchange code",                               example: "COINBASE"}
+      - {name: start,     required: true,  format: "Unix seconds or 'YYYY-MM-DD HH:MM:SS' (UTC)", example: 1754028000}
+      - {name: end,       required: false, format: "Unix seconds or 'YYYY-MM-DD HH:MM:SS' (UTC)"}
+      - {name: ordering,  required: false, format: "timestamp|-timestamp",                        example: "timestamp"}
+      - {name: page,      required: false, format: "integer"}
+      - {name: page_size, required: false, format: "integer, max 1000"}
+      - {name: format,    required: false, format: "json|csv"}
+    gotchas:
+      - "⚠️ both symbol and exchange are required; omitting either will error"
+      - "the depth field in responses is a JSON string in [bids, asks] format"
+      - "historical depth: BTC:USD / BTC:USDT / ETH:USD / ETH:USDT retained for 180 days; other pairs for 7 days only"
+    example:
+      name: "Crypto level 2 snapshots"
+      params: {symbol: "BTC:USD", exchange: "COINBASE", start: 1754028000}

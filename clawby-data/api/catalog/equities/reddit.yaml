@@ -1,0 +1,65 @@
+# ============================================================================
+# Equities & Markets — Reddit mentions / community sentiment
+# Usage: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Reddit mentions / sentiment"
+
+gotchas_for_all:
+  - "⚠️ field names differ by asset type: stocks use symbol=US:TICKER; crypto uses base=BTC (not symbol!)"
+  - "time-window params are Unix seconds: stocks/crypto use created_gte/created_lt, daily use date_gte/date_lt, top mentions use start/end"
+
+interfaces:
+  - name: "Top mentioned tickers for a given timeframe"
+    summary: "top mentioned tickers in a given time window"
+    params:
+      - {name: start, required: true, format: "Unix seconds (window start)", example: 1733011200}
+      - {name: end,   required: false, format: "Unix seconds (window end)"}
+    gotchas:
+      - "⚠️ start is a required Unix-second timestamp"
+    example:
+      name: "Top mentioned tickers for a given timeframe"
+      params: {start: 1733011200}
+
+  - name: "Reddit mentions for a given stock"
+    summary: "Reddit mention posts for a given stock"
+    params:
+      - {name: symbol,      required: true, format: "US:TICKER", example: "US:AAPL"}
+      - {name: created_gte, required: false, format: "Unix seconds, start"}
+      - {name: created_lt,  required: false, format: "Unix seconds, end"}
+    example:
+      name: "Reddit mentions for a given stock"
+      params: {symbol: "US:AAPL"}
+
+  - name: "Daily Reddit mention counts for a given stock"
+    summary: "daily Reddit mention counts for a given stock"
+    params:
+      - {name: symbol,   required: true, format: "US:TICKER", example: "US:AAPL"}
+      - {name: date_gte, required: false, format: "YYYY-MM-DD or Unix seconds, start"}
+      - {name: date_lt,  required: false, format: "end"}
+    example:
+      name: "Daily Reddit mention counts for a given stock"
+      params: {symbol: "US:AAPL"}
+
+  - name: "Reddit mentions for a given crypto base"
+    summary: "Reddit mention posts for a given crypto"
+    params:
+      - {name: base,        required: true, format: "currency code", example: "BTC", note: "⚠️ field name is base, not symbol; value is BTC not BTC:USD"}
+      - {name: created_gte, required: false, format: "Unix seconds, start"}
+      - {name: created_lt,  required: false, format: "Unix seconds, end"}
+    gotchas:
+      - "⚠️ use base=BTC, not symbol; this is the most common error (400 base required)"
+    example:
+      name: "Reddit mentions for a given crypto base"
+      params: {base: "BTC"}
+
+  - name: "Daily Reddit mention counts for a given crypto base"
+    summary: "daily Reddit mention counts for a given crypto"
+    params:
+      - {name: base,     required: true, format: "currency code", example: "BTC"}
+      - {name: date_gte, required: false}
+      - {name: date_lt,  required: false}
+    gotchas:
+      - "⚠️ use base=BTC, not symbol"
+    example:
+      name: "Daily Reddit mention counts for a given crypto base"
+      params: {base: "BTC"}

@@ -1,0 +1,133 @@
+# ============================================================================
+# EVM RPC — atleta
+# Call: POST /api/rpc   body {"chain":"atleta","method":"<method>","params":[...]}
+# ============================================================================
+chain: "atleta"                # chain param for /api/rpc
+type: EVM
+slug: "atleta"
+status: unverified             # ⚠️ not verified on the current key
+api_style: JSON-RPC
+how_to_call: 'POST /api/rpc  {"chain":"atleta","method":"<method>","params":[...]}'
+notes:
+  - "Atleta is an EVM-compatible modular smart contract platform dedicated to the sports industry (Chain ID: 2340, Olympia Testnet)"
+  - "Standard EVM JSON-RPC, methods are identical to Ethereum; the block parameter accepts latest/earliest/pending or a block number in hex"
+  - "Use eth_call to read ERC-20 data (decimals/symbol/totalSupply/balanceOf); use eth_getLogs to query transfer events"
+  - "eth_accounts is not supported on public RPC (the node does not hold private keys); sign locally then use eth_sendRawTransaction"
+  - "⚠️ not verified on the current key; availability depends on the plan"
+methods:
+  - name: eth_protocolVersion
+    summary: "Returns the current Ethereum protocol version"
+    params: "none"
+    example: {"chain":"atleta","method":"eth_protocolVersion","params":[]}
+  - name: eth_blockNumber
+    summary: "Returns the latest block number (hex)"
+    params: "none"
+    example: {"chain":"atleta","method":"eth_blockNumber","params":[]}
+  - name: eth_chainId
+    summary: "Returns the chain ID (hex)"
+    params: "none"
+    example: {"chain":"atleta","method":"eth_chainId","params":[]}
+  - name: eth_gasPrice
+    summary: "Returns the current gas price (hex wei)"
+    params: "none"
+    example: {"chain":"atleta","method":"eth_gasPrice","params":[]}
+  - name: eth_getBalance
+    summary: "Returns account balance (hex wei)"
+    params: "[address, block] — block is latest/earliest/pending or a block number in hex"
+    example: {"chain":"atleta","method":"eth_getBalance","params":["0xADDRESS", "latest"]}
+  - name: eth_getCode
+    summary: "Returns the contract bytecode at the given address"
+    params: "[address, block]"
+    example: {"chain":"atleta","method":"eth_getCode","params":["0xCONTRACT", "latest"]}
+  - name: eth_getStorageAt
+    summary: "Returns the value at a contract storage slot"
+    params: "[address, position(hex), block]"
+    example: {"chain":"atleta","method":"eth_getStorageAt","params":["0xCONTRACT", "0x0", "latest"]}
+  - name: eth_getTransactionCount
+    summary: "Returns the transaction count (nonce) for the address"
+    params: "[address, block]"
+    example: {"chain":"atleta","method":"eth_getTransactionCount","params":["0xADDRESS", "latest"]}
+  - name: eth_call
+    summary: "Read-only contract call (off-chain); use this for ERC-20 reads, etc."
+    params: "[{to, data, from?, value?}, block]"
+    example: {"chain":"atleta","method":"eth_call","params":[{"to":"0xCONTRACT","data":"0x18160ddd"}, "latest"]}
+  - name: eth_estimateGas
+    summary: "Estimates the gas required for a transaction"
+    params: "[{from?, to, data?, value?}]"
+    example: {"chain":"atleta","method":"eth_estimateGas","params":[{"to":"0xADDRESS","value":"0x1"}]}
+  - name: eth_getLogs
+    summary: "Returns event logs matching the filter (e.g., Transfer events)"
+    params: "[{fromBlock, toBlock, address?, topics?}] — large block ranges may be throttled"
+    example: {"chain":"atleta","method":"eth_getLogs","params":[{"fromBlock":"0x0","toBlock":"latest","address":"0xCONTRACT","topics":["0xddf252ad..."]}]}
+  - name: eth_getBlockByNumber
+    summary: "Returns a block by block number"
+    params: "[block, fullTx(bool)]"
+    example: {"chain":"atleta","method":"eth_getBlockByNumber","params":["latest", false]}
+  - name: eth_getBlockByHash
+    summary: "Returns a block by block hash"
+    params: "[blockHash, fullTx(bool)]"
+    example: {"chain":"atleta","method":"eth_getBlockByHash","params":["0xHASH", false]}
+  - name: eth_getBlockTransactionCountByNumber
+    summary: "Returns the transaction count for a block by block number"
+    params: "[block]"
+    example: {"chain":"atleta","method":"eth_getBlockTransactionCountByNumber","params":["latest"]}
+  - name: eth_getBlockTransactionCountByHash
+    summary: "Returns the transaction count for a block by block hash"
+    params: "[blockHash]"
+    example: {"chain":"atleta","method":"eth_getBlockTransactionCountByHash","params":["0xHASH"]}
+  - name: eth_getTransactionByHash
+    summary: "Returns transaction details by hash"
+    params: "[txHash]"
+    example: {"chain":"atleta","method":"eth_getTransactionByHash","params":["0xTXHASH"]}
+  - name: eth_getTransactionByBlockNumberAndIndex
+    summary: "Returns a transaction by block number and index"
+    params: "[block, index(hex)]"
+    example: {"chain":"atleta","method":"eth_getTransactionByBlockNumberAndIndex","params":["latest", "0x0"]}
+  - name: eth_getTransactionByBlockHashAndIndex
+    summary: "Returns a transaction by block hash and index"
+    params: "[blockHash, index(hex)]"
+    example: {"chain":"atleta","method":"eth_getTransactionByBlockHashAndIndex","params":["0xHASH", "0x0"]}
+  - name: eth_getTransactionReceipt
+    summary: "Returns the transaction receipt (status, logs, gas used)"
+    params: "[txHash]"
+    example: {"chain":"atleta","method":"eth_getTransactionReceipt","params":["0xTXHASH"]}
+  - name: eth_sendRawTransaction
+    summary: "Broadcasts a signed transaction (sign locally, then use this to submit on-chain)"
+    params: "[signedTxData(hex)]"
+    example: {"chain":"atleta","method":"eth_sendRawTransaction","params":["0xSIGNEDTX"]}
+  - name: eth_syncing
+    summary: "Returns sync status (false = synced)"
+    params: "none"
+    example: {"chain":"atleta","method":"eth_syncing","params":[]}
+  - name: eth_getUncleCountByBlockNumber
+    summary: "Returns the uncle count for a block by block number"
+    params: "[block]"
+    example: {"chain":"atleta","method":"eth_getUncleCountByBlockNumber","params":["latest"]}
+  - name: eth_getUncleCountByBlockHash
+    summary: "Returns the uncle count for a block by block hash"
+    params: "[blockHash]"
+    example: {"chain":"atleta","method":"eth_getUncleCountByBlockHash","params":["0xHASH"]}
+  - name: eth_getUncleByBlockNumberAndIndex
+    summary: "Returns an uncle by block number and index"
+    params: "[block, index(hex)]"
+    example: {"chain":"atleta","method":"eth_getUncleByBlockNumberAndIndex","params":["latest", "0x0"]}
+  - name: eth_getUncleByBlockHashAndIndex
+    summary: "Returns an uncle by block hash and index"
+    params: "[blockHash, index(hex)]"
+    example: {"chain":"atleta","method":"eth_getUncleByBlockHashAndIndex","params":["0xHASH", "0x0"]}
+  - name: net_version
+    summary: "Returns the network ID (Atleta Olympia: 2340)"
+    params: "none"
+    example: {"chain":"atleta","method":"net_version","params":[]}
+  - name: net_listening
+    summary: "Whether the node is listening (bool)"
+    params: "none"
+    example: {"chain":"atleta","method":"net_listening","params":[]}
+  - name: web3_clientVersion
+    summary: "Returns the node client version"
+    params: "none"
+    example: {"chain":"atleta","method":"web3_clientVersion","params":[]}
+  - name: web3_sha3
+    summary: "Returns the Keccak-256 hash of the input"
+    params: "[data(hex)]"
+    example: {"chain":"atleta","method":"web3_sha3","params":["0x68656c6c6f"]}

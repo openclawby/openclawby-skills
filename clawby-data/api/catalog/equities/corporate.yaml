@@ -1,0 +1,39 @@
+# ============================================================================
+# Equities — Corporate Actions
+# Usage: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Corporate Actions"
+
+gotchas_for_all:
+  - "⚠️ symbol format: US:TICKER (e.g. US:AAPL / US:SPY)"
+
+interfaces:
+  - name: "Dividends for a given stock"
+    summary: "dividend history for a given stock (amount, ex-date, pay-date, etc.)"
+    params:
+      - {name: symbol, required: true,  format: "US:TICKER", example: "US:AAPL"}
+      - {name: format, required: false, format: "json|csv"}
+    example:
+      name: "Dividends for a given stock"
+      params: {symbol: "US:AAPL"}
+
+  - name: "Splits for a given stock"
+    summary: "stock split/reverse-split history (ratio and date)"
+    params:
+      - {name: symbol, required: true,  format: "US:TICKER", example: "US:AAPL"}
+      - {name: format, required: false, format: "json|csv"}
+    example:
+      name: "Splits for a given stock"
+      params: {symbol: "US:AAPL"}
+
+  - name: "Historical Float and Shares Outstanding for a given stock"
+    summary: "historical float and shares outstanding trend for a given stock"
+    params:
+      - {name: symbol,    required: true,  format: "US:TICKER", example: "US:SPY"}
+      - {name: ordering,  required: false, format: "date|-date", example: "-date"}
+      - {name: page,      required: false, format: "integer"}
+      - {name: page_size, required: false, format: "integer, max 1000"}
+      - {name: format,    required: false, format: "json|csv"}
+    example:
+      name: "Historical Float and Shares Outstanding for a given stock"
+      params: {symbol: "US:SPY"}

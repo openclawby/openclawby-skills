@@ -1,0 +1,50 @@
+# ============================================================================
+# Filings — SEC Filings / Company Concept Data (US Stocks)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "SEC Filings and Company Documents (US Stocks)"
+note: >
+  US-listed companies only. All interfaces retrieve data via SEC EDGAR.
+  Typical flow: use sec_cik_lookup to find a CIK, then pass it to other interfaces.
+
+interfaces:
+  - name: "sec_cik_lookup"
+    summary: "Search for a company's SEC CIK number and recent filing list by name"
+    params:
+      - {name: company, required: true,  format: "full company name or keyword", example: "Apple Inc", note: "⚠️ ticker abbreviations (e.g. AAPL) are not supported; must pass company name"}
+      - {name: type,    required: false, format: "filing type filter", example: "10-K", note: "e.g. 10-K / 10-Q / 8-K; omit to return all types"}
+    gotchas:
+      - "⚠️ Returns Atom XML, not JSON; read the CIK value from the <cik> tag"
+      - "⚠️ ticker symbols (e.g. AAPL) are not supported; search by company name, e.g. 'Apple Inc'"
+      - "Search is fuzzy and may return multiple companies with similar names; take the first result or verify by company name"
+      - "Once you have the CIK, use sec_company_concept or sec_submissions for detailed data"
+    example:
+      name: "sec_cik_lookup"
+      params: {company: "Apple Inc"}
+
+  - name: "sec_company_concept"
+    summary: "Query historical reported values for a US-GAAP financial concept (across all quarterly/annual filings)"
+    params:
+      - {name: cik,     required: true, format: "SEC CIK number", example: "320193", note: "plain digits only; system zero-pads to 10 digits; get via sec_cik_lookup if needed"}
+      - {name: concept, required: true, format: "us-gaap concept tag name", example: "NetIncomeLoss", note: "must be a valid XBRL us-gaap tag; common ones: NetIncomeLoss / Assets / Revenues / StockholdersEquity / EarningsPerShareDiluted"}
+    gotchas:
+      - "⚠️ concept must be a valid us-gaap tag; typos or wrong tags return 404"
+      - "⚠️ tags vary by company: for net income use NetIncomeLoss, not Revenues; use Revenues only to query revenue"
+      - "⚠️ some companies use custom tags (non-us-gaap); this interface only supports the us-gaap namespace"
+      - "Returns JSON with values and reporting periods for all historical annual (10-K) and quarterly (10-Q) filings"
+      - "If you only have a ticker, use sec_cik_lookup first to get the CIK"
+    example:
+      name: "sec_company_concept"
+      params: {cik: "320193", concept: "NetIncomeLoss"}
+
+  - name: "sec_submissions"
+    summary: "Query company basic info and full SEC filing history (10-K / 10-Q / 8-K, etc.)"
+    params:
+      - {name: cik, required: true, format: "SEC CIK number", example: "320193", note: "plain digits only; system zero-pads to 10 digits; get via sec_cik_lookup if needed"}
+    gotchas:
+      - "If you only have a ticker, use sec_cik_lookup first to get the CIK"
+      - "Returns JSON: company name / SIC code / tickers / exchanges / recent filing list (with accession numbers)"
+      - "Accession numbers in the filing list can be used to fetch the full documents"
+    example:
+      name: "sec_submissions"
+      params: {cik: "320193"}

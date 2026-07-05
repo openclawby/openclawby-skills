@@ -1,0 +1,140 @@
+# ============================================================================
+# Equities — Screener
+# Usage: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Screener"
+
+gotchas_for_all:
+  - "⚠️ screener returns real-time data; other quote endpoints are delayed 30 minutes"
+  - "filter values (equity_type / exchange / sector, etc.) must be fetched from the corresponding list endpoint first"
+
+interfaces:
+  - name: "Screen thousands of stocks on numerous fields"
+    summary: "filter stocks on dozens of fields (real-time price / volume / market cap / Beta / borrow rate, etc.)"
+    params:
+      - {name: view_cols,           required: false, format: "comma-separated column names from 'List of Columns'",         example: "display,reg_price,reg_change_pct,market_cap,reg_volume"}
+      - {name: per_page,            required: false, format: "integer, max 100"}
+      - {name: page,                required: false, format: "integer"}
+      - {name: sort,                required: false, format: "'column,asc|desc'",                                           example: "market_cap,desc"}
+      - {name: symbol,              required: false, format: "bare tickers comma-separated (no US: prefix)",                example: "AAPL,SPY", note: "⚠️ no US: prefix here"}
+      - {name: region,              required: false, format: "comma-separated, values from List of Regions",               example: "US,CA"}
+      - {name: equity_type,         required: false, format: "comma-separated, values from List of EquityTypes",           example: "cs,et"}
+      - {name: exchange,            required: false, format: "comma-separated, values from List of Exchanges",             example: "NASDAQ,NYSE"}
+      - {name: currency,            required: false, format: "comma-separated, values from List of Currencies",            example: "USD"}
+      - {name: sector,              required: false, format: "comma-separated numeric IDs from List of Sectors",           example: "3,10"}
+      - {name: industry,            required: false, format: "comma-separated numeric IDs from List of Industries",        example: "38,114"}
+      - {name: country,             required: false, format: "comma-separated country names from List of Countries",       example: "United States,Canada"}
+      - {name: next_earnings,       required: false, format: "comma-separated dates from List of NextEarnings",            example: "2024-04-15"}
+      - {name: options,             required: false, format: "values from List of Options",                                example: "Y"}
+      - {name: market_cap,          required: false, format: "expression: >1B <1T (B=billion, m=million)",                 example: ">1B <1T"}
+      - {name: thirty_day_avg_vol,  required: false, format: "expression (30-day avg volume)",                             example: ">=10m"}
+      - {name: relative_vol,        required: false, format: "expression (relative volume)",                               example: ">2.5"}
+      - {name: reg_volume,          required: false, format: "expression (today's volume)"}
+      - {name: ten_day_avg_vol,     required: false, format: "expression (10-day avg volume)",                             example: ">=1m"}
+      - {name: shares_out,          required: false, format: "expression (shares outstanding)"}
+      - {name: pe_ratio,            required: false, format: "expression (P/E ratio)"}
+      - {name: six_month_beta,      required: false, format: "expression (6-month Beta)"}
+      - {name: one_year_beta,       required: false, format: "expression (1-year Beta)"}
+      - {name: two_year_beta,       required: false, format: "expression (2-year Beta)"}
+      - {name: five_year_beta,      required: false, format: "expression (5-year Beta)"}
+      - {name: employees,           required: false, format: "expression (employee count)"}
+      - {name: reg_price,           required: false, format: "expression (current price)"}
+      - {name: reg_change_pct,      required: false, format: "expression (day change %)",                                  example: "<-5"}
+      - {name: open_change_pct,     required: false, format: "expression (change % from open)",                            example: ">2"}
+      - {name: pre_change_pct,      required: false, format: "expression (pre-market %)"}
+      - {name: ah_change_pct,       required: false, format: "expression (after-hours %)"}
+      - {name: one_week_change_pct,   required: false, format: "expression (1-week %)"}
+      - {name: one_month_change_pct,  required: false, format: "expression (1-month %)"}
+      - {name: mtd_change_pct,        required: false, format: "expression (month-to-date %)"}
+      - {name: three_month_change_pct, required: false, format: "expression (3-month %)"}
+      - {name: six_month_change_pct,  required: false, format: "expression (6-month %)"}
+      - {name: one_year_change_pct,   required: false, format: "expression (1-year %)"}
+      - {name: ytd_change_pct,        required: false, format: "expression (year-to-date %)"}
+      - {name: two_year_change_pct,   required: false, format: "expression (2-year %)"}
+      - {name: three_year_change_pct, required: false, format: "expression (3-year %)"}
+      - {name: five_year_change_pct,  required: false, format: "expression (5-year %)"}
+      - {name: borrow_fee_rate_ib,    required: false, format: "expression (IB borrow fee rate %)",                       example: ">50"}
+      - {name: format,                required: false, format: "json|csv"}
+    gotchas:
+      - "⚠️ symbol takes a bare ticker (AAPL), no US: prefix — unlike all other endpoints!"
+      - "⚠️ pagination uses per_page (max 100) + page, not page_size"
+      - "numeric filter expression examples: >1B <1T / >=10m / <-5 (B=billion, m=million; multiple conditions can be combined)"
+    example:
+      name: "Screen thousands of stocks on numerous fields"
+      params:
+        view_cols: "display,reg_price,reg_change_pct,market_cap,reg_volume"
+        market_cap: ">1B"
+        reg_change_pct: "<-5"
+        sort: "market_cap,desc"
+
+  - name: "List of Columns"
+    summary: "all available screener column names (for use with the view_cols param)"
+    params:
+      - {name: format, required: false, format: "json|csv"}
+    example:
+      name: "List of Columns"
+      params: {}
+
+  # ── The following 9 endpoints return valid enum values for each screener filter dimension; only optional format/pagination params ──
+  - name: "List of Regions"
+    summary: "valid region enum values for the screener region param"
+    params:
+      - {name: format, required: false, format: "json|csv"}
+    gotchas: ["returned values are for the screener region param, e.g. US / CA"]
+    example: {name: "List of Regions", params: {}}
+
+  - name: "List of EquityTypes"
+    summary: "valid equity type enum values for the screener equity_type param"
+    params:
+      - {name: format, required: false, format: "json|csv"}
+    gotchas: ["returned values such as cs (common stock) / et (ETF) / ad (ADR), for use with equity_type"]
+    example: {name: "List of EquityTypes", params: {}}
+
+  - name: "List of Exchanges"
+    summary: "valid exchange enum values for the screener exchange param"
+    params:
+      - {name: format, required: false, format: "json|csv"}
+    gotchas: ["returned values such as NASDAQ/NYSE/NYSEAMERICAN/BATS, for use with exchange"]
+    example: {name: "List of Exchanges", params: {}}
+
+  - name: "List of Currencies"
+    summary: "valid currency enum values for the screener currency param"
+    params:
+      - {name: format, required: false, format: "json|csv"}
+    gotchas: ["returned values such as USD, for use with currency"]
+    example: {name: "List of Currencies", params: {}}
+
+  - name: "List of Sectors"
+    summary: "valid sector enum values for the screener sector param"
+    params:
+      - {name: format, required: false, format: "json|csv"}
+    gotchas: ["⚠️ returns numeric IDs; use the numeric ID when passing to the screener sector param"]
+    example: {name: "List of Sectors", params: {}}
+
+  - name: "List of Industries"
+    summary: "valid industry enum values for the screener industry param"
+    params:
+      - {name: format, required: false, format: "json|csv"}
+    gotchas: ["⚠️ returns numeric IDs; use the numeric ID when passing to the screener industry param"]
+    example: {name: "List of Industries", params: {}}
+
+  - name: "List of Countries"
+    summary: "valid country enum values for the screener country param"
+    params:
+      - {name: format, required: false, format: "json|csv"}
+    gotchas: ["returns country name strings such as United States, for use with country"]
+    example: {name: "List of Countries", params: {}}
+
+  - name: "List of NextEarnings"
+    summary: "valid next-earnings date enum values for the screener next_earnings param"
+    params:
+      - {name: format, required: false, format: "json|csv"}
+    gotchas: ["returns date strings such as 2024-04-15, for use with next_earnings"]
+    example: {name: "List of NextEarnings", params: {}}
+
+  - name: "List of Options"
+    summary: "valid options flag enum values for the screener options param"
+    params:
+      - {name: format, required: false, format: "json|csv"}
+    gotchas: ["returned values such as Y (has options), for use with options"]
+    example: {name: "List of Options", params: {}}

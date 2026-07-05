@@ -1,0 +1,29 @@
+# ============================================================================
+# DEX Category Index
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "DEX (DexScreener)"
+description: "Cross-chain DEX data: search tokens/pairs, query pool quotes, check promotional orders. Supports Ethereum / Solana / BSC / Base / Arbitrum and other major chains."
+
+files:
+  - file: "search.yaml"
+    summary: "Search & Profiles"
+    interfaces:
+      - dexscreener_search           # cross-chain keyword search for trading pairs
+      - dexscreener_token_profiles   # list of recently indexed token profiles
+      - dexscreener_token_boosts_latest  # most recently boosted tokens
+      - dexscreener_token_boosts_top     # top tokens by boost volume
+
+  - file: "pairs.yaml"
+    summary: "Pairs & Liquidity Pools"
+    interfaces:
+      - dexscreener_token_pools   # specified chain + token address → all pools on that chain
+      - dexscreener_token_pairs   # token address only → all pairs across chains
+      - dexscreener_pair          # chainId + pairId → full data for a single pool
+      - dexscreener_orders        # chainId + tokenAddress → paid promotional orders
+
+gotchas_global:
+  - "All interface names start with dexscreener_ — pass them as-is in the name field"
+  - "Path parameters (chainId / tokenAddress / pairId) are passed via the params field"
+  - "Common chainId values: ethereum / solana / bsc / base / arbitrum / polygon / avalanche"
+  - "tokenAddress and pairId are different addresses — do not mix them up"

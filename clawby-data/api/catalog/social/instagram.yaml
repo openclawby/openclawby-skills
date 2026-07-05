@@ -1,0 +1,79 @@
+# ============================================================================
+# Social — Instagram
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Social — Instagram"
+
+gotchas_for_all:
+  - "Path-style params (media_id / id / username / tag) must exist; use instagram_search to retrieve them first"
+  - "instagram_search occasionally times out; retry or reduce count"
+
+interfaces:
+  - name: "instagram_search"
+    summary: "Search Instagram by keyword / username / phrase"
+    params:
+      - {name: query, required: true, example: "bitcoin", note: "keyword, username, or phrase"}
+      - {name: count, required: false, format: "int, default 10"}
+      - {name: cursor, required: false, note: "pagination cursor"}
+    gotchas:
+      - "⚠️ query is required; missing it returns 422"
+      - "⚠️ occasionally times out; retry or reduce count"
+    example:
+      name: "instagram_search"
+      params: {query: "bitcoin"}
+
+  - name: "instagram_media"
+    summary: "Fetch a single Instagram media item by ID"
+    params:
+      - {name: id, required: true, example: "3456789012345678901", note: "real media id"}
+    gotchas:
+      - "⚠️ id is required (path param); use instagram_search first to get the media id"
+    example:
+      name: "instagram_media"
+      params: {id: "3456789012345678901"}
+
+  - name: "instagram_comments"
+    summary: "Fetch the comment list for an Instagram media item"
+    params:
+      - {name: media_id, required: true, example: "3456789012345678901", note: "real media id"}
+      - {name: count, required: false, format: "int, default 20"}
+      - {name: cursor, required: false, note: "pagination cursor"}
+    gotchas:
+      - "⚠️ media_id is required (path param); the param name is media_id, not id"
+    example:
+      name: "instagram_comments"
+      params: {media_id: "3456789012345678901"}
+
+  - name: "instagram_profile"
+    summary: "Fetch an Instagram user's profile"
+    params:
+      - {name: username, required: true, example: "cristiano", note: "username, without @"}
+    gotchas:
+      - "⚠️ username is required (path param); no @"
+    example:
+      name: "instagram_profile"
+      params: {username: "cristiano"}
+
+  - name: "instagram_profile_posts"
+    summary: "Fetch posts from an Instagram user"
+    params:
+      - {name: username, required: true, example: "cristiano", note: "username, without @"}
+      - {name: count, required: false, format: "int, default 20"}
+      - {name: cursor, required: false, note: "pagination cursor"}
+    gotchas:
+      - "⚠️ username is required (path param); no @"
+    example:
+      name: "instagram_profile_posts"
+      params: {username: "cristiano"}
+
+  - name: "instagram_hashtag"
+    summary: "Fetch Instagram media by hashtag"
+    params:
+      - {name: tag, required: true, example: "bitcoin", note: "hashtag, without #"}
+      - {name: count, required: false, format: "int, default 20"}
+      - {name: cursor, required: false, note: "pagination cursor"}
+    gotchas:
+      - "⚠️ tag is required (path param); omit the # symbol"
+    example:
+      name: "instagram_hashtag"
+      params: {tag: "bitcoin"}

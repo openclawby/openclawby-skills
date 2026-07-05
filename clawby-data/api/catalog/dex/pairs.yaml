@@ -1,0 +1,57 @@
+# ============================================================================
+# DEX — Trading Pairs / Token Pools (Pairs & Pools)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "DEX Trading Pairs & Liquidity Pools"
+
+interfaces:
+  - name: "dexscreener_token_pools"
+    summary: "Query all DEX pools for a token on a specified chain (price / liquidity / volume)"
+    params:
+      - {name: chainId,        required: true,  format: "chain identifier", example: "solana",  note: "e.g. ethereum / solana / bsc / base / arbitrum"}
+      - {name: tokenAddresses, required: true,  format: "contract address, comma-separated, up to 30", example: "So11111111111111111111111111111111111111112"}
+    gotchas:
+      - "chainId + tokenAddresses are both path parameters and both required"
+      - "Only returns pools on the specified chainId; if the chain is unknown, use dexscreener_token_pairs (cross-chain) instead"
+      - "Multiple addresses separated by commas, max 30"
+    example:
+      name: "dexscreener_token_pools"
+      params: {chainId: "solana", tokenAddresses: "So11111111111111111111111111111111111111112"}
+
+  - name: "dexscreener_token_pairs"
+    summary: "Query DEX pairs for a token across all chains (no chainId required)"
+    params:
+      - {name: tokenAddresses, required: true, format: "contract address, comma-separated, up to 30", example: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599", note: "tokens with the same name have different addresses on different chains — pass the contract address for the target chain"}
+    gotchas:
+      - "No chainId required; results aggregate all pairs for that address across chains"
+      - "If the same token has bridged versions on multiple chains, pass each chain's contract address separately"
+      - "Difference from dexscreener_token_pools: pools is chain-specific, pairs aggregates cross-chain"
+    example:
+      name: "dexscreener_token_pairs"
+      params: {tokenAddresses: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"}
+
+  - name: "dexscreener_pair"
+    summary: "Query full data for a single DEX pool by chain + pair address"
+    params:
+      - {name: chainId, required: true, format: "chain identifier", example: "ethereum",  note: "e.g. ethereum / solana / bsc / base / arbitrum"}
+      - {name: pairId,  required: true, format: "pair/pool contract address", example: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", note: "contract address of the pair/pool, not the token address"}
+    gotchas:
+      - "pairId is the contract address of the trading pair (pool), not the token address — the most common source of errors"
+      - "Both chainId + pairId are required; together they identify a unique pool"
+      - "Returns a single full record: priceUsd / liquidity / volume / txns / priceChange / fdv / marketCap"
+    example:
+      name: "dexscreener_pair"
+      params: {chainId: "ethereum", pairId: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"}
+
+  - name: "dexscreener_orders"
+    summary: "Query paid promotional orders for a token (Profile/Boost/Ads)"
+    params:
+      - {name: chainId,      required: true, format: "chain identifier", example: "ethereum",  note: "e.g. ethereum / solana / bsc / base / arbitrum"}
+      - {name: tokenAddress, required: true, format: "token contract address", example: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"}
+    gotchas:
+      - "Both chainId + tokenAddress are required; note this is tokenAddress (not pairId)"
+      - "Returns an orders/boosts array with fields: type (tokenProfile / tokenAd / communityTakeover) / status / timestamps"
+      - "Only returns paid promotional records — does not indicate real trading activity for the token"
+    example:
+      name: "dexscreener_orders"
+      params: {chainId: "ethereum", tokenAddress: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"}

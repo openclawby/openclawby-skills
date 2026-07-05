@@ -1,0 +1,53 @@
+# ============================================================================
+# Perps — User Data (Positions / Spot Balances / Open Orders / Fill History)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Perps Platform — User Account Data"
+note: >
+  All interfaces below require a 0x wallet address (user field) and return that address's account state on the platform.
+  No signing required — read-only queries only.
+
+gotchas_for_all:
+  - "⚠️ user must be a complete 0x Ethereum wallet address (42 chars); missing or malformed values return 400."
+
+interfaces:
+  - name: "hyperliquid_user_state"
+    summary: "Perp account state for a wallet: positions / margin / unrealized PnL / withdrawable amount"
+    params:
+      - {name: user, required: true, format: "0x wallet address (42 chars)", example: "0xabcdef1234567890abcdef1234567890abcdef12"}
+    gotchas:
+      - "Returns assetPositions[] (per-asset positions), marginSummary (margin summary), withdrawable (withdrawable amount)."
+    example:
+      name: "hyperliquid_user_state"
+      params: {user: "0xabcdef1234567890abcdef1234567890abcdef12"}
+
+  - name: "hyperliquid_spot_user_state"
+    summary: "Spot token balance list for a wallet"
+    params:
+      - {name: user, required: true, format: "0x wallet address (42 chars)", example: "0xabcdef1234567890abcdef1234567890abcdef12"}
+    gotchas:
+      - "Returns balances[] {coin, total, hold}; hold is the amount locked in open orders."
+    example:
+      name: "hyperliquid_spot_user_state"
+      params: {user: "0xabcdef1234567890abcdef1234567890abcdef12"}
+
+  - name: "hyperliquid_open_orders"
+    summary: "All open orders for a wallet (perps + spot)"
+    params:
+      - {name: user, required: true, format: "0x wallet address (42 chars)", example: "0xabcdef1234567890abcdef1234567890abcdef12"}
+    gotchas:
+      - "Returns [{coin, side, limitPx, sz, oid, timestamp}]. oid is the order ID, usable for cancellation."
+    example:
+      name: "hyperliquid_open_orders"
+      params: {user: "0xabcdef1234567890abcdef1234567890abcdef12"}
+
+  - name: "hyperliquid_user_fills"
+    summary: "Recent fill history (trade history) for a wallet"
+    params:
+      - {name: user, required: true, format: "0x wallet address (42 chars)", example: "0xabcdef1234567890abcdef1234567890abcdef12"}
+    gotchas:
+      - "Returns [{coin, px, sz, side, time, closedPnl, fee}]. time is a millisecond timestamp."
+      - "Only recent records are returned; for longer history use startTime (if supported by the interface)."
+    example:
+      name: "hyperliquid_user_fills"
+      params: {user: "0xabcdef1234567890abcdef1234567890abcdef12"}

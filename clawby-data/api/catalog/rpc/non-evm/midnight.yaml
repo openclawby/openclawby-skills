@@ -1,0 +1,272 @@
+# ============================================================================
+# Substrate/Cardano-sidechain JSON-RPC — midnight
+# Call: POST /api/rpc   body {"chain":"midnight","method":"<method>","params":[...]}
+# ============================================================================
+chain: "midnight"              # chain param for /api/rpc
+type: non-EVM
+slug: "midnight"
+status: unverified             # ⚠️ not verified on the current key
+api_style: JSON-RPC
+how_to_call: 'POST /api/rpc  {"chain":"midnight","method":"<method>","params":[...]}'
+notes:
+  - "Midnight is a privacy-preserving sidechain of Cardano, developed by IOG, supporting confidential smart contracts with zero-knowledge proofs (ZK)"
+  - "Built on the Substrate/Polkadot framework; contracts are written in TypeScript with ZKP privacy by default"
+  - "Currently in testnet (testnet-02-x); namespaces: system_/chain_/state_/grandpa_/midnight_/sidechain_/childstate_/archive_"
+  - "midnight_* and sidechain_* are Midnight-specific methods; the rest are standard Substrate JSON-RPC"
+  - "⚠️ not verified on the current key; availability depends on the plan"
+methods:
+  # ---------- System Info & Networking ----------
+  - name: system_chain
+    summary: "Returns the chain name (e.g. 'testnet-02-1')"
+    params: "none"
+    example: {"chain":"midnight","method":"system_chain","params":[]}
+  - name: system_chainType
+    summary: "Returns the chain type (Development/Local/Live)"
+    params: "none"
+    example: {"chain":"midnight","method":"system_chainType","params":[]}
+  - name: system_health
+    summary: "Returns node health status and sync info"
+    params: "none"
+    example: {"chain":"midnight","method":"system_health","params":[]}
+  - name: system_properties
+    summary: "Returns chain properties (token decimals, symbol, SS58 prefix, etc.)"
+    params: "none"
+    example: {"chain":"midnight","method":"system_properties","params":[]}
+  - name: system_syncState
+    summary: "Returns sync status and the highest known block"
+    params: "none"
+    example: {"chain":"midnight","method":"system_syncState","params":[]}
+  - name: system_version
+    summary: "Returns the node implementation version string"
+    params: "none"
+    example: {"chain":"midnight","method":"system_version","params":[]}
+  # ---------- Accounts & Keys ----------
+  - name: account_nextIndex
+    summary: "Returns the next nonce (transaction index) for the account"
+    params: "[accountId(SS58 address)]"
+    example: {"chain":"midnight","method":"account_nextIndex","params":["ACCOUNT_ADDRESS"]}
+  - name: system_accountNextIndex
+    summary: "Alias for account_nextIndex"
+    params: "[accountId(SS58 address)]"
+    example: {"chain":"midnight","method":"system_accountNextIndex","params":["ACCOUNT_ADDRESS"]}
+  # ---------- Grandpa Finality ----------
+  - name: grandpa_proveFinality
+    summary: "Returns the GRANDPA finality proof for the specified block height"
+    params: "[blockNumber(integer)]"
+    example: {"chain":"midnight","method":"grandpa_proveFinality","params":[1000]}
+  - name: grandpa_roundState
+    summary: "Returns the current best GRANDPA round state and any ongoing background rounds"
+    params: "none"
+    example: {"chain":"midnight","method":"grandpa_roundState","params":[]}
+  # ---------- Offchain Storage ----------
+  - name: offchain_localStorageGet
+    summary: "Reads data from the node's local offchain storage"
+    params: "[kind('PERSISTENT'|'LOCAL'), key(hex)]"
+    example: {"chain":"midnight","method":"offchain_localStorageGet","params":["PERSISTENT","0xKEY"]}
+  - name: offchain_localStorageSet
+    summary: "Writes data to the node's local offchain storage"
+    params: "[kind('PERSISTENT'|'LOCAL'), key(hex), value(hex)]"
+    example: {"chain":"midnight","method":"offchain_localStorageSet","params":["PERSISTENT","0xKEY","0xVALUE"]}
+  # ---------- Archive & Unstable Chain Access ----------
+  - name: archive_unstable_body
+    summary: "Returns the block body (extrinsics) for a historical block"
+    params: "[blockHash(hex)]"
+    example: {"chain":"midnight","method":"archive_unstable_body","params":["0xBLOCK_HASH"]}
+  - name: archive_unstable_call
+    summary: "Executes a Runtime call at the specified block height (without submitting)"
+    params: "[blockHash(hex), method(string), callParameters(hex)]"
+    example: {"chain":"midnight","method":"archive_unstable_call","params":["0xBLOCK_HASH","Runtime_method","0x"]}
+  - name: archive_unstable_finalizedHeight
+    summary: "Returns the finalized block height"
+    params: "none"
+    example: {"chain":"midnight","method":"archive_unstable_finalizedHeight","params":[]}
+  - name: archive_unstable_genesisHash
+    summary: "Returns the genesis block hash"
+    params: "none"
+    example: {"chain":"midnight","method":"archive_unstable_genesisHash","params":[]}
+  - name: archive_unstable_hashByHeight
+    summary: "Returns the block hash at the specified height"
+    params: "[height(integer)]"
+    example: {"chain":"midnight","method":"archive_unstable_hashByHeight","params":[1000]}
+  - name: archive_unstable_header
+    summary: "Returns the block header from the archive"
+    params: "[blockHash(hex)]"
+    example: {"chain":"midnight","method":"archive_unstable_header","params":["0xBLOCK_HASH"]}
+  - name: archive_unstable_storage
+    summary: "Returns historical storage values"
+    params: "[blockHash(hex), items([{key,type}])]"
+    example: {"chain":"midnight","method":"archive_unstable_storage","params":["0xBLOCK_HASH",[{"key":"0xKEY","type":"value"}]]}
+  # ---------- Midnight-specific ----------
+  - name: midnight_apiVersions
+    summary: "Lists the API versions supported by the Midnight node"
+    params: "none"
+    example: {"chain":"midnight","method":"midnight_apiVersions","params":[]}
+  - name: midnight_contractState
+    summary: "Returns the on-chain state of the specified Midnight contract"
+    params: "[contractAddress(hex), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"midnight_contractState","params":["0xCONTRACT_ADDR"]}
+  - name: midnight_decodeEvents
+    summary: "Decodes event data produced by Midnight smart contracts"
+    params: "[events([hex])]"
+    example: {"chain":"midnight","method":"midnight_decodeEvents","params":[["0xEVENT_DATA"]]}
+  - name: midnight_jsonBlock
+    summary: "Returns complete block data in JSON format"
+    params: "[blockHash?(hex)]"
+    example: {"chain":"midnight","method":"midnight_jsonBlock","params":[]}
+  - name: midnight_jsonContractState
+    summary: "Returns contract state in human-readable JSON format"
+    params: "[contractAddress(hex), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"midnight_jsonContractState","params":["0xCONTRACT_ADDR"]}
+  - name: midnight_zswapChainState
+    summary: "Returns the ZSwap contract state info"
+    params: "[blockHash?(hex)]"
+    example: {"chain":"midnight","method":"midnight_zswapChainState","params":[]}
+  # ---------- Sidechain ----------
+  - name: sidechain_getAriadneParameters
+    summary: "Returns the Ariadne privacy protocol parameters"
+    params: "[blockHash?(hex)]"
+    example: {"chain":"midnight","method":"sidechain_getAriadneParameters","params":[]}
+  - name: sidechain_getEpochCommittee
+    summary: "Returns the validator committee for the current or specified epoch"
+    params: "[epochNumber?(integer)]"
+    example: {"chain":"midnight","method":"sidechain_getEpochCommittee","params":[]}
+  - name: sidechain_getParams
+    summary: "Returns the current sidechain configuration parameters"
+    params: "none"
+    example: {"chain":"midnight","method":"sidechain_getParams","params":[]}
+  - name: sidechain_getRegistrations
+    summary: "Returns the list of registered sidechain participants"
+    params: "[epochNumber(integer)]"
+    example: {"chain":"midnight","method":"sidechain_getRegistrations","params":[1]}
+  - name: sidechain_getStatus
+    summary: "Returns the current sidechain status (sync state and parameters)"
+    params: "none"
+    example: {"chain":"midnight","method":"sidechain_getStatus","params":[]}
+  # ---------- Child State Access ----------
+  - name: childstate_getKeys
+    summary: "Returns the key list from child storage"
+    params: "[childStorageKey(hex), key(hex), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"childstate_getKeys","params":["0xCHILD_KEY","0x"]}
+  - name: childstate_getKeysPaged
+    summary: "Returns the child storage key list (paginated)"
+    params: "[childStorageKey(hex), prefix?(hex), count(uint), startKey?(hex), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"childstate_getKeysPaged","params":["0xCHILD_KEY","0x",10]}
+  - name: childstate_getKeysPagedAt
+    summary: "Returns child storage keys (paginated) at the specified historical block"
+    params: "[childStorageKey(hex), prefix?(hex), count(uint), startKey?(hex), blockHash(hex)]"
+    example: {"chain":"midnight","method":"childstate_getKeysPagedAt","params":["0xCHILD_KEY","0x",10,null,"0xBLOCK_HASH"]}
+  - name: childstate_getStorage
+    summary: "Returns the value for a key in child storage"
+    params: "[childStorageKey(hex), key(hex), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"childstate_getStorage","params":["0xCHILD_KEY","0xKEY"]}
+  - name: childstate_getStorageEntries
+    summary: "Returns values for multiple keys in child storage in batch"
+    params: "[childStorageKey(hex), keys([hex]), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"childstate_getStorageEntries","params":["0xCHILD_KEY",["0xKEY1","0xKEY2"]]}
+  - name: childstate_getStorageHash
+    summary: "Returns the hash of the value for a key in child storage"
+    params: "[childStorageKey(hex), key(hex), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"childstate_getStorageHash","params":["0xCHILD_KEY","0xKEY"]}
+  - name: childstate_getStorageSize
+    summary: "Returns the byte size of the value for a key in child storage"
+    params: "[childStorageKey(hex), key(hex), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"childstate_getStorageSize","params":["0xCHILD_KEY","0xKEY"]}
+  # ---------- RPC Meta ----------
+  - name: rpc_methods
+    summary: "Returns the list of all available RPC methods on the node"
+    params: "none"
+    example: {"chain":"midnight","method":"rpc_methods","params":[]}
+  # ---------- Chain & Block Data ----------
+  - name: chain_getBlock
+    summary: "Returns the full block data for the specified hash"
+    params: "[blockHash?(hex)]"
+    example: {"chain":"midnight","method":"chain_getBlock","params":[]}
+  - name: chain_getBlockHash
+    summary: "Returns the hash for the specified block number"
+    params: "[blockNumber?(integer)]"
+    example: {"chain":"midnight","method":"chain_getBlockHash","params":[1000]}
+  - name: chain_getFinalisedHead
+    summary: "Returns the latest finalized block hash (British spelling)"
+    params: "none"
+    example: {"chain":"midnight","method":"chain_getFinalisedHead","params":[]}
+  - name: chain_getFinalizedHead
+    summary: "Returns the latest finalized block hash (American spelling, same as above)"
+    params: "none"
+    example: {"chain":"midnight","method":"chain_getFinalizedHead","params":[]}
+  - name: chain_getHead
+    summary: "Returns the current best block hash"
+    params: "none"
+    example: {"chain":"midnight","method":"chain_getHead","params":[]}
+  - name: chain_getHeader
+    summary: "Returns the block header for the specified block"
+    params: "[blockHash?(hex)]"
+    example: {"chain":"midnight","method":"chain_getHeader","params":[]}
+  - name: chain_getRuntimeVersion
+    summary: "Returns the Runtime version info for the current chain"
+    params: "[blockHash?(hex)]"
+    example: {"chain":"midnight","method":"chain_getRuntimeVersion","params":[]}
+  # ---------- State & Storage ----------
+  - name: state_call
+    summary: "Executes a Runtime call (without submitting an extrinsic)"
+    params: "[method(string), data(hex), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"state_call","params":["Runtime_method","0x"]}
+  - name: state_callAt
+    summary: "Executes a Runtime call at the specified block"
+    params: "[method(string), data(hex), blockHash(hex)]"
+    example: {"chain":"midnight","method":"state_callAt","params":["Runtime_method","0x","0xBLOCK_HASH"]}
+  - name: state_getChildReadProof
+    summary: "Returns a child storage inclusion proof"
+    params: "[childStorageKey(hex), keys([hex]), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"state_getChildReadProof","params":["0xCHILD_KEY",["0xKEY"]]}
+  - name: state_getKeys
+    summary: "Returns all storage keys starting with the specified prefix"
+    params: "[prefix(hex), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"state_getKeys","params":["0x"]}
+  - name: state_getKeysPaged
+    summary: "Returns the storage key list (paginated)"
+    params: "[prefix?(hex), count(uint), startKey?(hex), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"state_getKeysPaged","params":["0x",10]}
+  - name: state_getKeysPagedAt
+    summary: "Returns storage keys (paginated) at the specified block"
+    params: "[prefix?(hex), count(uint), startKey?(hex), blockHash(hex)]"
+    example: {"chain":"midnight","method":"state_getKeysPagedAt","params":["0x",10,null,"0xBLOCK_HASH"]}
+  - name: state_getMetadata
+    summary: "Returns the current Runtime metadata (SCALE-encoded)"
+    params: "[blockHash?(hex)]"
+    example: {"chain":"midnight","method":"state_getMetadata","params":[]}
+  - name: state_getReadProof
+    summary: "Returns inclusion proofs for storage entries"
+    params: "[keys([hex]), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"state_getReadProof","params":[["0xKEY"]]}
+  - name: state_getRuntimeVersion
+    summary: "Returns the Runtime version at the current best block"
+    params: "[blockHash?(hex)]"
+    example: {"chain":"midnight","method":"state_getRuntimeVersion","params":[]}
+  - name: state_getStorage
+    summary: "Returns the storage value for the specified key"
+    params: "[key(hex), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"state_getStorage","params":["0xSTORAGE_KEY"]}
+  - name: state_getStorageAt
+    summary: "Returns the storage value for a key at the specified block"
+    params: "[key(hex), blockHash(hex)]"
+    example: {"chain":"midnight","method":"state_getStorageAt","params":["0xSTORAGE_KEY","0xBLOCK_HASH"]}
+  - name: state_getStorageHash
+    summary: "Returns the hash of a storage entry value"
+    params: "[key(hex), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"state_getStorageHash","params":["0xSTORAGE_KEY"]}
+  - name: state_getStorageHashAt
+    summary: "Returns the hash of the storage value at the specified block"
+    params: "[key(hex), blockHash(hex)]"
+    example: {"chain":"midnight","method":"state_getStorageHashAt","params":["0xSTORAGE_KEY","0xBLOCK_HASH"]}
+  - name: state_getStorageSize
+    summary: "Returns the byte size of the value for the given storage key"
+    params: "[key(hex), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"state_getStorageSize","params":["0xSTORAGE_KEY"]}
+  - name: state_getStorageSizeAt
+    summary: "Returns the storage size at the specified block"
+    params: "[key(hex), blockHash(hex)]"
+    example: {"chain":"midnight","method":"state_getStorageSizeAt","params":["0xSTORAGE_KEY","0xBLOCK_HASH"]}
+  - name: state_queryStorageAt
+    summary: "Queries storage changes at the specified block"
+    params: "[keys([hex]), blockHash?(hex)]"
+    example: {"chain":"midnight","method":"state_queryStorageAt","params":[["0xKEY1","0xKEY2"]]}

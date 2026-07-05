@@ -1,0 +1,62 @@
+# ============================================================================
+# Prediction Markets — Index (Guide)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Prediction Markets — Index"
+total_interfaces: 11
+
+files:
+  - path: "discovery.yaml"
+    count: 4
+    interfaces: [polymarket_events, polymarket_markets, polymarket_tags, polymarket_sports]
+    desc: "Discovery/browse: event list, market list, category tags, sports series"
+  - path: "clob.yaml"
+    count: 5
+    interfaces: [polymarket_orderbook, polymarket_price, polymarket_midpoint, polymarket_spread, polymarket_price_history]
+    desc: "Order book/prices: live orders, best price, midpoint, spread, price history"
+  - path: "activity.yaml"
+    count: 2
+    interfaces: [polymarket_trades, polymarket_value]
+    desc: "Activity/positions: trade records, wallet position valuation"
+
+# ── Critical Field Map ────────────────────────────────────────────────────────────
+critical_field_map:
+  token_id:
+    source: "market.clobTokenIds[] array returned by polymarket_events or polymarket_markets"
+    used_by: [polymarket_orderbook, polymarket_price, polymarket_midpoint, polymarket_spread]
+    note: "price_history's param name is market, but the value is still a token_id"
+  conditionId:
+    source: "market.conditionId field returned by polymarket_markets"
+    used_by: [polymarket_trades]
+    note: "polymarket_trades' market param takes a conditionId, not a token_id"
+  tag_id:
+    source: "id field returned by polymarket_tags"
+    used_by: [polymarket_events]
+  series_id:
+    source: "series_id field returned by polymarket_sports"
+    used_by: [polymarket_events]
+
+# ── Recommended Call Order ─────────────────────────────────────────────────────────────
+recommended_call_order:
+  - step: 1
+    action: "(Optional) call polymarket_tags for category ids, or polymarket_sports for sports series ids"
+  - step: 2
+    action: "Call polymarket_events (recommended) or polymarket_markets to browse events/markets"
+    key_output: "Each market's clobTokenIds[] (outcome token ids) and conditionId"
+  - step: 3
+    action: "Take token_id from clobTokenIds[n] and pass to CLOB endpoints (orderbook / price / midpoint / spread)"
+    note: "clobTokenIds[0] = first outcome (e.g. Yes); clobTokenIds[1] = second outcome (e.g. No)"
+  - step: 4
+    action: "Price history: pass the same token_id as the market param in polymarket_price_history"
+  - step: 5
+    action: "Trade lookup: pass conditionId as the market param in polymarket_trades"
+  - step: 6
+    action: "Position lookup: call polymarket_value with a 0x wallet address"
+
+# ── Global Gotchas ──────────────────────────────────────────────────────────────────
+global_gotchas:
+  - "⚠️ token_id for all CLOB endpoints must come from the clobTokenIds array; guessing will return 400 Invalid token id"
+  - "⚠️ polymarket_trades' market param takes a conditionId, not a token_id; the two look similar and are easily confused"
+  - "⚠️ polymarket_price_history's param name is market, but the value is a token_id (inconsistent naming)"
+  - "⚠️ polymarket_price_history's interval and startTs/endTs are mutually exclusive — pick one"
+  - "Markets with enableOrderBook=false do not support order book endpoints; use the lastTradePrice field instead"

@@ -1,0 +1,33 @@
+# ============================================================================
+# Derivatives — Futures Price OHLC
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Futures Price OHLC"
+
+gotchas_for_all:
+  - "⚠️ The limit param is required for futures_price_history"
+  - "⚠️ symbol uses pair format BTCUSDT, not coin name BTC"
+  - "⚠️ Response is {code, data}; success only when code='0'"
+
+interfaces:
+  - name: "futures_price_history"
+    summary: "Futures price OHLC history for a given exchange and pair"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT", note: "⚠️ use trading pair format"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: true, format: "integer, number of candles to return", example: 200, note: "⚠️ required"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ limit is required here, unlike other history endpoints"
+    example:
+      name: "futures_price_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h", limit: 200}
+
+  - name: "futures_coins_price_change"
+    summary: "Price change snapshot for all futures coins (no params needed)"
+    params: []
+    example:
+      name: "futures_coins_price_change"
+      params: {}

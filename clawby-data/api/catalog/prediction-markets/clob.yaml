@@ -1,0 +1,76 @@
+# ============================================================================
+# Prediction Markets — CLOB (Order Book / Prices)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Prediction Markets — CLOB (Order Book / Prices)"
+note: >
+  All CLOB endpoints require a token_id (outcome token id).
+  token_id source: first call polymarket_events or polymarket_markets,
+  and take it from the clobTokenIds array; clobTokenIds[0] is the first outcome (e.g. Yes),
+  clobTokenIds[1] is the second outcome (e.g. No). Guessing a token_id returns 400 Invalid token id.
+
+gotchas_for_all:
+  - "⚠️ token_id must be taken from the clobTokenIds array returned by polymarket_markets/events; do not construct one yourself"
+  - "⚠️ Markets with enableOrderBook=false do not support CLOB endpoints; only lastTradePrice is readable"
+
+interfaces:
+  - name: "polymarket_orderbook"
+    summary: "Query the live order book (bid/ask list) for an outcome token"
+    params:
+      - {name: token_id, required: true, format: "outcome token id string", note: "take from the clobTokenIds array"}
+    gotchas:
+      - "⚠️ 404 'No orderbook' = no active order book for this token (very low liquidity or market ended)"
+      - "Return fields: bids/asks are [{price, size}] arrays; price is a 0-1 probability value"
+      - "neg_risk field indicates a negative-risk market; pricing logic differs"
+    example:
+      name: "polymarket_orderbook"
+      params: {token_id: "71321045679252212594626385532706912750332728571942532289631379312455583992563"}
+
+  - name: "polymarket_price"
+    summary: "Query the best price (implied probability, 0-1) for an outcome token"
+    params:
+      - {name: token_id, required: true,  format: "outcome token id string"}
+      - {name: side,     required: false, format: "BUY|SELL", note: "BUY=best ask; SELL=best bid; omit for composite price"}
+    gotchas:
+      - "Price range 0-1 is the implied probability for the outcome; 0.65 ≈ 65% chance"
+      - "BUY price is higher than SELL price; their difference is the spread"
+    example:
+      name: "polymarket_price"
+      params: {token_id: "71321045679252212594626385532706912750332728571942532289631379312455583992563", side: "BUY"}
+
+  - name: "polymarket_midpoint"
+    summary: "Query the bid/ask midpoint (implied probability) for an outcome token"
+    params:
+      - {name: token_id, required: true, format: "outcome token id string"}
+    gotchas:
+      - "Returns {mid}; when spread > 0.10 it is common to use lastTradePrice instead"
+    example:
+      name: "polymarket_midpoint"
+      params: {token_id: "71321045679252212594626385532706912750332728571942532289631379312455583992563"}
+
+  - name: "polymarket_spread"
+    summary: "Query the bid/ask spread (liquidity indicator) for an outcome token"
+    params:
+      - {name: token_id, required: true, format: "outcome token id string"}
+    gotchas:
+      - "Returns {spread}; a larger spread means worse liquidity"
+      - "spread > 0.10 is the liquidity warning threshold; midpoint is less meaningful at this level"
+    example:
+      name: "polymarket_spread"
+      params: {token_id: "71321045679252212594626385532706912750332728571942532289631379312455583992563"}
+
+  - name: "polymarket_price_history"
+    summary: "Query the historical price (probability) time series for an outcome token"
+    params:
+      - {name: market,   required: true,  format: "outcome token id string",  note: "⚠️ param name is market, but value is a token_id"}
+      - {name: interval, required: false, format: "1h|6h|1d|1w|1m|max", note: "mutually exclusive with startTs/endTs — pick one"}
+      - {name: startTs,  required: false, format: "Unix seconds",             note: "mutually exclusive with interval; must also pass endTs"}
+      - {name: endTs,    required: false, format: "Unix seconds",             note: "mutually exclusive with interval; must also pass startTs"}
+      - {name: fidelity, required: false, format: "integer (minutes)", example: 60, note: "time interval between adjacent data points"}
+    gotchas:
+      - "⚠️ param name is market (not token_id), but the value is still the outcome token's token_id"
+      - "⚠️ interval and startTs/endTs are mutually exclusive: passing both will error — choose one"
+      - "Each data point format: {t: Unix timestamp, p: price (0-1)}"
+    example:
+      name: "polymarket_price_history"
+      params: {market: "71321045679252212594626385532706912750332728571942532289631379312455583992563", interval: "1d"}

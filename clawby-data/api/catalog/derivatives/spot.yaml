@@ -1,0 +1,213 @@
+# ============================================================================
+# Derivatives — Spot
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Spot"
+
+gotchas_for_all:
+  - "⚠️ Single-pair endpoints: use exchange + symbol=BTCUSDT (pair format)"
+  - "⚠️ Aggregated endpoints (aggregated_*): use exchange_list (comma-separated) + symbol=BTC (coin name)"
+  - "⚠️ spot_pairs_markets symbol uses coin name BTC"
+  - "⚠️ spot_orderbook_large_limit_order_history requires three mandatory params: start_time, end_time, and state"
+  - "⚠️ Response is {code, data}; success only when code='0'"
+
+interfaces:
+  - name: "spot_orderbook_ask_bids_history"
+    summary: "Spot single-pair orderbook bid/ask history (volume distribution within a price range)"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT", note: "⚠️ use trading pair format"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: range, required: false, format: "price offset range (e.g. 2 means ±2%)", example: 2}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "spot_orderbook_ask_bids_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "spot_orderbook_aggregated_ask_bids_history"
+    summary: "Spot aggregated orderbook bid/ask history across exchanges (by coin)"
+    params:
+      - {name: exchange_list, required: true, format: "comma-separated exchange names", example: "Binance,OKX"}
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ use coin name BTC"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: range, required: false, format: "price offset range", example: 2}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    gotchas:
+      - "⚠️ param is exchange_list, not exchange; symbol uses coin name BTC"
+    example:
+      name: "spot_orderbook_aggregated_ask_bids_history"
+      params: {exchange_list: "Binance,OKX", symbol: "BTC", interval: "1h"}
+
+  - name: "spot_orderbook_history"
+    summary: "Spot orderbook heatmap history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "spot_orderbook_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "spot_orderbook_large_limit_order"
+    summary: "Current spot large limit order snapshot"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+    example:
+      name: "spot_orderbook_large_limit_order"
+      params: {exchange: "Binance", symbol: "BTCUSDT"}
+
+  - name: "spot_orderbook_large_limit_order_history"
+    summary: "Historical spot large limit order records"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: start_time, required: true, format: "Unix milliseconds", example: 1700000000000}
+      - {name: end_time, required: true, format: "Unix milliseconds", example: 1700086400000}
+      - {name: state, required: true, format: "order state", example: "all", note: "common values: all / filled / cancelled"}
+    gotchas:
+      - "⚠️ start_time, end_time, and state are all required"
+    example:
+      name: "spot_orderbook_large_limit_order_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", start_time: 1700000000000, end_time: 1700086400000, state: "all"}
+
+  - name: "spot_taker_buy_sell_volume_history"
+    summary: "Spot single-pair taker buy/sell volume history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "spot_taker_buy_sell_volume_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "spot_aggregated_taker_buy_sell_volume_history"
+    summary: "Spot aggregated taker buy/sell volume history across exchanges (by coin)"
+    params:
+      - {name: exchange_list, required: true, format: "comma-separated exchange names", example: "Binance,OKX"}
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: unit, required: false, format: "usd/coin", example: "usd"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "spot_aggregated_taker_buy_sell_volume_history"
+      params: {exchange_list: "Binance,OKX", symbol: "BTC", interval: "1h"}
+
+  - name: "spot_volume_footprint_history"
+    summary: "Spot footprint volume history (last 90 days)"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "spot_volume_footprint_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "spot_cvd_history"
+    summary: "Spot single-pair CVD history"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: unit, required: false, format: "usd/coin", example: "usd"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "spot_cvd_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}
+
+  - name: "spot_aggregated_cvd_history"
+    summary: "Spot aggregated CVD history across exchanges (by coin)"
+    params:
+      - {name: exchange_list, required: true, format: "comma-separated exchange names", example: "Binance,OKX"}
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: unit, required: false, format: "usd/coin", example: "usd"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "spot_aggregated_cvd_history"
+      params: {exchange_list: "Binance,OKX", symbol: "BTC", interval: "1h"}
+
+  - name: "spot_netflow_list"
+    summary: "Spot net flow ranking list by coin"
+    params:
+      - {name: per_page, required: false, format: "integer, items per page"}
+      - {name: page, required: false, format: "integer, page number"}
+    example:
+      name: "spot_netflow_list"
+      params: {}
+
+  - name: "spot_coin_netflow"
+    summary: "Spot net flow detail for a given coin (broken down by exchange)"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC"}
+      - {name: exchange_list, required: true, format: "comma-separated exchange names", example: "Binance,OKX"}
+    gotchas:
+      - "⚠️ exchange_list is required; use a comma-separated string"
+    example:
+      name: "spot_coin_netflow"
+      params: {symbol: "BTC", exchange_list: "Binance,OKX"}
+
+  - name: "spot_supported_coins"
+    summary: "List of supported spot coins"
+    params: []
+    example:
+      name: "spot_supported_coins"
+      params: {}
+
+  - name: "spot_supported_exchange_pairs"
+    summary: "List of supported spot exchange/pair combinations"
+    params: []
+    example:
+      name: "spot_supported_exchange_pairs"
+      params: {}
+
+  - name: "spot_coins_markets"
+    summary: "Market snapshot for all spot coins"
+    params:
+      - {name: per_page, required: false, format: "integer, items per page"}
+      - {name: page, required: false, format: "integer, page number"}
+    example:
+      name: "spot_coins_markets"
+      params: {}
+
+  - name: "spot_pairs_markets"
+    summary: "Spot market data for all pairs of a given coin"
+    params:
+      - {name: symbol, required: true, format: "coin name", example: "BTC", note: "⚠️ use coin name BTC, not a pair"}
+    gotchas:
+      - "⚠️ symbol uses coin name BTC, not pair format"
+    example:
+      name: "spot_pairs_markets"
+      params: {symbol: "BTC"}
+
+  - name: "spot_price_history"
+    summary: "Spot price OHLC history for a given exchange and pair"
+    params:
+      - {name: exchange, required: true, format: "exchange name", example: "Binance"}
+      - {name: symbol, required: true, format: "trading pair", example: "BTCUSDT", note: "⚠️ use trading pair format"}
+      - {name: interval, required: true, format: "1h/4h/1d", example: "1h"}
+      - {name: limit, required: false, format: "integer"}
+      - {name: start_time, required: false, format: "Unix milliseconds"}
+      - {name: end_time, required: false, format: "Unix milliseconds"}
+    example:
+      name: "spot_price_history"
+      params: {exchange: "Binance", symbol: "BTCUSDT", interval: "1h"}

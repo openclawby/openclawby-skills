@@ -1,0 +1,138 @@
+# ============================================================================
+# Derivatives — ETF (Bitcoin / Ethereum / Altcoin Spot ETFs)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "ETF (Bitcoin / Ethereum / Altcoin Spot ETFs)"
+
+gotchas_for_all:
+  - "⚠️ Endpoints that require ticker take the ETF code (e.g. IBIT / GBTC), not the crypto coin name BTC"
+  - "⚠️ etf_bitcoin_price_history uses range (1d/7d/all) for the time window, not interval"
+  - "⚠️ grayscale_premium_history: symbol takes the crypto coin name (BTC/ETH/SOL), not the ETF ticker"
+  - "⚠️ Response is {code, data}; code='0' means success; non-0 typically means ticker not found or insufficient plan tier"
+
+interfaces:
+  - name: "etf_bitcoin_list"
+    summary: "Bitcoin spot ETF list with key metrics (AUM, shares, NAV, BTC holdings)"
+    params: []
+    example:
+      name: "etf_bitcoin_list"
+      params: {}
+
+  - name: "hk_etf_bitcoin_flow_history"
+    summary: "Daily historical fund flows for Hong Kong-listed Bitcoin ETFs"
+    params: []
+    example:
+      name: "hk_etf_bitcoin_flow_history"
+      params: {}
+
+  - name: "etf_bitcoin_net_assets_history"
+    summary: "Bitcoin ETF net assets (USD) history, filterable by individual ticker"
+    params:
+      - {name: ticker, required: false, format: "ETF ticker", example: "IBIT", note: "leave blank to return aggregated total"}
+    example:
+      name: "etf_bitcoin_net_assets_history"
+      params: {}
+
+  - name: "etf_bitcoin_flow_history"
+    summary: "Daily net fund flow history for Bitcoin ETFs broken down by ticker"
+    params: []
+    example:
+      name: "etf_bitcoin_flow_history"
+      params: {}
+
+  - name: "etf_bitcoin_premium_discount_history"
+    summary: "Bitcoin ETF premium/discount vs NAV history, filterable by ticker"
+    params:
+      - {name: ticker, required: false, format: "ETF ticker", example: "GBTC", note: "leave blank to return all"}
+    example:
+      name: "etf_bitcoin_premium_discount_history"
+      params: {}
+
+  - name: "etf_bitcoin_history"
+    summary: "Historical data for a Bitcoin ETF (price, NAV, premium/discount, shares, net assets)"
+    params:
+      - {name: ticker, required: true, format: "ETF ticker", example: "GBTC"}
+    gotchas:
+      - "⚠️ ticker is required, e.g. GBTC / IBIT / FBTC; omitting it will cause an error"
+    example:
+      name: "etf_bitcoin_history"
+      params: {ticker: "IBIT"}
+
+  - name: "etf_bitcoin_price_history"
+    summary: "Price + volume OHLC history for a Bitcoin ETF"
+    params:
+      - {name: ticker, required: true, format: "ETF ticker", example: "GBTC"}
+      - {name: range, required: true, format: "1d/7d/all", example: "7d", note: "time-window string, not interval"}
+    gotchas:
+      - "⚠️ The time-window param is called range, not interval; values are 1d/7d/all"
+    example:
+      name: "etf_bitcoin_price_history"
+      params: {ticker: "IBIT", range: "7d"}
+
+  - name: "etf_bitcoin_detail"
+    summary: "Detailed info for a Bitcoin ETF (quote, trading records, performance)"
+    params:
+      - {name: ticker, required: true, format: "ETF ticker", example: "GBTC"}
+    example:
+      name: "etf_bitcoin_detail"
+      params: {ticker: "IBIT"}
+
+  - name: "etf_bitcoin_aum"
+    summary: "Bitcoin ETF historical AUM (USD), filterable by ticker"
+    params:
+      - {name: ticker, required: false, format: "ETF ticker", example: "GBTC", note: "leave blank to return all"}
+    example:
+      name: "etf_bitcoin_aum"
+      params: {}
+
+  - name: "etf_ethereum_net_assets_history"
+    summary: "Ethereum ETF net assets (USD) history"
+    params: []
+    example:
+      name: "etf_ethereum_net_assets_history"
+      params: {}
+
+  - name: "etf_ethereum_list"
+    summary: "Ethereum spot ETF list (NAV, ETH holdings, fee rate)"
+    params: []
+    example:
+      name: "etf_ethereum_list"
+      params: {}
+
+  - name: "etf_ethereum_flow_history"
+    summary: "Daily fund flow history for Ethereum ETFs broken down by ticker"
+    params: []
+    example:
+      name: "etf_ethereum_flow_history"
+      params: {}
+
+  - name: "grayscale_holdings_list"
+    summary: "Grayscale trust current holdings list (quantity, USD value, premium rate)"
+    params: []
+    example:
+      name: "grayscale_holdings_list"
+      params: {}
+
+  - name: "grayscale_premium_history"
+    summary: "Grayscale trust premium/discount vs NAV history"
+    params:
+      - {name: symbol, required: true, format: "crypto coin name", example: "BTC", note: "⚠️ use the coin name (BTC/ETH/SOL/LTC/BCH/ETC), not the ETF ticker"}
+    gotchas:
+      - "⚠️ symbol must be the crypto coin name (e.g. BTC), not the ETF ticker (GBTC etc.); using a ticker will cause a parameter error"
+    example:
+      name: "grayscale_premium_history"
+      params: {symbol: "BTC"}
+
+  - name: "etf_solana_flow_history"
+    summary: "Daily fund flow history for Solana ETFs"
+    params: []
+    example:
+      name: "etf_solana_flow_history"
+      params: {}
+
+  - name: "etf_xrp_flow_history"
+    summary: "Daily fund flow history for XRP ETFs"
+    params: []
+    example:
+      name: "etf_xrp_flow_history"
+      params: {}

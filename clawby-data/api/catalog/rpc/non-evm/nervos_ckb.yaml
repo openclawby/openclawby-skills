@@ -1,0 +1,95 @@
+# ============================================================================
+# Non-EVM RPC — nervos_ckb
+# Call: POST /api/rpc   body {"chain":"nervos_ckb","method":"<method>","params":[...]}
+# ============================================================================
+chain: "nervos_ckb"
+type: "Nervos-CKB"
+slug: "nervos_ckb"
+status: ok
+how_to_call: 'POST /api/rpc  {"chain":"nervos_ckb","method":"<method>","params":[...]}'
+notes:
+  - "Nervos CKB Layer 1 — uses a UTXO-variant Cell model, non-EVM; all integers are represented as 0x-prefixed hex strings"
+  - "Nervos EVM/Polyjuice (Godwoken) Layer 2 was officially shut down in June 2025; only Layer 1 is available"
+  - "A Cell is uniquely identified by OutPoint {tx_hash, index}; capacity is measured in Shannon (1 CKB = 10^8 Shannon)"
+  - "The following methods are not exposed on shared nodes: local_node_info/get_peers/set_ban/get_block_template/submit_block/clear_tx_pool/debug_*"
+  - "send_transaction requires constructing and signing a complete Transaction object locally before submitting"
+methods:
+  - name: get_tip_block_number
+    summary: "Returns the current tip block number of the canonical chain (0x-prefixed hex string)"
+    params: "none"
+    example: {"chain":"nervos_ckb","method":"get_tip_block_number","params":[]}
+
+  - name: get_tip_header
+    summary: "Returns the header of the tip block (HeaderView object) with number/hash/timestamp/epoch fields"
+    params: "[verbosity?] — '0x0' returns a serialized header; '0x1' (default) returns a JSON object"
+    example: {"chain":"nervos_ckb","method":"get_tip_header","params":[]}
+
+  - name: get_current_epoch
+    summary: "Returns current epoch info (EpochView): number/start_number/length/compact_target"
+    params: "none"
+    example: {"chain":"nervos_ckb","method":"get_current_epoch","params":[]}
+
+  - name: get_block_by_number
+    summary: "Returns the full block by block number (BlockView: header + transactions + proposals + uncles)"
+    params: "[blockNumber(hex), verbosity?, with_cycles?] — blockNumber required, e.g. '0x12a6ad1'"
+    example: {"chain":"nervos_ckb","method":"get_block_by_number","params":["0x12a6ad1"]}
+
+  - name: get_block
+    summary: "Returns the full block by block hash (BlockView); returns null if not found"
+    params: "[blockHash(0x hex 32 bytes), verbosity?, with_cycles?]"
+    example: {"chain":"nervos_ckb","method":"get_block","params":["0xaa8d68b396f8a01449d829fef85c4065c83e6fa71ec7b1f066674ff752dd0d01"]}
+
+  - name: get_header
+    summary: "Returns the block header by block hash (HeaderView); returns null if not found"
+    params: "[blockHash(0x hex), verbosity?] — verbosity '0x0' | '0x1' (default)"
+    example: {"chain":"nervos_ckb","method":"get_header","params":["0xaa8d68b396f8a01449d829fef85c4065c83e6fa71ec7b1f066674ff752dd0d01"]}
+
+  - name: get_header_by_number
+    summary: "Returns the block header by block number; returns null if it does not exist"
+    params: "[blockNumber(hex), verbosity?]"
+    example: {"chain":"nervos_ckb","method":"get_header_by_number","params":["0x12a6ad1"]}
+
+  - name: get_block_hash
+    summary: "Returns the block hash by block number; returns null if it does not exist"
+    params: "[blockNumber(hex)]"
+    example: {"chain":"nervos_ckb","method":"get_block_hash","params":["0x12a6ad1"]}
+
+  - name: get_transaction
+    summary: "Returns transaction details and status by transaction hash (pending/proposed/committed/unknown/rejected)"
+    params: "[txHash(0x hex), verbosity?, only_committed?]"
+    example: {"chain":"nervos_ckb","method":"get_transaction","params":["0xTX_HASH_HEX"]}
+
+  - name: get_live_cell
+    summary: "Returns the current state (live/dead/unknown) and optional data for a Cell; Cell is identified by OutPoint"
+    params: "[outPoint({tx_hash, index(hex)}), with_data(bool)]"
+    example: {"chain":"nervos_ckb","method":"get_live_cell","params":[{"tx_hash":"0xTX_HASH","index":"0x0"},true]}
+
+  - name: get_consensus
+    summary: "Returns chain consensus parameters (genesis_hash/epoch_duration_target/max_block_bytes/max_block_cycles, etc.)"
+    params: "none"
+    example: {"chain":"nervos_ckb","method":"get_consensus","params":[]}
+
+  - name: get_fee_rate_statistics
+    summary: "Returns fee rate statistics from confirmed blocks (mean/median, in Shannon/kilo-weight)"
+    params: "[target(hex)?] — number of blocks to look back; default '0x15' (21 blocks)"
+    example: {"chain":"nervos_ckb","method":"get_fee_rate_statistics","params":[]}
+
+  - name: get_blockchain_info
+    summary: "Returns basic chain info: chain/difficulty/epoch/median_time/is_initial_block_download/alerts"
+    params: "none"
+    example: {"chain":"nervos_ckb","method":"get_blockchain_info","params":[]}
+
+  - name: tx_pool_info
+    summary: "Returns transaction pool info: pending/proposed/orphan counts, min_fee_rate, tip_hash, etc."
+    params: "none"
+    example: {"chain":"nervos_ckb","method":"tx_pool_info","params":[]}
+
+  - name: send_transaction
+    summary: "Submits a signed transaction to the transaction pool; returns the transaction hash (0x hex)"
+    params: "[transaction(object), outputs_validator?] — transaction contains version/cell_deps/inputs/outputs/witnesses"
+    example: {"chain":"nervos_ckb","method":"send_transaction","params":[{"version":"0x0","cell_deps":[],"header_deps":[],"inputs":[],"outputs":[],"outputs_data":[],"witnesses":[]},"passthrough"]}
+
+  - name: test_tx_pool_accept
+    summary: "Simulates submitting a transaction to the pool (not actually broadcast); returns estimated cycles and fee"
+    params: "[transaction(object), outputs_validator?] — same structure as send_transaction"
+    example: {"chain":"nervos_ckb","method":"test_tx_pool_accept","params":[{"version":"0x0","cell_deps":[],"header_deps":[],"inputs":[],"outputs":[],"outputs_data":[],"witnesses":[]},"passthrough"]}

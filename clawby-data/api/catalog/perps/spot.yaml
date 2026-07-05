@@ -1,0 +1,29 @@
+# ============================================================================
+# Perps — Spot Data (Metadata / Live Context)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Perps Platform Spot — Metadata and Prices"
+note: >
+  The following interfaces return metadata and live price/supply data for platform spot pairs. No params required for any of them.
+  Spot pairs are identified in @{index} format, where index is the position in spot_meta's universe array.
+
+interfaces:
+  - name: "hyperliquid_spot_meta"
+    summary: "Spot token and pair metadata (token list / pair mapping)"
+    params: []
+    gotchas:
+      - "No params needed. Returns tokens[] and universe[] (trading pairs)."
+      - "Array index i of universe corresponds to the coin format @i used in spot queries (e.g. @0 / @1)."
+    example:
+      name: "hyperliquid_spot_meta"
+      params: {}
+
+  - name: "hyperliquid_spot_contexts"
+    summary: "Live spot context: mark price / mid price / circulating supply / daily volume"
+    params: []
+    gotchas:
+      - "No params needed. Returns [meta, ctxs[]], both arrays aligned by spot_meta universe order."
+      - "Key fields: markPx (mark price), midPx (mid price), circulatingSupply, dayNtlVlm (daily notional volume), prevDayPx (previous day close)."
+    example:
+      name: "hyperliquid_spot_contexts"
+      params: {}
