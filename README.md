@@ -84,6 +84,10 @@ The skill keeps itself current: it checks the published manifest at most once pe
 - Examples: https://www.openclawby.com/examples
 - X: [@openclawby](https://x.com/openclawby)
 
+## License
+
+[MIT](./LICENSE)
+
 ---
 
 *Market data is provided for analysis. Not investment advice.*
