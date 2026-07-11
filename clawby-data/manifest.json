@@ -1,5 +1,5 @@
 {
-  "version": "1.0.30",
+  "version": "1.0.31",
   "base_url": "https://www.openclawby.com/clawby-skill/",
   "managed": [
     "SKILL.md",
@@ -92,6 +92,7 @@
     "api/catalog/rpc/evm/optimism.yaml",
     "api/catalog/rpc/evm/polygon.yaml",
     "api/catalog/rpc/evm/polygon_zkevm.yaml",
+    "api/catalog/rpc/evm/robinhood.yaml",
     "api/catalog/rpc/evm/rollux.yaml",
     "api/catalog/rpc/evm/scroll.yaml",
     "api/catalog/rpc/evm/sei.yaml",

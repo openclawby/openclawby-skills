@@ -10,7 +10,7 @@ status_legend:
   ok: "verified working"
   no_nodes: "no nodes for this chain currently"
   unverified: "not verified on the current key; availability depends on the plan"
-evm_chains:   # 53 chains — standard EVM JSON-RPC; see evm/<chain>.yaml
+evm_chains:   # 54 chains — standard EVM JSON-RPC; see evm/<chain>.yaml
   - {chain: "arbitrum", chain_id: 42161, status: ok}
   - {chain: "arbitrum_nova", chain_id: 42170, status: ok}
   - {chain: "avalanche", chain_id: 43114, status: ok}
@@ -47,6 +47,7 @@ evm_chains:   # 53 chains — standard EVM JSON-RPC; see evm/<chain>.yaml
   - {chain: "optimism", chain_id: 10, status: ok}
   - {chain: "polygon", chain_id: 137, status: ok}
   - {chain: "polygon_zkevm", chain_id: 1101, status: ok}
+  - {chain: "robinhood", chain_id: 4663, status: ok}
   - {chain: "rollux", chain_id: 570, status: ok}
   - {chain: "scroll", chain_id: 534352, status: ok}
   - {chain: "sei", chain_id: 1329, status: ok}
