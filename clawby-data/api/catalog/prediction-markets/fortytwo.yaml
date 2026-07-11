@@ -1,0 +1,254 @@
+# ============================================================================
+# Prediction Markets — 42.space (FortyTwo, "eventcoins")
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Prediction Markets — 42.space (FortyTwo)"
+note: >
+  42.space (FortyTwo) is an on-chain prediction market ("eventcoins") on BNB Chain (chainId 56), USDT collateral.
+  A second prediction-market source alongside Polymarket. Read-only, no key. Start with ft42_markets to browse,
+  take a market `address` (0x...) and its outcome `tokenId`/`outcomeIndex`, then query prices/history/holders.
+  Markets have N outcomes (not just Yes/No); each outcome is a tradeable token. Alpha API — shapes may change.
+
+# ── Critical Field Map ──────────────────────────────────────────────────────
+critical_field_map:
+  market_address:
+    source: "data[].address returned by ft42_markets (on-chain market contract, 0x...)"
+    used_by: [ft42_market, ft42_market_timeline, ft42_prices, ft42_price_history, ft42_event_price_history, ft42_ohlc, ft42_market_stats, ft42_holders]
+    note: "param name is `market_address` (path) for ft42_market/ft42_market_timeline, and `market` (query) for market-data endpoints"
+  tokenId:
+    source: "outcomes[].tokenId from ft42_market, or data[].tokenId from ft42_tokens"
+    used_by: [ft42_prices, ft42_price_history, ft42_event_price_history, ft42_ohlc, ft42_holders]
+    note: "most price endpoints accept token_id OR outcome_index (0-based) — provide one, not both"
+  user:
+    source: "any 0x wallet address (e.g. from ft42_leaderboard walletAddress)"
+    used_by: [ft42_activity, ft42_positions, ft42_closed_positions, ft42_wallet_stats]
+
+# ── Recommended Call Order ──────────────────────────────────────────────────
+recommended_call_order:
+  - {step: 1, action: "ft42_markets (filter status=live, order=volume_24h) to browse — get each market's address + outcomes[]"}
+  - {step: 2, action: "ft42_market {market_address} for full detail, or ft42_prices {market} for current outcome prices"}
+  - {step: 3, action: "ft42_price_history / ft42_ohlc {market + token_id|outcome_index} for charts"}
+  - {step: 4, action: "ft42_holders / ft42_market_stats for depth; ft42_leaderboard / ft42_positions for traders"}
+
+interfaces:
+  # ── Markets ──
+  - name: "ft42_markets"
+    summary: "Browse all 42.space prediction markets (rich filtering + sorting)"
+    params:
+      - {name: status,      required: false, format: "not_started|live|ended|resolved|finalised|all", example: "live"}
+      - {name: category,    required: false, format: "category name (case-insensitive)", note: "also subcategory, topic, tag"}
+      - {name: order,       required: false, format: "created_at|volume|volume_24h|collateral|start_timestamp|end_timestamp", example: "volume_24h"}
+      - {name: ascending,   required: false, format: "true|false", example: false, note: "default false = descending"}
+      - {name: limit,       required: false, format: "integer, max 500", example: 50, note: "default 100"}
+      - {name: offset,      required: false, format: "integer", example: 0}
+      - {name: collateral,  required: false, format: "symbol or address", note: "e.g. USDT"}
+      - {name: volume_min,  required: false, format: "number"}
+      - {name: volume_max,  required: false, format: "number"}
+      - {name: contract_version, required: false, format: "1|2", note: "1=legacy, 2=v2"}
+      - {name: locale,      required: false, format: "BCP-47 (zh, id...)"}
+    gotchas:
+      - "Response: {data:[...], pagination:{hasMore, totalResults}} — paginate with offset when hasMore=true"
+      - "Each market's outcomes[] carries tokenId + outcomeIndex + price — the source for all price/holder calls"
+      - "Also filters: start_date_min/max, end_date_min/max (ISO 8601), oracle, creator, question_id/market_address (csv)"
+    example: {name: "ft42_markets", params: {status: "live", order: "volume_24h", limit: 5}}
+
+  - name: "ft42_market"
+    summary: "Full details of one market by on-chain address (outcomes, prices, collateral, status)"
+    params:
+      - {name: market_address, required: true,  format: "0x market contract address", note: "path param"}
+      - {name: locale,         required: false, format: "BCP-47"}
+    gotchas: ["Returns a single market object with outcomes[] (tokenId/price/name), collateralSymbol, status, oracle, ancillaryData"]
+    example: {name: "ft42_market", params: {market_address: "0x9b549058Dc466A39000c959BeF9299Ed281a022f"}}
+
+  - name: "ft42_market_timeline"
+    summary: "Lifecycle event history of a market (launched/extended/resolved/finalised)"
+    params:
+      - {name: market_address, required: true, format: "0x market contract address", note: "path param"}
+    gotchas: ["Returns {events:[{type, timestamp, answer, winningOutcomes[]}]}; type = launched|extended|shortened|flagged|unflagged|resolved|unresolve|finalised"]
+    example: {name: "ft42_market_timeline", params: {market_address: "0x9b549058Dc466A39000c959BeF9299Ed281a022f"}}
+
+  - name: "ft42_tokens"
+    summary: "List all tradeable outcome tokens across markets"
+    params:
+      - {name: market_address, required: false, format: "0x", note: "filter to one market"}
+      - {name: token_id,       required: false, format: "string"}
+      - {name: outcome_index,  required: false, format: "integer, 0-based"}
+      - {name: order,          required: false, format: "price|market_cap|token_id|outcome_index", example: "market_cap"}
+      - {name: ascending,      required: false, format: "true|false"}
+      - {name: limit,          required: false, format: "integer, max 500", note: "default 50"}
+      - {name: offset,         required: false, format: "integer"}
+    gotchas: ["Returns {data:[{tokenId, outcomeIndex, outcomeName, price, marketCap, market:{marketAddress,slug,question}}], pagination}"]
+    example: {name: "ft42_tokens", params: {order: "market_cap", limit: 10}}
+
+  # ── Taxonomy ──
+  - name: "ft42_categories"
+    summary: "All market categories with live-market/subcategory/topic counts"
+    params:
+      - {name: limit,  required: false, format: "integer", note: "default 100"}
+      - {name: offset, required: false, format: "integer"}
+      - {name: locale, required: false, format: "BCP-47"}
+    gotchas: ["Returns {data:[{id, name, slug, liveMarketCount, subcategoryCount, topicCount}], pagination}"]
+    example: {name: "ft42_categories", params: {limit: 20}}
+
+  - name: "ft42_category"
+    summary: "One category by slug, with nested subcategories + topics"
+    params:
+      - {name: slug,   required: true,  format: "category slug", note: "path param; from ft42_categories"}
+      - {name: locale, required: false, format: "BCP-47"}
+    example: {name: "ft42_category", params: {slug: "crypto"}}
+
+  # ── Prices / Charts ──
+  - name: "ft42_prices"
+    summary: "Current price(s) of outcome token(s) in a market (single / batch / all)"
+    params:
+      - {name: market,          required: true,  format: "0x market address"}
+      - {name: token_id,        required: false, format: "single token id"}
+      - {name: outcome_index,   required: false, format: "single index, 0-based"}
+      - {name: token_ids,       required: false, format: "csv token ids (max 50)"}
+      - {name: outcome_indices, required: false, format: "csv indices (max 50)"}
+      - {name: projection,      required: false, format: "full|midpoint", note: "midpoint = lightweight"}
+    gotchas:
+      - "No token param = all outcomes of the market. Choose ONE of token_id/outcome_index/token_ids/outcome_indices"
+      - "Returns array of {tokenId, outcome, price, mintedQuantity, outcomeCap, totalMarketCap, updatedAt}"
+    example: {name: "ft42_prices", params: {market: "0x9b549058Dc466A39000c959BeF9299Ed281a022f"}}
+
+  - name: "ft42_price_history"
+    summary: "Historical price series for one outcome token (line chart)"
+    params:
+      - {name: market,        required: true,  format: "0x market address"}
+      - {name: token_id,      required: false, format: "provide token_id OR outcome_index"}
+      - {name: outcome_index, required: false, format: "0-based"}
+      - {name: duration,      required: false, format: "1h|4h|24h|7d|30d|90d|180d|1y|all", example: "24h", note: "duration mode (default 24h)"}
+      - {name: interval,      required: false, format: "1s|10s|1m|3m|30m|2h|6h|12h|1d", note: "range mode; needs start_ts"}
+      - {name: start_ts,      required: false, format: "unix seconds", note: "required in range mode"}
+      - {name: end_ts,        required: false, format: "unix seconds", note: "default now"}
+      - {name: fidelity,      required: false, format: "integer", note: "cap # of points"}
+      - {name: changes_only,  required: false, format: "true|false", note: "only step edges"}
+    gotchas:
+      - "Two modes: duration (pass duration) OR range (pass interval + start_ts). Returns {outcomeName, history:[{t, p, v, collateral, payout, mintedQuantity}]}"
+      - "interval is IGNORED when changes_only=true"
+    example: {name: "ft42_price_history", params: {market: "0x9b549058Dc466A39000c959BeF9299Ed281a022f", outcome_index: 0, duration: "7d"}}
+
+  - name: "ft42_event_price_history"
+    summary: "Per-event price history for one outcome token (segmented by market events)"
+    params:
+      - {name: market,        required: true,  format: "0x market address"}
+      - {name: start_ts,      required: true,  format: "unix seconds"}
+      - {name: token_id,      required: false, format: "token_id OR outcome_index"}
+      - {name: outcome_index, required: false, format: "0-based"}
+      - {name: end_ts,        required: false, format: "unix seconds"}
+      - {name: fidelity,      required: false, format: "integer"}
+    example: {name: "ft42_event_price_history", params: {market: "0x9b549058Dc466A39000c959BeF9299Ed281a022f", outcome_index: 0, start_ts: 1783771200}}
+
+  - name: "ft42_ohlc"
+    summary: "OHLC candlestick data for one outcome token"
+    params:
+      - {name: market,        required: true,  format: "0x market address"}
+      - {name: interval,      required: true,  format: "candle interval"}
+      - {name: token_id,      required: false, format: "token_id OR outcome_index"}
+      - {name: outcome_index, required: false, format: "0-based"}
+      - {name: start_ts,      required: false, format: "unix seconds"}
+      - {name: end_ts,        required: false, format: "unix seconds"}
+      - {name: limit,         required: false, format: "integer"}
+    example: {name: "ft42_ohlc", params: {market: "0x9b549058Dc466A39000c959BeF9299Ed281a022f", outcome_index: 0, interval: "1h"}}
+
+  # ── Stats / Holders ──
+  - name: "ft42_market_stats"
+    summary: "Batch trading stats for market(s) — volume, traders"
+    params:
+      - {name: market, required: true, format: "0x market address (supports batch)"}
+    example: {name: "ft42_market_stats", params: {market: "0x9b549058Dc466A39000c959BeF9299Ed281a022f"}}
+
+  - name: "ft42_token_stats"
+    summary: "Stats for outcome tokens (filter + sort)"
+    params:
+      - {name: market_address, required: false, format: "0x"}
+      - {name: category,       required: false, format: "category name"}
+      - {name: category_id,    required: false, format: "integer"}
+      - {name: status,         required: false, format: "market status"}
+      - {name: order_by,       required: false, format: "sort field"}
+      - {name: ascending,      required: false, format: "true|false"}
+      - {name: limit,          required: false, format: "integer"}
+      - {name: offset,         required: false, format: "integer"}
+    example: {name: "ft42_token_stats", params: {limit: 10}}
+
+  - name: "ft42_holders"
+    summary: "Holders of a specific outcome token (address + balance)"
+    params:
+      - {name: market,   required: true,  format: "0x market address"}
+      - {name: token_id, required: true,  format: "outcome token id"}
+      - {name: limit,    required: false, format: "integer"}
+      - {name: offset,   required: false, format: "integer"}
+    example: {name: "ft42_holders", params: {market: "0x9b549058Dc466A39000c959BeF9299Ed281a022f", token_id: "1"}}
+
+  # ── Users ──
+  - name: "ft42_activity"
+    summary: "Activity feed (trades/actions), filterable by user/market/type"
+    params:
+      - {name: user,        required: false, format: "0x wallet"}
+      - {name: market,      required: false, format: "0x market address"}
+      - {name: question_id, required: false, format: "question id"}
+      - {name: type,        required: false, format: "activity type"}
+      - {name: start,       required: false, format: "unix seconds / range start"}
+      - {name: end,         required: false, format: "range end"}
+      - {name: limit,       required: false, format: "integer"}
+      - {name: offset,      required: false, format: "integer"}
+    example: {name: "ft42_activity", params: {market: "0x9b549058Dc466A39000c959BeF9299Ed281a022f", limit: 20}}
+
+  - name: "ft42_positions"
+    summary: "Open positions of a user (wallet)"
+    params:
+      - {name: user,        required: true,  format: "0x wallet address"}
+      - {name: market,      required: false, format: "0x"}
+      - {name: question_id, required: false, format: "question id"}
+      - {name: order,       required: false, format: "sort field"}
+      - {name: ascending,   required: false, format: "true|false"}
+      - {name: limit,       required: false, format: "integer"}
+      - {name: offset,      required: false, format: "integer"}
+    example: {name: "ft42_positions", params: {user: "0x3E3172058EFc5eBC5e222BE969C97B3a3c6DdFB4"}}
+
+  - name: "ft42_closed_positions"
+    summary: "Closed/settled positions of a user (wallet)"
+    params:
+      - {name: user,        required: true,  format: "0x wallet address"}
+      - {name: market,      required: false, format: "0x"}
+      - {name: question_id, required: false, format: "question id"}
+      - {name: claimed,     required: false, format: "true|false"}
+      - {name: order,       required: false, format: "sort field"}
+      - {name: ascending,   required: false, format: "true|false"}
+      - {name: limit,       required: false, format: "integer"}
+      - {name: offset,      required: false, format: "integer"}
+    example: {name: "ft42_closed_positions", params: {user: "0x3E3172058EFc5eBC5e222BE969C97B3a3c6DdFB4"}}
+
+  # ── Leaderboard ──
+  - name: "ft42_leaderboard"
+    summary: "Trader leaderboard ranked by performance"
+    params:
+      - {name: period,  required: false, format: "time period"}
+      - {name: sort_by, required: false, format: "sort field (e.g. pnl)"}
+      - {name: user,    required: false, format: "0x wallet (find a user's rank)"}
+      - {name: limit,   required: false, format: "integer"}
+      - {name: offset,  required: false, format: "integer"}
+    gotchas: ["Returns {data:[{rank, walletAddress, pnl, pnlPct, ...}]}"]
+    example: {name: "ft42_leaderboard", params: {limit: 20}}
+
+  - name: "ft42_wallet_stats"
+    summary: "Aggregate trading stats for one wallet"
+    params:
+      - {name: wallet_address, required: true, format: "0x wallet address", note: "path param"}
+    example: {name: "ft42_wallet_stats", params: {wallet_address: "0x3E3172058EFc5eBC5e222BE969C97B3a3c6DdFB4"}}
+
+  - name: "ft42_top_trades"
+    summary: "Top trades by size/performance"
+    params:
+      - {name: period, required: false, format: "time period"}
+      - {name: limit,  required: false, format: "integer"}
+      - {name: offset, required: false, format: "integer"}
+    example: {name: "ft42_top_trades", params: {limit: 20}}
+
+global_gotchas:
+  - "⚠️ `market`/`market_address` is always the on-chain contract address (0x...), from ft42_markets data[].address"
+  - "⚠️ Outcome tokens: pass token_id OR outcome_index (0-based), never both. Source: ft42_market outcomes[] or ft42_tokens"
+  - "⚠️ 42 markets have N outcomes (price ranges, multi-choice), not just Yes/No — iterate outcomes[]"
+  - "BNB Chain (chainId 56), collateral USDT. Prices are 0..1-style probabilities scaled by the power curve"
+  - "Alpha API — response shapes may change; all endpoints are read-only and need no key"

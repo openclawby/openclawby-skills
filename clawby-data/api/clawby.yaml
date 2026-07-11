@@ -1,5 +1,5 @@
-version: 433
-generated_at: "2026-07-01T13:52:26.481084+00:00"
+version: 434
+generated_at: "2026-07-11T15:35:09.511197+00:00"
 base_url: https://api.openclawby.com
 auth_header: X-API-Key
 relay: POST /api/relay  body {name|id, params}
@@ -2435,3 +2435,136 @@ apis:
     description: "Tokens created/deployed by a wallet (dev history + rug/open stats)."
     docs: |
       Params: chain*, wallet_address*. Returns created token list + open_ratio/creator_ath_info.
+  - id: 478
+    name: "ft42_markets"
+    asset_classes: "prediction_market"
+    data_types: "markets,events,prediction_market"
+    description: "42.space (FortyTwo) prediction markets on BNB Chain — paginated list of all eventcoin markets with rich filtering."
+    docs: |
+      Params (all optional): limit(default 100, max 500), offset, order(created_at|volume|volume_24h|collateral|start_timestamp|end_timestamp), ascending(true/false, default false=desc), status(not_started|live|ended|resolved|finalised|all), category, subcategory, topic, tag, collateral(symbol/address), volume_min, volume_max, start_date_min/start_date_max/end_date_min/end_date_max(ISO 8601), oracle, creator, contract_version(1|2), question_id(csv), market_address(csv), locale(zh/id...), fields(csv whitelist). Response: {data:[...], pagination:{hasMore,totalResults}}. Each market has address, question, slug, status, outcomes[], collateralSymbol, volume, oracle, creator.
+  - id: 479
+    name: "ft42_market"
+    asset_classes: "prediction_market"
+    data_types: "market,outcomes,prediction_market"
+    description: "Full details of a single 42.space market by its on-chain contract address (outcomes, prices, collateral, status)."
+    docs: |
+      Required(path): market_address. Optional: locale. Returns one market object with outcomes[], collateralSymbol, status, volume, oracle, ancillaryData.
+  - id: 480
+    name: "ft42_market_timeline"
+    asset_classes: "prediction_market"
+    data_types: "timeline,events,prediction_market"
+    description: "Lifecycle event history of a 42.space market (launched/extended/resolved/finalised) with timestamps + winning outcomes."
+    docs: |
+      Required(path): market_address. Returns {events:[{type,timestamp,answer,winningOutcomes[]}]}. type = launched|extended|shortened|flagged|unflagged|resolved|unresolve|finalised.
+  - id: 481
+    name: "ft42_categories"
+    asset_classes: "prediction_market"
+    data_types: "categories,taxonomy,prediction_market"
+    description: "All 42.space market categories, each with subcategory/topic counts and live market count."
+    docs: |
+      Optional: limit(default 100), offset, locale. Returns {data:[{id,name,slug,liveMarketCount,subcategoryCount,topicCount}], pagination}.
+  - id: 482
+    name: "ft42_category"
+    asset_classes: "prediction_market"
+    data_types: "category,taxonomy,prediction_market"
+    description: "Single 42.space category by URL slug, including nested subcategories and topics."
+    docs: |
+      Required(path): slug. Optional: locale. Returns category with subcategories[] each containing topics[].
+  - id: 483
+    name: "ft42_tokens"
+    asset_classes: "prediction_market"
+    data_types: "outcome_tokens,prices,prediction_market"
+    description: "Paginated list of all tradeable 42.space outcome tokens across markets."
+    docs: |
+      Optional: market_address, token_id, outcome_index(0-based), limit(default 50, max 500), offset, order(price|market_cap|token_id|outcome_index), ascending. Returns {data:[{tokenId,outcomeIndex,outcomeName,price,marketCap,market:{marketAddress,slug,question}}], pagination}.
+  - id: 484
+    name: "ft42_prices"
+    asset_classes: "prediction_market"
+    data_types: "prices,quotes,prediction_market"
+    description: "Current price(s) of one or more 42.space outcome tokens in a market (single, batch <=50, or all outcomes)."
+    docs: |
+      Required: market(contract address). Optional (choose one lookup): token_id | outcome_index | token_ids(csv, max 50) | outcome_indices(csv, max 50); none = all outcomes. projection(full|midpoint). Returns array of {tokenId,outcome,price,mintedQuantity,outcomeCap,totalMarketCap,updatedAt}.
+  - id: 485
+    name: "ft42_price_history"
+    asset_classes: "prediction_market"
+    data_types: "price_history,chart,prediction_market"
+    description: "Historical price series for a single 42.space outcome token (line chart, step-held between trades)."
+    docs: |
+      Required: market. Provide token_id OR outcome_index (not both). Duration mode(default): duration(1h|4h|24h|7d|30d|90d|180d|1y|all, default 24h). Range mode: interval(1s|10s|1m|3m|30m|2h|6h|12h|1d) + start_ts(required) + end_ts. Optional: fidelity(max points), changes_only(true=only step edges). Returns {outcomeName, history:[{t(unix),p(price),v,collateral,payout,mintedQuantity}]}.
+  - id: 486
+    name: "ft42_event_price_history"
+    asset_classes: "prediction_market"
+    data_types: "price_history,chart,prediction_market"
+    description: "Per-event price history for a 42.space outcome token, segmented by market lifecycle events."
+    docs: |
+      Required: market, start_ts. Provide token_id OR outcome_index. Optional: end_ts, fidelity. Returns price points anchored to market events.
+  - id: 487
+    name: "ft42_ohlc"
+    asset_classes: "prediction_market"
+    data_types: "ohlc,candlestick,chart,prediction_market"
+    description: "OHLC candlestick data for a 42.space outcome token."
+    docs: |
+      Required: market, interval. Provide token_id OR outcome_index. Optional: start_ts, end_ts, limit. Returns OHLC candles.
+  - id: 488
+    name: "ft42_market_stats"
+    asset_classes: "prediction_market"
+    data_types: "stats,volume,prediction_market"
+    description: "Batch trading stats for 42.space market(s) — volume, traders, etc."
+    docs: |
+      Required: market (contract address; supports batch). Returns aggregate stats per market.
+  - id: 489
+    name: "ft42_token_stats"
+    asset_classes: "prediction_market"
+    data_types: "stats,outcome_tokens,prediction_market"
+    description: "Stats for 42.space outcome tokens with filtering and sorting."
+    docs: |
+      Optional: market_address, category, category_id, status, order_by, ascending, limit, offset. Returns paginated token stats.
+  - id: 490
+    name: "ft42_holders"
+    asset_classes: "prediction_market"
+    data_types: "holders,ownership,prediction_market"
+    description: "Holders of a specific 42.space outcome token (address + balance)."
+    docs: |
+      Required: market, token_id. Optional: limit, offset. Returns paginated holder list.
+  - id: 491
+    name: "ft42_activity"
+    asset_classes: "prediction_market"
+    data_types: "activity,trades,prediction_market"
+    description: "Activity feed for 42.space — trades/actions, filterable by user, market, or type."
+    docs: |
+      Optional: user(wallet), market, question_id, type, start, end, limit, offset. Returns paginated activity events.
+  - id: 492
+    name: "ft42_positions"
+    asset_classes: "prediction_market"
+    data_types: "positions,portfolio,prediction_market"
+    description: "Open positions of a 42.space user (wallet)."
+    docs: |
+      Required: user(wallet address). Optional: market, question_id, order, ascending, limit, offset. Returns paginated open positions.
+  - id: 493
+    name: "ft42_closed_positions"
+    asset_classes: "prediction_market"
+    data_types: "positions,portfolio,prediction_market"
+    description: "Closed/settled positions of a 42.space user (wallet)."
+    docs: |
+      Required: user(wallet address). Optional: market, question_id, claimed(true/false), order, ascending, limit, offset. Returns paginated closed positions.
+  - id: 494
+    name: "ft42_leaderboard"
+    asset_classes: "prediction_market"
+    data_types: "leaderboard,traders,prediction_market"
+    description: "42.space trader leaderboard ranked by performance."
+    docs: |
+      Optional: period, sort_by, user, limit, offset. Returns ranked traders.
+  - id: 495
+    name: "ft42_wallet_stats"
+    asset_classes: "prediction_market"
+    data_types: "stats,traders,prediction_market"
+    description: "Aggregate trading stats for a single 42.space wallet."
+    docs: |
+      Required(path): wallet_address. Returns wallet trading stats (volume, pnl, win rate, etc.).
+  - id: 496
+    name: "ft42_top_trades"
+    asset_classes: "prediction_market"
+    data_types: "trades,leaderboard,prediction_market"
+    description: "Top trades on 42.space by size/performance."
+    docs: |
+      Optional: period, limit, offset. Returns top trades.

@@ -1,5 +1,5 @@
 {
-  "version": "1.0.31",
+  "version": "1.0.32",
   "base_url": "https://www.openclawby.com/clawby-skill/",
   "managed": [
     "SKILL.md",
@@ -55,6 +55,7 @@
     "api/catalog/prediction-markets/activity.yaml",
     "api/catalog/prediction-markets/clob.yaml",
     "api/catalog/prediction-markets/discovery.yaml",
+    "api/catalog/prediction-markets/fortytwo.yaml",
     "api/catalog/rpc/_index.yaml",
     "api/catalog/rpc/evm/arbitrum.yaml",
     "api/catalog/rpc/evm/arbitrum_nova.yaml",
