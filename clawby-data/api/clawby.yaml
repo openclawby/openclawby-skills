@@ -1,5 +1,5 @@
-version: 434
-generated_at: "2026-07-11T15:35:09.511197+00:00"
+version: 435
+generated_at: "2026-07-12T01:45:47.279772+00:00"
 base_url: https://api.openclawby.com
 auth_header: X-API-Key
 relay: POST /api/relay  body {name|id, params}
@@ -2568,3 +2568,143 @@ apis:
     description: "Top trades on 42.space by size/performance."
     docs: |
       Optional: period, limit, offset. Returns top trades.
+  - id: 497
+    name: "rootdata_search"
+    asset_classes: "crypto"
+    data_types: "search,projects,vc,people,crypto"
+    description: "RootData: search crypto projects / VCs / people by keyword. Unlimited (free)."
+    docs: |
+      Body: query(required, project/org/token name or keyword), precise_x_search(bool, exact match by X handle like @name). Returns [{id, type(1=project/2=org/3=people), name, logo, introduce, active, rootdataurl}]. Use the id with rootdata_project/rootdata_org/rootdata_people.
+  - id: 498
+    name: "rootdata_id_map"
+    asset_classes: "crypto"
+    data_types: "ids,catalog,crypto"
+    description: "RootData: full ID list of all projects/VCs/people (for bulk mapping). 20 credits/call."
+    docs: |
+      Body: type(required, 1=project 2=VC 3=people). Returns list of {id, name}.
+  - id: 499
+    name: "rootdata_project"
+    asset_classes: "crypto"
+    data_types: "project,funding,team,investors,crypto"
+    description: "RootData: full detail of one project by ID (or contract address). 2 credits/call."
+    docs: |
+      Body: project_id(int) OR contract_address(string; project_id wins if both). include_team(bool, default false), include_investors(bool, default false). Returns project_name, one_liner, description, total_funding, tags, investors[], social_media, rd_score/rd_rank, ecosystem, market_cap/price/fdv, team_members, contracts, X heat/influence/followers (Pro fields).
+  - id: 500
+    name: "rootdata_org"
+    asset_classes: "crypto"
+    data_types: "vc,investor,investments,crypto"
+    description: "RootData: full detail of one VC/institution by ID. 2 credits/call."
+    docs: |
+      Body: org_id(int, required). include_team(bool), include_investments(bool). Returns org_name, description, category, investments[], social_media, team_members, X heat/influence/followers (Pro).
+  - id: 501
+    name: "rootdata_people"
+    asset_classes: "crypto"
+    data_types: "people,person,crypto"
+    description: "RootData: full detail of one person by ID (Pro). 2 credits/call."
+    docs: |
+      Body: people_id(long, required). Returns people_name, introduce, one_liner, head_img, X, linkedin, heat/influence/followers, education_experience.
+  - id: 502
+    name: "rootdata_events"
+    asset_classes: "crypto"
+    data_types: "events,calendar,unlocks,mainnet,crypto"
+    description: "RootData: project calendar events (mainnet/testnet/security/token/unlock/conference etc). Pro. 1 credit/item."
+    docs: |
+      Body: page(default 1), page_size(default 10, max 100), m_id(project id; omit for all), begin_time/end_time(yyyy-MM-dd filter on hap_date), type(1 mainnet,2 testnet,3 security,4 token issuance,5 shutdown,7 product,9 other,13 unlock,16 conference,21 incentive,22 public sale; omit for all). Returns {total, items:[{id,project_id,name,type,type_name,hap_date,o_name,site_url,start_date,end_date}]}.
+  - id: 503
+    name: "rootdata_investors"
+    asset_classes: "crypto"
+    data_types: "investors,portfolio,vc,crypto"
+    description: "RootData: bulk investor details (portfolio, analytics). Plus/Pro. 2 credits/item."
+    docs: |
+      Body: page(default 1), page_size(default 10, max 100). Returns {total, items:[{invest_id,invest_name,type,logo,area,invest_num,last_invest_num,invest_overview,investments[],invest_range,invest_stics,team_members}]}.
+  - id: 504
+    name: "rootdata_twitter_map"
+    asset_classes: "crypto"
+    data_types: "twitter,x,social,crypto"
+    description: "RootData: bulk export X (Twitter) data (followers/heat/influence) for all entities of a type. Plus/Pro. 50 credits/call."
+    docs: |
+      Body: type(required, 1=project 2=org 3=people). Returns list of {id,name,X,followers,following,heat,influence}.
+  - id: 505
+    name: "rootdata_fundraising"
+    asset_classes: "crypto"
+    data_types: "fundraising,rounds,funding,crypto"
+    description: "RootData: bulk fundraising rounds (2018-now). Plus/Pro. 2 credits/item."
+    docs: |
+      Body: page(default 1), page_size(default 10, max 200), start_time/end_time(yyyy-MM funding announce date), min_amount/max_amount(USD), project_id(int), id(long, single round). Returns {total, items:[{id,name,logo,rounds,published_time,amount(USD),valuation,project_id,invests[]}]}.
+  - id: 506
+    name: "rootdata_updates"
+    asset_classes: "crypto"
+    data_types: "updates,sync,crypto"
+    description: "RootData: entities updated within a time window (sync). Pro. 2 credits/call."
+    docs: |
+      Body: begin_time(long unix-ms, required), end_time(long unix-ms), type(1 project,2 VC,3 people,6 funding; omit for all). Returns [{id,type,name,update_time}].
+  - id: 507
+    name: "rootdata_hot_index"
+    asset_classes: "crypto"
+    data_types: "hot,ranking,trending,crypto"
+    description: "RootData: RD heat-index Top100 projects. Pro. 20 credits/call."
+    docs: |
+      Body: days(required, 1 or 7). Returns [{project_id,project_name,eval(heat),rank,logo,one_liner,token_symbol,tags}].
+  - id: 508
+    name: "rootdata_rd_top300"
+    asset_classes: "crypto"
+    data_types: "ranking,growth,trending,crypto"
+    description: "RootData: RD growth-index Top300 projects (today). Pro. 20 credits/call."
+    docs: |
+      Body: none. Returns [{project_id,project_name,logo,rd_score,rd_rank(1-300)}].
+  - id: 509
+    name: "rootdata_hot_projects_x"
+    asset_classes: "crypto"
+    data_types: "twitter,x,hot,projects,crypto"
+    description: "RootData: hot projects on X by heat/influence/followers. Pro. 10 credits/call."
+    docs: |
+      Body: heat(bool), influence(bool), followers(bool) — set which ranking(s) to return. Returns {heat:[...],influence:[...],followers:[...]} each {project_id,project_name,logo,one_liner,score}.
+  - id: 510
+    name: "rootdata_hot_figures_x"
+    asset_classes: "crypto"
+    data_types: "twitter,x,people,hot,crypto"
+    description: "RootData: hot crypto figures on X. Pro. 10 credits/call."
+    docs: |
+      Body: page(default 1), page_size(default 10, max 100), rank_type(required, 'heat' or 'influence'). Returns {total, items:[{people_id,people_name,score,head_img,one_liner}]}.
+  - id: 511
+    name: "rootdata_x_follows"
+    asset_classes: "crypto"
+    data_types: "twitter,x,follows,social,crypto"
+    description: "RootData: X account follow/unfollow activity (last 14d) + top influential followers. Pro. 1 credit/call."
+    docs: |
+      Body: twitter_account(required, handle with or without @). Returns {follow_updates:[{date,follows[],unfollows[],followers[],unfollowers[]}], top_followers:[{type,id,name,twitter_handle,...}]}.
+  - id: 512
+    name: "rootdata_job_changes"
+    asset_classes: "crypto"
+    data_types: "people,jobs,hires,crypto"
+    description: "RootData: recent people job changes (hires/resignations). Pro. 10 credits/call."
+    docs: |
+      Body: recent_joinees(bool), recent_resignations(bool). Returns {recent_joinees:[...],recent_resignations:[{people_id,people_name,head_img,company,position}]}.
+  - id: 513
+    name: "rootdata_ecosystems"
+    asset_classes: "crypto"
+    data_types: "ecosystem,catalog,crypto"
+    description: "RootData: ecosystem map (all ecosystems + project counts). Pro. 50 credits/call."
+    docs: |
+      Body: none. Returns [{ecosystem_id,ecosystem_name,project_num}]. Use ecosystem_id with rootdata_projects_by_ecosystem.
+  - id: 514
+    name: "rootdata_tags"
+    asset_classes: "crypto"
+    data_types: "tags,catalog,crypto"
+    description: "RootData: tag map (all tags). Pro. 50 credits/call."
+    docs: |
+      Body: none. Returns [{tag_id,tag_name}]. Use tag_id with rootdata_projects_by_tag.
+  - id: 515
+    name: "rootdata_projects_by_ecosystem"
+    asset_classes: "crypto"
+    data_types: "projects,ecosystem,crypto"
+    description: "RootData: projects in given ecosystem(s). Pro. 20 credits/call."
+    docs: |
+      Body: ecosystem_ids(required, comma-separated ids from rootdata_ecosystems). Returns [{project_id,project_name,logo,one_liner}].
+  - id: 516
+    name: "rootdata_projects_by_tag"
+    asset_classes: "crypto"
+    data_types: "projects,tags,crypto"
+    description: "RootData: projects with given tag(s). Pro. 20 credits/call."
+    docs: |
+      Body: tag_ids(required, comma-separated ids from rootdata_tags). Returns [{project_id,project_name,logo,one_liner}].

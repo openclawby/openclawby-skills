@@ -1,0 +1,37 @@
+# ============================================================================
+# Crypto Intel — Index (Guide)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Crypto Intel — Index"
+total_interfaces: 20   # 20 RootData
+providers_note: >
+  Research intelligence data for the crypto industry. RootData (rootdata_*) covers projects,
+  VCs, people, fundraising rounds, calendar events, ecosystem maps, and X (Twitter) social signals.
+  Most endpoints require RootData Pro/Plus (Clawby handles credentials). Credits costs vary by endpoint —
+  see rootdata.yaml global_gotchas for the full credit table.
+
+files:
+  - path: "rootdata.yaml"
+    count: 20
+    interfaces:
+      - rootdata_search
+      - rootdata_id_map
+      - rootdata_project
+      - rootdata_org
+      - rootdata_people
+      - rootdata_events
+      - rootdata_investors
+      - rootdata_twitter_map
+      - rootdata_fundraising
+      - rootdata_updates
+      - rootdata_hot_index
+      - rootdata_rd_top300
+      - rootdata_hot_projects_x
+      - rootdata_hot_figures_x
+      - rootdata_x_follows
+      - rootdata_job_changes
+      - rootdata_ecosystems
+      - rootdata_tags
+      - rootdata_projects_by_ecosystem
+      - rootdata_projects_by_tag
+    desc: "RootData: crypto project/VC/people search & detail, fundraising rounds, calendar events, ecosystem & tag maps, X social signals, hot rankings — research intelligence for the crypto industry"

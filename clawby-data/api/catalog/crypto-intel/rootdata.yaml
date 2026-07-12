@@ -1,0 +1,253 @@
+# ============================================================================
+# Crypto Intel — RootData (crypto projects / VCs / people / fundraising)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Crypto Intel — RootData"
+note: >
+  RootData is the leading crypto research intelligence database covering projects, VCs, people,
+  fundraising rounds, calendar events, ecosystem maps, and X (Twitter) social signals.
+  Requires RootData Pro/Plus for most endpoints (Clawby handles the key — agents do not need one).
+  Credits cost varies per endpoint (listed per interface). Start with rootdata_search to resolve
+  a name/keyword to an id, then use rootdata_project / rootdata_org / rootdata_people for full detail.
+
+# ── Critical Field Map ──────────────────────────────────────────────────────
+critical_field_map:
+  id:
+    source: "rootdata_search returns [{id, type(1=project/2=org/3=people), name, ...}]"
+    used_by: [rootdata_project, rootdata_org, rootdata_people]
+    note: "type=1 → use as project_id in rootdata_project; type=2 → org_id in rootdata_org; type=3 → people_id in rootdata_people"
+  project_id:
+    source: "rootdata_search (type=1) / rootdata_fundraising items[].project_id / rootdata_hot_index items[].project_id / rootdata_rd_top300 items[].project_id / rootdata_projects_by_ecosystem[].project_id / rootdata_projects_by_tag[].project_id"
+    used_by: [rootdata_project, rootdata_events]
+    note: "also accepts contract_address in rootdata_project; project_id wins if both"
+  org_id:
+    source: "rootdata_search (type=2) / rootdata_fundraising items[].invests[].invest_id"
+    used_by: [rootdata_org]
+  people_id:
+    source: "rootdata_search (type=3)"
+    used_by: [rootdata_people]
+  ecosystem_id:
+    source: "rootdata_ecosystems returns [{ecosystem_id, ecosystem_name, project_num}]"
+    used_by: [rootdata_projects_by_ecosystem]
+  tag_id:
+    source: "rootdata_tags returns [{tag_id, tag_name}]"
+    used_by: [rootdata_projects_by_tag]
+
+# ── Recommended Call Order ──────────────────────────────────────────────────
+recommended_call_order:
+  - {step: 1, action: "rootdata_search {query} to resolve a project/VC/person name → get id + type"}
+  - {step: 2, action: "rootdata_project {project_id} / rootdata_org {org_id} / rootdata_people {people_id} for full detail"}
+  - {step: 3, action: "rootdata_fundraising (paginated) for bulk funding rounds; filter by project_id or date range"}
+  - {step: 4, action: "rootdata_hot_index {days:1|7} or rootdata_rd_top300 for trending projects; then rootdata_project for detail"}
+  - {step: 5, action: "rootdata_ecosystems → rootdata_projects_by_ecosystem for ecosystem landscape; rootdata_tags → rootdata_projects_by_tag for theme landscape"}
+
+interfaces:
+  # ── Search / Lookup ──
+  - name: "rootdata_search"
+    summary: "Search crypto projects, VCs, or people by keyword or X handle (free, no credit cost)"
+    params:
+      - {name: query,             required: true,  format: "project/org/token name or keyword", example: "Uniswap"}
+      - {name: precise_x_search, required: false, format: "bool", example: true, note: "exact match by X handle like @name"}
+    gotchas:
+      - "Returns [{id, type(1=project/2=org/3=people), name, logo, introduce, active, rootdataurl}]"
+      - "The id here is the key for rootdata_project (type=1), rootdata_org (type=2), rootdata_people (type=3)"
+    example: {name: "rootdata_search", params: {query: "Uniswap"}}
+
+  - name: "rootdata_id_map"
+    summary: "Full ID list of all projects / VCs / people by type (bulk catalog mapping). 20 credits/call."
+    params:
+      - {name: type, required: true, format: "1=project 2=VC 3=people", example: 1}
+    gotchas:
+      - "Returns list of {id, name}. High credits (20) — use for bulk sync, not single lookups"
+    example: {name: "rootdata_id_map", params: {type: 1}}
+
+  # ── Detail ──
+  - name: "rootdata_project"
+    summary: "Full detail of one crypto project by id or contract address. 2 credits/call."
+    params:
+      - {name: project_id,       required: false, format: "int, from rootdata_search (type=1)", note: "project_id wins if both provided"}
+      - {name: contract_address, required: false, format: "contract address string"}
+      - {name: include_team,     required: false, format: "bool", example: false}
+      - {name: include_investors, required: false, format: "bool", example: false}
+    gotchas:
+      - "project_id OR contract_address required (at least one)"
+      - "Returns project_name, one_liner, description, total_funding, tags, investors[], social_media, rd_score/rd_rank, ecosystem, market_cap/price/fdv, team_members, contracts, X heat/influence/followers (Pro fields)"
+    example: {name: "rootdata_project", params: {project_id: 12345, include_investors: true}}
+
+  - name: "rootdata_org"
+    summary: "Full detail of one VC / institution by ID. 2 credits/call."
+    params:
+      - {name: org_id,             required: true,  format: "int, from rootdata_search (type=2)"}
+      - {name: include_team,       required: false, format: "bool"}
+      - {name: include_investments, required: false, format: "bool"}
+    gotchas:
+      - "Returns org_name, description, category, investments[], social_media, team_members, X heat/influence/followers (Pro)"
+    example: {name: "rootdata_org", params: {org_id: 5678, include_investments: true}}
+
+  - name: "rootdata_people"
+    summary: "Full detail of one person by ID (Pro). 2 credits/call."
+    params:
+      - {name: people_id, required: true, format: "long int, from rootdata_search (type=3)"}
+    gotchas:
+      - "Returns people_name, introduce, one_liner, head_img, X, linkedin, heat/influence/followers, education_experience"
+    example: {name: "rootdata_people", params: {people_id: 9012}}
+
+  # ── Events / Calendar ──
+  - name: "rootdata_events"
+    summary: "Project calendar events (mainnet/testnet/token/unlock/conference etc). Pro. 1 credit/item."
+    params:
+      - {name: page,       required: false, format: "int, default 1"}
+      - {name: page_size,  required: false, format: "int, default 10, max 100"}
+      - {name: m_id,       required: false, format: "project id; omit for all projects"}
+      - {name: begin_time, required: false, format: "yyyy-MM-dd (filter on event date)", example: "2025-01-01"}
+      - {name: end_time,   required: false, format: "yyyy-MM-dd"}
+      - {name: type,       required: false, format: "1=mainnet,2=testnet,3=security,4=token issuance,5=shutdown,7=product,9=other,13=unlock,16=conference,21=incentive,22=public sale; omit=all"}
+    gotchas:
+      - "Returns {total, items:[{id,project_id,name,type,type_name,hap_date,o_name,site_url,start_date,end_date}]}"
+      - "Credit cost = 1 per returned item; large page_size can be expensive"
+    example: {name: "rootdata_events", params: {page: 1, page_size: 20, type: 13}}
+
+  # ── Investors / Fundraising ──
+  - name: "rootdata_investors"
+    summary: "Bulk VC / investor details with portfolio analytics. Plus/Pro. 2 credits/item."
+    params:
+      - {name: page,      required: false, format: "int, default 1"}
+      - {name: page_size, required: false, format: "int, default 10, max 100"}
+    gotchas:
+      - "Returns {total, items:[{invest_id,invest_name,type,logo,area,invest_num,last_invest_num,invest_overview,investments[],invest_range,invest_stics,team_members}]}"
+      - "Credits = 2 per item; e.g. page_size=50 costs 100 credits"
+    example: {name: "rootdata_investors", params: {page: 1, page_size: 10}}
+
+  - name: "rootdata_fundraising"
+    summary: "Bulk fundraising rounds (2018-present) with filtering. Plus/Pro. 2 credits/item."
+    params:
+      - {name: page,        required: false, format: "int, default 1"}
+      - {name: page_size,   required: false, format: "int, default 10, max 200"}
+      - {name: start_time,  required: false, format: "yyyy-MM (funding announce date start)", example: "2024-01"}
+      - {name: end_time,    required: false, format: "yyyy-MM"}
+      - {name: min_amount,  required: false, format: "USD amount (number)"}
+      - {name: max_amount,  required: false, format: "USD amount (number)"}
+      - {name: project_id,  required: false, format: "int — filter to one project"}
+      - {name: id,          required: false, format: "long — fetch a single round by round id"}
+    gotchas:
+      - "Returns {total, items:[{id,name,logo,rounds,published_time,amount(USD),valuation,project_id,invests[]}]}"
+      - "Credits = 2 per returned item; paginate carefully"
+    example: {name: "rootdata_fundraising", params: {page: 1, page_size: 20, start_time: "2024-01", min_amount: 1000000}}
+
+  # ── Sync ──
+  - name: "rootdata_updates"
+    summary: "Entities updated within a time window — for incremental sync. Pro. 2 credits/call."
+    params:
+      - {name: begin_time, required: true,  format: "long unix-ms timestamp", example: 1720000000000}
+      - {name: end_time,   required: false, format: "long unix-ms timestamp; default now"}
+      - {name: type,       required: false, format: "1=project, 2=VC, 3=people, 6=funding; omit=all"}
+    gotchas:
+      - "Returns [{id, type, name, update_time}]; then fetch detail with rootdata_project/org/people/fundraising"
+    example: {name: "rootdata_updates", params: {begin_time: 1720000000000, type: 1}}
+
+  # ── Ranking / Trending ──
+  - name: "rootdata_hot_index"
+    summary: "RD heat-index Top 100 crypto projects. Pro. 20 credits/call."
+    params:
+      - {name: days, required: true, format: "1 or 7", example: 7}
+    gotchas:
+      - "Returns [{project_id,project_name,eval(heat score),rank,logo,one_liner,token_symbol,tags}]"
+      - "Use project_id with rootdata_project for full detail"
+    example: {name: "rootdata_hot_index", params: {days: 7}}
+
+  - name: "rootdata_rd_top300"
+    summary: "RD growth-index Top 300 projects (today). Pro. 20 credits/call."
+    params: []
+    gotchas:
+      - "No body params. Returns [{project_id,project_name,logo,rd_score,rd_rank(1-300)}]"
+    example: {name: "rootdata_rd_top300", params: {}}
+
+  # ── X (Twitter) Social Intelligence ──
+  - name: "rootdata_hot_projects_x"
+    summary: "Hot crypto projects on X ranked by heat / influence / followers. Pro. 10 credits/call."
+    params:
+      - {name: heat,      required: false, format: "bool — include heat ranking"}
+      - {name: influence, required: false, format: "bool — include influence ranking"}
+      - {name: followers, required: false, format: "bool — include followers ranking"}
+    gotchas:
+      - "Set at least one of heat/influence/followers to true"
+      - "Returns {heat:[...],influence:[...],followers:[...]} each list: [{project_id,project_name,logo,one_liner,score}]"
+    example: {name: "rootdata_hot_projects_x", params: {heat: true, influence: true}}
+
+  - name: "rootdata_hot_figures_x"
+    summary: "Hot crypto figures (people) on X by heat or influence. Pro. 10 credits/call."
+    params:
+      - {name: page,      required: false, format: "int, default 1"}
+      - {name: page_size, required: false, format: "int, default 10, max 100"}
+      - {name: rank_type, required: true,  format: "'heat' or 'influence'", example: "heat"}
+    gotchas:
+      - "Returns {total, items:[{people_id,people_name,score,head_img,one_liner}]}"
+    example: {name: "rootdata_hot_figures_x", params: {rank_type: "heat", page_size: 20}}
+
+  - name: "rootdata_twitter_map"
+    summary: "Bulk export X (Twitter) data (followers/heat/influence) for all entities of a type. Plus/Pro. 50 credits/call."
+    params:
+      - {name: type, required: true, format: "1=project 2=org 3=people", example: 1}
+    gotchas:
+      - "Very high credit cost (50). Returns list of {id,name,X,followers,following,heat,influence}"
+      - "Returns data for ALL entities of that type — use for bulk analysis, not single lookups"
+    example: {name: "rootdata_twitter_map", params: {type: 1}}
+
+  - name: "rootdata_x_follows"
+    summary: "X account follow/unfollow activity (last 14 days) + top influential followers. Pro. 1 credit/call."
+    params:
+      - {name: twitter_account, required: true, format: "X handle with or without @", example: "@uniswap"}
+    gotchas:
+      - "Returns {follow_updates:[{date,follows[],unfollows[],followers[],unfollowers[]}], top_followers:[{type,id,name,twitter_handle,...}]}"
+    example: {name: "rootdata_x_follows", params: {twitter_account: "@uniswap"}}
+
+  # ── People / Hiring ──
+  - name: "rootdata_job_changes"
+    summary: "Recent people job changes (hires / resignations). Pro. 10 credits/call."
+    params:
+      - {name: recent_joinees,     required: false, format: "bool"}
+      - {name: recent_resignations, required: false, format: "bool"}
+    gotchas:
+      - "Set at least one of recent_joinees/recent_resignations to true"
+      - "Returns {recent_joinees:[...],recent_resignations:[{people_id,people_name,head_img,company,position}]}"
+    example: {name: "rootdata_job_changes", params: {recent_joinees: true, recent_resignations: true}}
+
+  # ── Ecosystems / Tags (Landscape) ──
+  - name: "rootdata_ecosystems"
+    summary: "Full ecosystem map — all ecosystems + project counts. Pro. 50 credits/call."
+    params: []
+    gotchas:
+      - "No body params. Returns [{ecosystem_id,ecosystem_name,project_num}]"
+      - "Use ecosystem_id with rootdata_projects_by_ecosystem. High cost (50) — cache results"
+    example: {name: "rootdata_ecosystems", params: {}}
+
+  - name: "rootdata_tags"
+    summary: "Full tag map — all tags. Pro. 50 credits/call."
+    params: []
+    gotchas:
+      - "No body params. Returns [{tag_id,tag_name}]"
+      - "Use tag_id with rootdata_projects_by_tag. High cost (50) — cache results"
+    example: {name: "rootdata_tags", params: {}}
+
+  - name: "rootdata_projects_by_ecosystem"
+    summary: "Projects within given ecosystem(s). Pro. 20 credits/call."
+    params:
+      - {name: ecosystem_ids, required: true, format: "comma-separated ecosystem_id values from rootdata_ecosystems", example: "1,5,12"}
+    gotchas:
+      - "Returns [{project_id,project_name,logo,one_liner}]. Then use rootdata_project for full detail"
+    example: {name: "rootdata_projects_by_ecosystem", params: {ecosystem_ids: "1,5"}}
+
+  - name: "rootdata_projects_by_tag"
+    summary: "Projects with given tag(s). Pro. 20 credits/call."
+    params:
+      - {name: tag_ids, required: true, format: "comma-separated tag_id values from rootdata_tags", example: "3,7"}
+    gotchas:
+      - "Returns [{project_id,project_name,logo,one_liner}]. Then use rootdata_project for full detail"
+    example: {name: "rootdata_projects_by_tag", params: {tag_ids: "3,7"}}
+
+global_gotchas:
+  - "Credits cost varies widely: rootdata_search=free; rootdata_project/org/people=2; rootdata_fundraising=2/item; rootdata_twitter_map/ecosystems/tags=50; rootdata_hot_index/rd_top300/projects_by_ecosystem/projects_by_tag=20; rootdata_hot_projects_x/hot_figures_x/job_changes=10; rootdata_events=1/item; rootdata_x_follows=1; rootdata_updates=2; rootdata_id_map=20"
+  - "Most endpoints require RootData Pro or Plus (Clawby key covers this — agents do not need a separate RootData account)"
+  - "Always call rootdata_search first to resolve a name to an id; do not guess project_id / org_id values"
+  - "rootdata_ecosystems and rootdata_tags are expensive (50 credits) — call once and cache ecosystem_id / tag_id mappings"
+  - "For incremental sync, use rootdata_updates with a begin_time unix-ms timestamp to get changed entity ids, then fetch details"

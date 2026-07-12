@@ -1,5 +1,5 @@
 {
-  "version": "1.0.32",
+  "version": "1.0.33",
   "base_url": "https://www.openclawby.com/clawby-skill/",
   "managed": [
     "SKILL.md",
@@ -133,6 +133,8 @@
     "api/catalog/rpc/non-evm/sui.yaml",
     "api/catalog/rpc/non-evm/ton.yaml",
     "api/catalog/rpc/non-evm/xrp.yaml",
+    "api/catalog/crypto-intel/_index.yaml",
+    "api/catalog/crypto-intel/rootdata.yaml",
     "api/catalog/social/_index.yaml",
     "api/catalog/social/facebook.yaml",
     "api/catalog/social/instagram.yaml",

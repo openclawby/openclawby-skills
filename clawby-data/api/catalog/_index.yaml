@@ -38,6 +38,9 @@ categories:
   - dir: "filings/"
     desc: "US SEC: CIK lookup · financial concepts (XBRL) · filing history"
     count: 3
+  - dir: "crypto-intel/"
+    desc: "Crypto research intelligence: project/VC/people search & detail · fundraising rounds · calendar events · ecosystem & tag maps · X social signals · hot rankings (RootData)"
+    count: 20
 
 # On-chain native RPC (/api/rpc — a different endpoint from /api/relay above):
 onchain_rpc:
