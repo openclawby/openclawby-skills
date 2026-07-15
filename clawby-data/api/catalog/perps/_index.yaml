@@ -3,11 +3,17 @@
 # Call: POST /api/relay   {"name": "<name>", "params": {...}}
 # ============================================================================
 category: "Perpetual Futures (Perps) Interface Catalog"
-total_interfaces: 13
+total_interfaces: 34   # 13 Hyperliquid + 21 Aster DEX
+
+providers_note: >
+  Two perp-DEX data sources. Hyperliquid (hyperliquid_*) — see market/spot/user.yaml; POST-style params,
+  nested req objects. Aster DEX (aster_* / aster_spot_*) — see aster.yaml, Binance-style GET params
+  (symbol/interval), 500+ USDT perps + spot venue; self-contained field map + gotchas in the file.
+  The quick_tips below apply to hyperliquid_* interfaces only.
 
 files:
   - file: "market.yaml"
-    description: "Market-wide data — mid-price snapshot / metadata / order book / candles / funding history / predicted fundings"
+    description: "Hyperliquid market-wide data — mid-price snapshot / metadata / order book / candles / funding history / predicted fundings"
     count: 7
     interfaces:
       - "hyperliquid_all_mids"
@@ -19,14 +25,14 @@ files:
       - "hyperliquid_predicted_fundings"
 
   - file: "spot.yaml"
-    description: "Spot data — spot token metadata / live price and circulating supply"
+    description: "Hyperliquid spot data — spot token metadata / live price and circulating supply"
     count: 2
     interfaces:
       - "hyperliquid_spot_meta"
       - "hyperliquid_spot_contexts"
 
   - file: "user.yaml"
-    description: "User accounts — perp positions / spot balances / open orders / fill history"
+    description: "Hyperliquid user accounts — perp positions / spot balances / open orders / fill history"
     count: 4
     interfaces:
       - "hyperliquid_user_state"
@@ -34,9 +40,36 @@ files:
       - "hyperliquid_open_orders"
       - "hyperliquid_user_fills"
 
+  - file: "aster.yaml"
+    description: "Aster DEX (asterdex.com) futures + spot market data — exchange info / depth / trades / klines (last + index + mark price) / funding rate & config / 24h tickers / best bid-ask. Binance-style symbols (BTCUSDT). Prediction markets are in prediction-markets/aster.yaml."
+    count: 21
+    interfaces:
+      - "aster_exchange_info"
+      - "aster_depth"
+      - "aster_trades"
+      - "aster_agg_trades"
+      - "aster_klines"
+      - "aster_index_price_klines"
+      - "aster_mark_price_klines"
+      - "aster_premium_index"
+      - "aster_funding_rate"
+      - "aster_funding_info"
+      - "aster_ticker_24hr"
+      - "aster_ticker_price"
+      - "aster_book_ticker"
+      - "aster_spot_exchange_info"
+      - "aster_spot_depth"
+      - "aster_spot_trades"
+      - "aster_spot_agg_trades"
+      - "aster_spot_klines"
+      - "aster_spot_ticker_24hr"
+      - "aster_spot_ticker_price"
+      - "aster_spot_book_ticker"
+
 quick_tips:
   - "All timestamps are milliseconds (13-digit Unix ms), not seconds."
   - "candles requires a nested req object: {coin, interval, startTime(ms)} — do not flatten into top-level params."
   - "funding_history requires two mandatory params: coin + startTime(ms)."
   - "All user_* interfaces require user=0x... full wallet address."
   - "l2_book requires the coin param."
+  - "aster_* interfaces use flat Binance-style params (symbol, interval, limit) — see aster.yaml; aster_index_price_klines takes `pair`, not `symbol`."

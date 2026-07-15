@@ -3,11 +3,13 @@
 # Call: POST /api/relay   {"name": "<name>", "params": {...}}
 # ============================================================================
 category: "Prediction Markets — Index"
-total_interfaces: 30   # 11 Polymarket + 19 FortyTwo (42.space)
+total_interfaces: 36   # 11 Polymarket + 19 FortyTwo (42.space) + 6 Aster
 providers_note: >
-  Two prediction-market sources. Polymarket (polymarket_*) — see discovery/clob/activity.yaml and the field map below.
+  Three prediction-market sources. Polymarket (polymarket_*) — see discovery/clob/activity.yaml and the field map below.
   42.space / FortyTwo (ft42_*) — see fortytwo.yaml, which carries its OWN field map + call order + gotchas
-  (BNB Chain eventcoins, N-outcome markets). The Polymarket field map below does NOT apply to ft42_* interfaces.
+  (BNB Chain eventcoins, N-outcome markets). Aster (aster_prediction_*) — see aster.yaml, fast crypto up/down
+  binaries (5-minute BTC/ETH markets) + event markets, Binance-style symbols, self-contained gotchas.
+  The Polymarket field map below does NOT apply to ft42_* or aster_prediction_* interfaces.
 
 files:
   - path: "discovery.yaml"
@@ -26,6 +28,10 @@ files:
     count: 19
     interfaces: [ft42_markets, ft42_market, ft42_market_timeline, ft42_tokens, ft42_categories, ft42_category, ft42_prices, ft42_price_history, ft42_event_price_history, ft42_ohlc, ft42_market_stats, ft42_token_stats, ft42_holders, ft42_activity, ft42_positions, ft42_closed_positions, ft42_leaderboard, ft42_wallet_stats, ft42_top_trades]
     desc: "42.space (FortyTwo) eventcoins on BNB Chain — browse markets, outcome prices, price/OHLC history, holders, user positions, leaderboard. Self-contained field map + gotchas in the file."
+  - path: "aster.yaml"
+    count: 6
+    interfaces: [aster_prediction_markets, aster_prediction_depth, aster_prediction_klines, aster_prediction_trades, aster_prediction_ticker_24hr, aster_prediction_ticker_price]
+    desc: "Aster up/down binary markets (BTC_UP_DOWN_5M_* etc, prices = implied probability 0-1) — market list, depth, probability klines, trades, tickers. Self-contained field map + gotchas in the file."
 
 # ── Critical Field Map ────────────────────────────────────────────────────────────
 critical_field_map:

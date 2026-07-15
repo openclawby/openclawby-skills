@@ -18,11 +18,11 @@ categories:
     desc: "Crypto derivatives: funding rates · open interest · liquidations · long/short ratio · taker buy/sell volume · order book · price candles · market indicators · ETF · options · spot · on-chain · market lists"
     count: 157
   - dir: "perps/"
-    desc: "Perpetuals: whole-market data (funding / OI / mark price / candles) · spot · user positions & fills"
-    count: 13
+    desc: "Perpetuals: Hyperliquid (whole-market data / spot / user positions & fills) + Aster DEX (500+ perps: depth / klines / funding / tickers + spot venue)"
+    count: 34
   - dir: "prediction-markets/"
-    desc: "Prediction markets: event / market discovery · order book & prices (CLOB) · trades & positions"
-    count: 11
+    desc: "Prediction markets: Polymarket (events / CLOB prices / trades) + 42.space eventcoins + Aster up/down binaries"
+    count: 36
   - dir: "social/"
     desc: "Social search: X (Twitter) · Facebook · Instagram posts / comments / profiles / topics / trends"
     count: 21

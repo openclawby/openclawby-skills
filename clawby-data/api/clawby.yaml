@@ -1,5 +1,5 @@
-version: 435
-generated_at: "2026-07-12T01:45:47.279772+00:00"
+version: 437
+generated_at: "2026-07-16T03:02:36.002051+00:00"
 base_url: https://api.openclawby.com
 auth_header: X-API-Key
 relay: POST /api/relay  body {name|id, params}
@@ -2708,3 +2708,192 @@ apis:
     description: "RootData: projects with given tag(s). Pro. 20 credits/call."
     docs: |
       Body: tag_ids(required, comma-separated ids from rootdata_tags). Returns [{project_id,project_name,logo,one_liner}].
+  - id: 517
+    name: "aster_exchange_info"
+    asset_classes: "perp,crypto"
+    data_types: "markets,symbols,trading_rules"
+    description: "Aster DEX futures exchange info: all USDT-margined perpetual symbols (500+) with trading rules, precisions and filters."
+    docs: |
+      No params. WARNING: very large responses are auto-truncated to fit the response budget (a _clawby_truncated marker shows what was cut); pass symbol to query a single instrument. For a quick symbol list prefer aster_ticker_price.
+  - id: 518
+    name: "aster_depth"
+    asset_classes: "perp,crypto"
+    data_types: "orderbook,depth"
+    description: "Aster DEX futures order book depth for a perpetual symbol."
+    docs: |
+      Params: symbol (required, e.g. BTCUSDT), limit (optional: 5|10|20|50|100|500|1000, default 500). Example params: {"symbol":"BTCUSDT","limit":50}
+  - id: 519
+    name: "aster_trades"
+    asset_classes: "perp,crypto"
+    data_types: "trades,executions"
+    description: "Aster DEX futures recent trades for a perpetual symbol."
+    docs: |
+      Params: symbol (required), limit (optional, default 500, max 1000). Example params: {"symbol":"BTCUSDT","limit":100}
+  - id: 520
+    name: "aster_agg_trades"
+    asset_classes: "perp,crypto"
+    data_types: "trades,aggregate_trades"
+    description: "Aster DEX futures aggregated (compressed) trades for a perpetual symbol."
+    docs: |
+      Params: symbol (required), fromId (optional), startTime/endTime (optional, ms epoch), limit (optional, default 500 max 1000). Example params: {"symbol":"BTCUSDT","limit":100}
+  - id: 521
+    name: "aster_klines"
+    asset_classes: "perp,crypto"
+    data_types: "ohlc,candles,price_history"
+    description: "Aster DEX futures OHLCV klines/candlesticks for a perpetual symbol."
+    docs: |
+      Params: symbol (required), interval (required: 1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w|1M), startTime/endTime (optional, ms epoch), limit (optional, default 500 max 1500). Returns array of arrays: [openTime(ms), open, high, low, close, volume, closeTime(ms), quoteVolume, tradeCount, takerBuyBase, takerBuyQuote, ignore]. Example params: {"symbol":"BTCUSDT","interval":"1h","limit":100}
+  - id: 522
+    name: "aster_index_price_klines"
+    asset_classes: "perp,crypto"
+    data_types: "ohlc,candles,index_price"
+    description: "Aster DEX futures index-price klines for a pair (underlying index, not mark/last)."
+    docs: |
+      Params: pair (required, e.g. BTCUSDT — note the param name is pair, not symbol), interval (required: 1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w|1M), startTime/endTime (optional, ms), limit (optional, default 500 max 1500). Returns array of arrays: [openTime(ms), open, high, low, close, volume, closeTime(ms), quoteVolume, tradeCount, takerBuyBase, takerBuyQuote, ignore]. Example params: {"pair":"BTCUSDT","interval":"1h","limit":24}
+  - id: 523
+    name: "aster_mark_price_klines"
+    asset_classes: "perp,crypto"
+    data_types: "ohlc,candles,mark_price"
+    description: "Aster DEX futures mark-price klines for a perpetual symbol."
+    docs: |
+      Params: symbol (required), interval (required: 1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w|1M), startTime/endTime (optional, ms), limit (optional, default 500 max 1500). Returns array of arrays: [openTime(ms), open, high, low, close, volume, closeTime(ms), quoteVolume, tradeCount, takerBuyBase, takerBuyQuote, ignore]. Example params: {"symbol":"BTCUSDT","interval":"1h","limit":24}
+  - id: 524
+    name: "aster_premium_index"
+    asset_classes: "perp,crypto"
+    data_types: "mark_price,index_price,funding_rate"
+    description: "Aster DEX futures mark price, index price, last funding rate and next funding time (premium index snapshot)."
+    docs: |
+      Params: symbol (optional; omit for ALL symbols — large). Example params: {"symbol":"BTCUSDT"}
+  - id: 525
+    name: "aster_funding_rate"
+    asset_classes: "perp,crypto"
+    data_types: "funding_rate,funding_history"
+    description: "Aster DEX futures funding rate history."
+    docs: |
+      Params: symbol (optional), startTime/endTime (optional, ms epoch), limit (optional, default 100 max 1000). Example params: {"symbol":"BTCUSDT","limit":10}
+  - id: 526
+    name: "aster_funding_info"
+    asset_classes: "perp,crypto"
+    data_types: "funding_rate,funding_config"
+    description: "Aster DEX futures funding rate configuration per symbol (cap, floor, interval hours)."
+    docs: |
+      No params.
+  - id: 527
+    name: "aster_ticker_24hr"
+    asset_classes: "perp,crypto"
+    data_types: "ticker,price,volume,stats_24h"
+    description: "Aster DEX futures 24h rolling price-change statistics (last/high/low/volume/change%)."
+    docs: |
+      Params: symbol (optional; omit for ALL symbols). WARNING: very large responses are auto-truncated to fit the response budget (a _clawby_truncated marker shows what was cut); pass symbol to query a single instrument. Example params: {"symbol":"BTCUSDT"}
+  - id: 528
+    name: "aster_ticker_price"
+    asset_classes: "perp,crypto"
+    data_types: "ticker,price"
+    description: "Aster DEX futures latest price for one or all perpetual symbols."
+    docs: |
+      Params: symbol (optional; omit for all symbols). Example params: {"symbol":"BTCUSDT"}
+  - id: 529
+    name: "aster_book_ticker"
+    asset_classes: "perp,crypto"
+    data_types: "ticker,orderbook,best_bid_ask"
+    description: "Aster DEX futures best bid/ask price & quantity for one or all perpetual symbols."
+    docs: |
+      Params: symbol (optional; omit for all symbols). Example params: {"symbol":"BTCUSDT"}
+  - id: 530
+    name: "aster_spot_exchange_info"
+    asset_classes: "spot,crypto"
+    data_types: "markets,symbols,trading_rules"
+    description: "Aster DEX spot exchange info: all spot symbols with trading rules and filters."
+    docs: |
+      No params.
+  - id: 531
+    name: "aster_spot_depth"
+    asset_classes: "spot,crypto"
+    data_types: "orderbook,depth"
+    description: "Aster DEX spot order book depth for a spot symbol."
+    docs: |
+      Params: symbol (required, e.g. BTCUSDT), limit (optional: 5|10|20|50|100|500|1000, default 100). Example params: {"symbol":"BTCUSDT","limit":50}
+  - id: 532
+    name: "aster_spot_trades"
+    asset_classes: "spot,crypto"
+    data_types: "trades,executions"
+    description: "Aster DEX spot recent trades for a spot symbol."
+    docs: |
+      Params: symbol (required), limit (optional, default 500 max 1000). Example params: {"symbol":"BTCUSDT","limit":100}
+  - id: 533
+    name: "aster_spot_agg_trades"
+    asset_classes: "spot,crypto"
+    data_types: "trades,aggregate_trades"
+    description: "Aster DEX spot aggregated (compressed) trades for a spot symbol."
+    docs: |
+      Params: symbol (required), fromId (optional), startTime/endTime (optional, ms), limit (optional, default 500 max 1000). Example params: {"symbol":"BTCUSDT","limit":100}
+  - id: 534
+    name: "aster_spot_klines"
+    asset_classes: "spot,crypto"
+    data_types: "ohlc,candles,price_history"
+    description: "Aster DEX spot OHLCV klines/candlesticks for a spot symbol."
+    docs: |
+      Params: symbol (required), interval (required: 1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w|1M), startTime/endTime (optional, ms), limit (optional, default 500 max 1000). Returns array of arrays: [openTime(ms), open, high, low, close, volume, closeTime(ms), quoteVolume, tradeCount, takerBuyBase, takerBuyQuote, ignore]. Example params: {"symbol":"BTCUSDT","interval":"1h","limit":100}
+  - id: 535
+    name: "aster_spot_ticker_24hr"
+    asset_classes: "spot,crypto"
+    data_types: "ticker,price,volume,stats_24h"
+    description: "Aster DEX spot 24h rolling price-change statistics."
+    docs: |
+      Params: symbol (optional; omit for all spot symbols). Example params: {"symbol":"BTCUSDT"}
+  - id: 536
+    name: "aster_spot_ticker_price"
+    asset_classes: "spot,crypto"
+    data_types: "ticker,price"
+    description: "Aster DEX spot latest price for one or all spot symbols."
+    docs: |
+      Params: symbol (optional; omit for all symbols). Example params: {"symbol":"BTCUSDT"}
+  - id: 537
+    name: "aster_spot_book_ticker"
+    asset_classes: "spot,crypto"
+    data_types: "ticker,orderbook,best_bid_ask"
+    description: "Aster DEX spot best bid/ask price & quantity for one or all spot symbols."
+    docs: |
+      Params: symbol (optional; omit for all symbols). Example params: {"symbol":"BTCUSDT"}
+  - id: 538
+    name: "aster_prediction_markets"
+    asset_classes: "prediction_market,crypto"
+    data_types: "markets,events,prediction_market"
+    description: "Aster prediction markets list (crypto up/down binary markets like BTC_UP_DOWN_5M_* plus event markets) with status and trading rules."
+    docs: |
+      No params. WARNING: very large responses are auto-truncated to fit the response budget (a _clawby_truncated marker shows what was cut); pass symbol to query a single instrument. Symbols look like BTC_UP_DOWN_5M_1778483280_YUSDT; status TRADING = live market.
+  - id: 539
+    name: "aster_prediction_depth"
+    asset_classes: "prediction_market,crypto"
+    data_types: "orderbook,depth"
+    description: "Aster prediction market order book depth for a prediction symbol."
+    docs: |
+      Params: symbol (required, prediction symbol, e.g. BTC_UP_DOWN_5M_1778483280_YUSDT — get live ones from aster_prediction_markets), limit (optional). Example params: {"symbol":"<prediction symbol>","limit":50}
+  - id: 540
+    name: "aster_prediction_klines"
+    asset_classes: "prediction_market,crypto"
+    data_types: "ohlc,candles,price_history"
+    description: "Aster prediction market OHLCV klines (probability-style prices 0-1) for a prediction symbol."
+    docs: |
+      Params: symbol (required, prediction symbol), interval (required: 1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w|1M), limit (optional). Returns array of arrays: [openTime(ms), open, high, low, close, volume, closeTime(ms), quoteVolume, tradeCount, takerBuyBase, takerBuyQuote, ignore]. Example params: {"symbol":"<prediction symbol>","interval":"1m","limit":60}
+  - id: 541
+    name: "aster_prediction_trades"
+    asset_classes: "prediction_market,crypto"
+    data_types: "trades,executions"
+    description: "Aster prediction market recent trades for a prediction symbol."
+    docs: |
+      Params: symbol (required, prediction symbol), limit (optional, default 500). Example params: {"symbol":"<prediction symbol>","limit":50}
+  - id: 542
+    name: "aster_prediction_ticker_24hr"
+    asset_classes: "prediction_market,crypto"
+    data_types: "ticker,price,volume,stats_24h"
+    description: "Aster prediction market 24h price-change statistics (price = implied probability 0-1)."
+    docs: |
+      Params: symbol (optional; omit for ALL prediction symbols). WARNING: very large responses are auto-truncated to fit the response budget (a _clawby_truncated marker shows what was cut); pass symbol to query a single instrument. Example params: {"symbol":"<prediction symbol>"}
+  - id: 543
+    name: "aster_prediction_ticker_price"
+    asset_classes: "prediction_market,crypto"
+    data_types: "ticker,price"
+    description: "Aster prediction market latest price (implied probability) for one or all prediction symbols."
+    docs: |
+      Params: symbol (optional; omit for all). WARNING: very large responses are auto-truncated to fit the response budget (a _clawby_truncated marker shows what was cut); pass symbol to query a single instrument. Example params: {"symbol":"<prediction symbol>"}

@@ -1,0 +1,73 @@
+# ============================================================================
+# Prediction Markets — Aster (crypto up/down binaries + event markets)
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Prediction Markets — Aster (up/down binaries)"
+note: >
+  Aster's prediction venue: fast crypto up/down binary markets (e.g. "will BTC close up in the next 5
+  minutes" — symbols like BTC_UP_DOWN_5M_<startTs>_YUSDT / _NUSDT for the Yes/No leg) plus event markets
+  (EVENT2_*). Prices are implied probabilities (0-1). Binance-style REST semantics, read-only, no key.
+  A third prediction-market source alongside Polymarket and 42.space. Markets churn fast (5-minute
+  binaries expire constantly) — always discover live symbols first via aster_prediction_markets.
+
+# ── Critical Field Map ──────────────────────────────────────────────────────
+critical_field_map:
+  symbol:
+    source: "symbols[] with status=TRADING from aster_prediction_markets (e.g. BTC_UP_DOWN_5M_1778483280_YUSDT)"
+    used_by: [aster_prediction_depth, aster_prediction_klines, aster_prediction_trades, aster_prediction_ticker_24hr, aster_prediction_ticker_price]
+    note: "5-minute binaries expire within minutes — a symbol that was TRADING moments ago may already be SETTLED"
+
+# ── Recommended Call Order ──────────────────────────────────────────────────
+recommended_call_order:
+  - {step: 1, action: "aster_prediction_markets to list markets — filter status=TRADING client-side, note the symbol"}
+  - {step: 2, action: "aster_prediction_ticker_price {symbol} for the implied probability; aster_prediction_depth {symbol} for the book"}
+  - {step: 3, action: "aster_prediction_klines {symbol, interval:1m} for the probability path; aster_prediction_trades for flow"}
+
+global_gotchas:
+  - "Prices are implied probabilities 0-1 (e.g. 0.2212 = 22.12%), not dollar prices"
+  - "aster_prediction_markets returns ~700 markets (mostly SETTLED history) and is auto-truncated (look for the _clawby_truncated marker); live TRADING markets are what matter"
+  - "No-symbol ticker calls return every settled market too — always pass symbol"
+
+interfaces:
+  - name: "aster_prediction_markets"
+    summary: "List Aster prediction markets (up/down binaries + events) with status and rules"
+    params: []
+    gotchas:
+      - "Large response is auto-truncated (_clawby_truncated marker shows what was cut) — scan for status TRADING entries"
+    example: '{"name":"aster_prediction_markets","params":{}}'
+
+  - name: "aster_prediction_depth"
+    summary: "Prediction market order book depth"
+    params:
+      - {name: symbol, required: true,  format: "prediction symbol from aster_prediction_markets", example: "BTC_UP_DOWN_5M_1778483280_YUSDT"}
+      - {name: limit,  required: false, format: "5|10|20|50|100|500|1000", example: 50}
+    example: '{"name":"aster_prediction_depth","params":{"symbol":"<prediction symbol>","limit":50}}'
+
+  - name: "aster_prediction_klines"
+    summary: "Probability-path OHLCV klines for a prediction symbol"
+    params:
+      - {name: symbol,   required: true,  format: "prediction symbol", example: "BTC_UP_DOWN_5M_1778483280_YUSDT"}
+      - {name: interval, required: true,  format: "1m|3m|5m|15m|30m|1h|…", example: "1m", note: "5-minute binaries only have a few 1m candles"}
+      - {name: limit,    required: false, format: "int", example: 60}
+    example: '{"name":"aster_prediction_klines","params":{"symbol":"<prediction symbol>","interval":"1m","limit":60}}'
+
+  - name: "aster_prediction_trades"
+    summary: "Recent trades on a prediction market"
+    params:
+      - {name: symbol, required: true,  format: "prediction symbol", example: "BTC_UP_DOWN_5M_1778483280_YUSDT"}
+      - {name: limit,  required: false, format: "int, default 500", example: 50}
+    gotchas:
+      - "Thin markets often return [] — empty is normal, not an error"
+    example: '{"name":"aster_prediction_trades","params":{"symbol":"<prediction symbol>","limit":50}}'
+
+  - name: "aster_prediction_ticker_24hr"
+    summary: "24h stats for a prediction market (price = implied probability)"
+    params:
+      - {name: symbol, required: false, format: "prediction symbol; omit = ALL (large, auto-truncated)", example: "BTC_UP_DOWN_5M_1778483280_YUSDT"}
+    example: '{"name":"aster_prediction_ticker_24hr","params":{"symbol":"<prediction symbol>"}}'
+
+  - name: "aster_prediction_ticker_price"
+    summary: "Latest implied probability for a prediction market"
+    params:
+      - {name: symbol, required: false, format: "prediction symbol; omit = ALL (large, auto-truncated)", example: "BTC_UP_DOWN_5M_1778483280_YUSDT"}
+    example: '{"name":"aster_prediction_ticker_price","params":{"symbol":"<prediction symbol>"}}'

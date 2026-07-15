@@ -1,0 +1,199 @@
+# ============================================================================
+# Perps — Aster DEX (asterdex.com) futures + spot market data
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Perpetual Futures — Aster DEX (futures + spot market data)"
+note: >
+  Aster is an on-chain perp DEX (built on Aster L1) with Binance-style REST semantics: 500+ USDT-margined
+  perpetual symbols (aster_* names) plus a spot venue (aster_spot_* names, ~60 pairs). Read-only public
+  market data, no key. Symbols look like BTCUSDT / ETHUSDT / ASTERUSDT. A second perp-DEX data source
+  alongside Hyperliquid. Prediction-market data lives in prediction-markets/aster.yaml (aster_prediction_*).
+
+# ── Critical Field Map ──────────────────────────────────────────────────────
+critical_field_map:
+  symbol:
+    source: "symbols[].symbol from aster_exchange_info / aster_spot_exchange_info, or any ticker response"
+    used_by: [aster_depth, aster_trades, aster_agg_trades, aster_klines, aster_mark_price_klines, aster_premium_index, aster_funding_rate, aster_ticker_24hr, aster_ticker_price, aster_book_ticker, aster_spot_depth, aster_spot_trades, aster_spot_agg_trades, aster_spot_klines, aster_spot_ticker_24hr, aster_spot_ticker_price, aster_spot_book_ticker]
+    note: "futures and spot are separate venues — the same BTCUSDT string is a different market on each"
+  pair:
+    source: "same value as symbol (e.g. BTCUSDT)"
+    used_by: [aster_index_price_klines]
+    note: "aster_index_price_klines takes `pair`, NOT `symbol` — the only endpoint with this quirk"
+  interval:
+    source: "one of 1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w|1M"
+    used_by: [aster_klines, aster_index_price_klines, aster_mark_price_klines, aster_spot_klines]
+
+# ── Recommended Call Order ──────────────────────────────────────────────────
+recommended_call_order:
+  - {step: 1, action: "aster_ticker_price (no params) for a quick live symbol scan, or aster_exchange_info for trading rules (large!)"}
+  - {step: 2, action: "aster_ticker_24hr {symbol} for 24h stats; aster_premium_index {symbol} for mark/index price + live funding"}
+  - {step: 3, action: "aster_klines {symbol, interval} for charts; aster_depth / aster_book_ticker for the book"}
+  - {step: 4, action: "aster_funding_rate {symbol} for funding history; aster_funding_info for per-symbol funding config"}
+
+global_gotchas:
+  - "Kline endpoints return array-of-arrays: [openTime(ms), open, high, low, close, volume, closeTime(ms), quoteVolume, tradeCount, takerBuyBase, takerBuyQuote, ignore] — all prices/volumes are strings"
+  - "aster_exchange_info / no-symbol ticker calls return 500+ entries and get auto-truncated to the response budget with a _clawby_truncated marker — always pass symbol when you only need one market"
+  - "Timestamps are ms epoch everywhere (startTime/endTime params and response times)"
+
+interfaces:
+  # ── Futures market data ──
+  - name: "aster_exchange_info"
+    summary: "All Aster perpetual symbols (500+) with trading rules, precisions, filters"
+    params: []
+    gotchas:
+      - "Very large response, auto-truncated (_clawby_truncated marker) — use aster_ticker_price for a quick symbol list"
+    example: '{"name":"aster_exchange_info","params":{}}'
+
+  - name: "aster_depth"
+    summary: "Futures order book depth (bids/asks)"
+    params:
+      - {name: symbol, required: true,  format: "e.g. BTCUSDT", example: "BTCUSDT"}
+      - {name: limit,  required: false, format: "5|10|20|50|100|500|1000", example: 50, note: "default 500"}
+    example: '{"name":"aster_depth","params":{"symbol":"BTCUSDT","limit":50}}'
+
+  - name: "aster_trades"
+    summary: "Futures recent trades"
+    params:
+      - {name: symbol, required: true,  format: "e.g. BTCUSDT", example: "BTCUSDT"}
+      - {name: limit,  required: false, format: "int, max 1000", example: 100, note: "default 500"}
+    example: '{"name":"aster_trades","params":{"symbol":"BTCUSDT","limit":100}}'
+
+  - name: "aster_agg_trades"
+    summary: "Futures aggregated (compressed) trades"
+    params:
+      - {name: symbol,    required: true,  format: "e.g. BTCUSDT", example: "BTCUSDT"}
+      - {name: fromId,    required: false, format: "aggregate trade id"}
+      - {name: startTime, required: false, format: "ms epoch"}
+      - {name: endTime,   required: false, format: "ms epoch"}
+      - {name: limit,     required: false, format: "int, max 1000", example: 100}
+    gotchas:
+      - "Response fields are compact: a=aggTradeId, p=price, q=qty, f/l=first/last trade id, T=time, m=buyer-is-maker"
+    example: '{"name":"aster_agg_trades","params":{"symbol":"BTCUSDT","limit":100}}'
+
+  - name: "aster_klines"
+    summary: "Futures OHLCV candlesticks"
+    params:
+      - {name: symbol,    required: true,  format: "e.g. BTCUSDT", example: "BTCUSDT"}
+      - {name: interval,  required: true,  format: "1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w|1M", example: "1h"}
+      - {name: startTime, required: false, format: "ms epoch"}
+      - {name: endTime,   required: false, format: "ms epoch"}
+      - {name: limit,     required: false, format: "int, default 500 max 1500", example: 100}
+    example: '{"name":"aster_klines","params":{"symbol":"BTCUSDT","interval":"1h","limit":100}}'
+
+  - name: "aster_index_price_klines"
+    summary: "Index-price klines (underlying index, not mark/last)"
+    params:
+      - {name: pair,      required: true,  format: "e.g. BTCUSDT — param is `pair`, NOT `symbol`", example: "BTCUSDT"}
+      - {name: interval,  required: true,  format: "1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w|1M", example: "1h"}
+      - {name: startTime, required: false, format: "ms epoch"}
+      - {name: endTime,   required: false, format: "ms epoch"}
+      - {name: limit,     required: false, format: "int, default 500 max 1500", example: 24}
+    gotchas:
+      - "Uses `pair` instead of `symbol` — passing symbol returns an error"
+    example: '{"name":"aster_index_price_klines","params":{"pair":"BTCUSDT","interval":"1h","limit":24}}'
+
+  - name: "aster_mark_price_klines"
+    summary: "Mark-price klines"
+    params:
+      - {name: symbol,    required: true,  format: "e.g. BTCUSDT", example: "BTCUSDT"}
+      - {name: interval,  required: true,  format: "1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w|1M", example: "1h"}
+      - {name: startTime, required: false, format: "ms epoch"}
+      - {name: endTime,   required: false, format: "ms epoch"}
+      - {name: limit,     required: false, format: "int, default 500 max 1500", example: 24}
+    example: '{"name":"aster_mark_price_klines","params":{"symbol":"BTCUSDT","interval":"1h","limit":24}}'
+
+  - name: "aster_premium_index"
+    summary: "Mark price + index price + last funding rate + next funding time"
+    params:
+      - {name: symbol, required: false, format: "e.g. BTCUSDT; omit = ALL symbols (large)", example: "BTCUSDT"}
+    example: '{"name":"aster_premium_index","params":{"symbol":"BTCUSDT"}}'
+
+  - name: "aster_funding_rate"
+    summary: "Funding rate history"
+    params:
+      - {name: symbol,    required: false, format: "e.g. BTCUSDT", example: "BTCUSDT"}
+      - {name: startTime, required: false, format: "ms epoch"}
+      - {name: endTime,   required: false, format: "ms epoch"}
+      - {name: limit,     required: false, format: "int, default 100 max 1000", example: 10}
+    example: '{"name":"aster_funding_rate","params":{"symbol":"BTCUSDT","limit":10}}'
+
+  - name: "aster_funding_info"
+    summary: "Funding config per symbol (cap / floor / interval hours)"
+    params: []
+    example: '{"name":"aster_funding_info","params":{}}'
+
+  - name: "aster_ticker_24hr"
+    summary: "24h rolling stats (last/high/low/volume/change%)"
+    params:
+      - {name: symbol, required: false, format: "e.g. BTCUSDT; omit = ALL symbols (large, auto-truncated)", example: "BTCUSDT"}
+    example: '{"name":"aster_ticker_24hr","params":{"symbol":"BTCUSDT"}}'
+
+  - name: "aster_ticker_price"
+    summary: "Latest price (single symbol or full scan)"
+    params:
+      - {name: symbol, required: false, format: "e.g. BTCUSDT; omit = all symbols", example: "BTCUSDT"}
+    example: '{"name":"aster_ticker_price","params":{"symbol":"BTCUSDT"}}'
+
+  - name: "aster_book_ticker"
+    summary: "Best bid/ask price & qty"
+    params:
+      - {name: symbol, required: false, format: "e.g. BTCUSDT; omit = all symbols", example: "BTCUSDT"}
+    example: '{"name":"aster_book_ticker","params":{"symbol":"BTCUSDT"}}'
+
+  # ── Spot market data ──
+  - name: "aster_spot_exchange_info"
+    summary: "All Aster spot symbols (~60) with trading rules"
+    params: []
+    example: '{"name":"aster_spot_exchange_info","params":{}}'
+
+  - name: "aster_spot_depth"
+    summary: "Spot order book depth"
+    params:
+      - {name: symbol, required: true,  format: "e.g. BTCUSDT", example: "BTCUSDT"}
+      - {name: limit,  required: false, format: "5|10|20|50|100|500|1000", example: 50, note: "default 100"}
+    example: '{"name":"aster_spot_depth","params":{"symbol":"BTCUSDT","limit":50}}'
+
+  - name: "aster_spot_trades"
+    summary: "Spot recent trades"
+    params:
+      - {name: symbol, required: true,  format: "e.g. BTCUSDT", example: "BTCUSDT"}
+      - {name: limit,  required: false, format: "int, max 1000", example: 100}
+    example: '{"name":"aster_spot_trades","params":{"symbol":"BTCUSDT","limit":100}}'
+
+  - name: "aster_spot_agg_trades"
+    summary: "Spot aggregated trades"
+    params:
+      - {name: symbol,    required: true,  format: "e.g. BTCUSDT", example: "BTCUSDT"}
+      - {name: fromId,    required: false, format: "aggregate trade id"}
+      - {name: startTime, required: false, format: "ms epoch"}
+      - {name: endTime,   required: false, format: "ms epoch"}
+      - {name: limit,     required: false, format: "int, max 1000", example: 100}
+    example: '{"name":"aster_spot_agg_trades","params":{"symbol":"BTCUSDT","limit":100}}'
+
+  - name: "aster_spot_klines"
+    summary: "Spot OHLCV candlesticks"
+    params:
+      - {name: symbol,    required: true,  format: "e.g. BTCUSDT", example: "BTCUSDT"}
+      - {name: interval,  required: true,  format: "1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w|1M", example: "1h"}
+      - {name: startTime, required: false, format: "ms epoch"}
+      - {name: endTime,   required: false, format: "ms epoch"}
+      - {name: limit,     required: false, format: "int, default 500 max 1000", example: 100}
+    example: '{"name":"aster_spot_klines","params":{"symbol":"BTCUSDT","interval":"1h","limit":100}}'
+
+  - name: "aster_spot_ticker_24hr"
+    summary: "Spot 24h rolling stats"
+    params:
+      - {name: symbol, required: false, format: "e.g. BTCUSDT; omit = all spot symbols", example: "BTCUSDT"}
+    example: '{"name":"aster_spot_ticker_24hr","params":{"symbol":"BTCUSDT"}}'
+
+  - name: "aster_spot_ticker_price"
+    summary: "Spot latest price"
+    params:
+      - {name: symbol, required: false, format: "e.g. BTCUSDT; omit = all symbols", example: "BTCUSDT"}
+    example: '{"name":"aster_spot_ticker_price","params":{"symbol":"BTCUSDT"}}'
+
+  - name: "aster_spot_book_ticker"
+    summary: "Spot best bid/ask"
+    params:
+      - {name: symbol, required: false, format: "e.g. BTCUSDT; omit = all symbols", example: "BTCUSDT"}
+    example: '{"name":"aster_spot_book_ticker","params":{"symbol":"BTCUSDT"}}'
