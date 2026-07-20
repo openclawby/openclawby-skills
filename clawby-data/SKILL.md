@@ -68,7 +68,7 @@ clawby-data/
 
 ## Interface index — locate before you read (local/index/)
 
-`local/index/` holds a machine-readable index of all 287 relay interfaces + the RPC chain map (derived from `api/clawby.yaml`; regenerate with `python3 local/index/build_index.py` after a skill update):
+`local/index/` holds a machine-readable index of all 364 relay interfaces + the RPC chain map (derived from `api/clawby.yaml`; regenerate with `python3 local/index/build_index.py` after a skill update):
 
 - `python3 local/index/query.py find <keywords>` — interface name + required params + which catalog yaml to read
 - `python3 local/index/query.py entity us_stock` — EVERY interface accepting that input; use as the completeness-sweep checklist (entities: `us_stock` `crypto_coin` `crypto_pair` `token_contract` `wallet_address` `sec_company` `pm_market` `social_query`)

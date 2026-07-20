@@ -21,8 +21,8 @@ categories:
     desc: "Perpetuals: Hyperliquid (whole-market data / spot / user positions & fills) + Aster DEX (500+ perps: depth / klines / funding / tickers + spot venue)"
     count: 34
   - dir: "prediction-markets/"
-    desc: "Prediction markets: Polymarket (events / CLOB prices / trades) + 42.space eventcoins + Aster up/down binaries"
-    count: 36
+    desc: "Prediction markets: Polymarket (events / CLOB prices / trades) + 42.space eventcoins + Aster up/down binaries + Kalshi (CFTC-regulated US exchange)"
+    count: 47
   - dir: "social/"
     desc: "Social search: X (Twitter) · Facebook · Instagram posts / comments / profiles / topics / trends"
     count: 21
