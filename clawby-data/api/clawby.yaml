@@ -1,5 +1,5 @@
-version: 439
-generated_at: "2026-07-20T19:31:19.712583+00:00"
+version: 440
+generated_at: "2026-07-20T23:00:31.819465+00:00"
 base_url: https://api.openclawby.com
 auth_header: X-API-Key
 relay: POST /api/relay  body {name|id, params}
@@ -2903,28 +2903,28 @@ apis:
     data_types: "markets,odds,prices"
     description: "Kalshi prediction markets list (CFTC-regulated US exchange). Filter by event/series/status."
     docs: |
-      Params: limit(0-1000, default 100), cursor(pagination), event_ticker, series_ticker, status(unopened|open|paused|closed|settled, single value only), tickers(comma-separated), min_close_ts/max_close_ts(unix s), min_created_ts/max_created_ts(unix s), min_settled_ts/max_settled_ts(unix s), min_updated_ts(unix s), mve_filter(only|exclude). All prices in cents (1-99 = implied probability %).
+      Params: limit(0-1000, default 100), cursor(pagination), event_ticker, series_ticker, status(unopened|open|paused|closed|settled, single value only), tickers(comma-separated), min_close_ts/max_close_ts(unix s), min_created_ts/max_created_ts(unix s), min_settled_ts/max_settled_ts(unix s), min_updated_ts(unix s), mve_filter(only|exclude). Prices are *_dollars decimal strings 0-1 (e.g. yes_bid_dollars '0.9130' = 91.3% implied probability); volume/open_interest are *_fp strings; there are NO legacy integer cents fields. Tip: KXMVE* combo markets are mostly provisional with no quotes — to find active markets check kalshi_trades tape first.
   - id: 545
     name: "kalshi_market"
     asset_classes: "prediction_market"
     data_types: "markets,odds,prices"
     description: "Single Kalshi market detail: bid/ask, last price, volume, open interest, rules."
     docs: |
-      Path: ticker(required, e.g. from kalshi_markets). Returns yes_bid/yes_ask/no_bid/no_ask/last_price(cents), volume, open_interest, close_time, rules_primary.
+      Path: ticker(required, e.g. from kalshi_markets). Returns yes_bid_dollars/yes_ask_dollars/no_bid_dollars/no_ask_dollars/last_price_dollars (decimal strings 0-1 = implied probability), volume_fp, volume_24h_fp, open_interest_fp, liquidity_dollars, close_time, rules_primary.
   - id: 546
     name: "kalshi_market_orderbook"
     asset_classes: "prediction_market"
     data_types: "orderbook"
     description: "Kalshi market order book (yes/no side price levels)."
     docs: |
-      Path: ticker(required). Params: depth(optional int, levels per side). Returns orderbook.yes / orderbook.no arrays of [price_cents, quantity].
+      Path: ticker(required). Params: depth(optional int, levels per side). Returns orderbook_fp.yes_dollars / orderbook_fp.no_dollars arrays of [price_dollars_string, quantity_string]; empty arrays = no resting orders.
   - id: 547
     name: "kalshi_trades"
     asset_classes: "prediction_market"
     data_types: "trades"
     description: "Kalshi public trade tape across all markets or one market."
     docs: |
-      Params: ticker(market ticker filter), limit(1-1000, default 100), cursor, min_ts/max_ts(unix s). Returns taker_side, yes_price/no_price(cents), count, created_time.
+      Params: ticker(market ticker filter), limit(1-1000, default 100), cursor, min_ts/max_ts(unix s). Returns taker_side, yes_price_dollars/no_price_dollars (decimal strings), count_fp, created_time.
   - id: 548
     name: "kalshi_events"
     asset_classes: "prediction_market"
@@ -2945,7 +2945,7 @@ apis:
     data_types: "series,catalog"
     description: "Kalshi series catalog (a series is a recurring market template, e.g. daily NYC high temp)."
     docs: |
-      Params: category(e.g. Politics|Economics|Sports|Climate...), tags, include_product_metadata(bool), include_volume(bool), min_updated_ts(unix s).
+      Params: category(CAPITALIZED, e.g. Economics|Politics|Sports|Financials|Companies|World — lowercase returns series:null), tags, include_product_metadata(bool), include_volume(bool), min_updated_ts(unix s). Category filter is approximate (a few other categories may slip in). Unfiltered response is ~1.7MB.
   - id: 551
     name: "kalshi_series"
     asset_classes: "prediction_market"
@@ -2959,7 +2959,7 @@ apis:
     data_types: "candlesticks,ohlc,history"
     description: "Kalshi market OHLC candlesticks (yes-side price history in cents)."
     docs: |
-      Path: series_ticker(required) + ticker(required). Get series_ticker via kalshi_event of the market's event_ticker. Params: start_ts(required, unix s), end_ts(required, unix s), period_interval(required: 1|60|1440 = 1m|1h|1d), include_latest_before_start(bool). Markets settled before historical cutoff are not returned here.
+      Path: series_ticker(required) + ticker(required). Get series_ticker via kalshi_event of the market's event_ticker. Params: start_ts(required, unix s), end_ts(required, unix s), period_interval(required: 1|60|1440 = 1m|1h|1d), include_latest_before_start(bool). Each candle: end_period_ts + price/yes_bid/yes_ask OHLC groups (open/high/low/close_dollars decimal strings) + volume_fp + open_interest_fp. Match period to market lifespan: short binaries (KXBTC15M etc) only have period_interval=1 data; multi-day markets support 60/1440.
   - id: 553
     name: "kalshi_exchange_status"
     asset_classes: "prediction_market"

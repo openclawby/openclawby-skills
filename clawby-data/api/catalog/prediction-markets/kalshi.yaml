@@ -5,16 +5,17 @@
 category: "Prediction Markets — Kalshi"
 note: >
   Kalshi is the CFTC-regulated US prediction-market exchange (elections, economics, weather,
-  sports, world events). Fourth prediction-market source alongside Polymarket, 42.space and Aster.
-  Relay signs every upstream request server-side (RSA) — agents just call by name, no key handling.
-  Hierarchy: series (recurring template, e.g. KXHIGHNY) → event (one instance, e.g. a given day's
-  market group) → market (one tradable yes/no contract). Prices appear both in cents (1-99 =
-  implied probability %) and as *_dollars decimal strings (0-1) depending on the field.
+  sports, crypto 15-min binaries, world events). Fourth prediction-market source alongside
+  Polymarket, 42.space and Aster. Hierarchy: series (recurring template, e.g. KXHIGHTSFO) →
+  event (one instance) → market (one tradable yes/no contract).
+  FIELD ENCODING (verified live 2026-07): all prices are *_dollars DECIMAL STRINGS 0-1
+  (yes_bid_dollars "0.9130" = 91.3% implied probability); sizes/volumes are *_fp strings
+  (volume_fp, open_interest_fp, yes_bid_size_fp). There are NO legacy integer cents fields.
 
 # ── Critical Field Map ──────────────────────────────────────────────────────
 critical_field_map:
   ticker:
-    source: "markets[].ticker from kalshi_markets (or nested markets in kalshi_events with_nested_markets:true)"
+    source: "markets[].ticker from kalshi_markets (or nested markets in kalshi_events with_nested_markets:true, or trades[].ticker from kalshi_trades)"
     used_by: [kalshi_market, kalshi_market_orderbook, kalshi_trades, kalshi_candlesticks]
   event_ticker:
     source: "markets[].event_ticker from kalshi_markets"
@@ -23,60 +24,68 @@ critical_field_map:
     source: "event.series_ticker from kalshi_event — NOT present on the market object"
     used_by: [kalshi_series, kalshi_candlesticks]
     note: "kalshi_candlesticks needs BOTH series_ticker and ticker — fetch the event first"
+  price_fields:
+    source: "yes_bid_dollars / yes_ask_dollars / no_bid_dollars / no_ask_dollars / last_price_dollars on market objects"
+    note: "decimal strings 0-1 = implied probability; parse with float(). volume_fp / volume_24h_fp / open_interest_fp likewise strings"
 
 # ── Recommended Call Order ──────────────────────────────────────────────────
 recommended_call_order:
-  - {step: 1, action: "kalshi_markets {status:'open', limit} to browse tradable markets (or kalshi_events {with_nested_markets:true} to browse by event)"}
-  - {step: 2, action: "kalshi_market {ticker} for bid/ask/volume; kalshi_market_orderbook {ticker} for the book; kalshi_trades {ticker} for the tape"}
-  - {step: 3, action: "for price history: kalshi_event {event_ticker} → event.series_ticker → kalshi_candlesticks {series_ticker, ticker, start_ts, end_ts, period_interval}"}
+  - {step: 1, action: "To find ACTIVE markets fast: kalshi_trades {limit:50} and count tickers in the tape (markets with recent fills). Browsing kalshi_markets {status:'open'} surfaces many provisional KXMVE* combo markets with no quotes"}
+  - {step: 2, action: "kalshi_market {ticker} for *_dollars quotes + volume_fp; kalshi_market_orderbook {ticker} for the book; kalshi_trades {ticker} for that market's tape"}
+  - {step: 3, action: "for price history: kalshi_event {event_ticker} → event.series_ticker → kalshi_candlesticks {series_ticker, ticker, start_ts, end_ts, period_interval} — match period to market lifespan (15-min binaries → period_interval:1)"}
 
 global_gotchas:
-  - "Prices: cents fields are 1-99 ints (= implied probability %); *_dollars / *_fp fields are decimal strings 0-1. Same quote, two encodings"
-  - "status accepts a SINGLE value (unopened|open|paused|closed|settled) — no comma lists"
-  - "kalshi_candlesticks: start_ts / end_ts / period_interval all REQUIRED; series_ticker only obtainable via kalshi_event"
+  - "ALL prices are *_dollars decimal strings 0-1 (parse with float; '0.9130' = 91.3%); volumes/sizes are *_fp strings. Legacy integer cents fields (yes_bid, last_price, volume) DO NOT EXIST"
+  - "status accepts a SINGLE value (unopened|open|paused|closed|settled) — no comma lists; response status value is 'active' for open markets"
+  - "KXMVE* multivariate combo markets are mostly is_provisional=true with empty quotes — filter them out or use the trades tape to find liquid markets"
+  - "kalshi_candlesticks: start_ts/end_ts/period_interval all REQUIRED; series_ticker only via kalshi_event; short-lived binaries (KXBTC15M/KXETH15M) only have period_interval=1 (minute) data — 60/1440 return empty for them"
+  - "kalshi_series_list category must be CAPITALIZED (Economics, not economics — lowercase returns series:null); the filter is approximate (a few other categories may appear); unfiltered response ~1.7MB"
   - "Empty orderbook / empty candlesticks on young or thin markets is normal, not an error"
-  - "kalshi_series_list without filters is huge (~550KB) and may hit the relay auto-truncation (_clawby_truncated marker) — pass category to narrow"
-  - "All timestamps in params are unix SECONDS (close_time etc. in responses are ISO strings)"
+  - "All timestamps in params are unix SECONDS; response times are ISO strings; candle timestamps are end_period_ts (unix s)"
 
 interfaces:
   - name: "kalshi_markets"
-    summary: "List/filter Kalshi markets (the core browse endpoint)"
+    summary: "List/filter Kalshi markets (browse endpoint; quotes as *_dollars strings)"
     params:
       - {name: limit,         required: false, format: "int 0-1000, default 100", example: 50}
       - {name: cursor,        required: false, format: "pagination cursor from previous response"}
-      - {name: event_ticker,  required: false, format: "filter by event", example: "KXHIGHNY-25JUL21"}
-      - {name: series_ticker, required: false, format: "filter by series", example: "KXHIGHNY"}
+      - {name: event_ticker,  required: false, format: "filter by event", example: "KXHIGHTSFO-26JUL21"}
+      - {name: series_ticker, required: false, format: "filter by series", example: "KXHIGHTSFO"}
       - {name: status,        required: false, format: "unopened|open|paused|closed|settled (single value)", example: "open"}
       - {name: tickers,       required: false, format: "comma-separated market tickers"}
-      - {name: min_close_ts,  required: false, format: "unix s", note: "also max_close_ts, min/max_created_ts, min/max_settled_ts, min_updated_ts"}
-    example: '{"name":"kalshi_markets","params":{"status":"open","limit":50}}'
+      - {name: min_close_ts,  required: false, format: "unix s", note: "also max_close_ts, min/max_created_ts, min/max_settled_ts, min_updated_ts, mve_filter(only|exclude)"}
+    gotchas:
+      - "Many open markets are provisional KXMVE* combos with empty quotes — mve_filter:'exclude' or the trades tape finds real liquidity"
+    example: '{"name":"kalshi_markets","params":{"status":"open","limit":50,"mve_filter":"exclude"}}'
 
   - name: "kalshi_market"
-    summary: "Single market detail: yes/no bid-ask, last price, volume, open interest, rules"
+    summary: "Single market detail: *_dollars bid/ask/last, volume_fp, open_interest_fp, rules"
     params:
-      - {name: ticker, required: true, format: "market ticker from kalshi_markets", example: "KXHIGHNY-25JUL21-B54.5"}
+      - {name: ticker, required: true, format: "market ticker from kalshi_markets / trades tape", example: "KXBTC15M-26JUL201900-00"}
     example: '{"name":"kalshi_market","params":{"ticker":"<ticker>"}}'
 
   - name: "kalshi_market_orderbook"
-    summary: "Order book for a market (yes/no price levels)"
+    summary: "Order book: orderbook_fp.yes_dollars / no_dollars arrays of [price_str, qty_str]"
     params:
       - {name: ticker, required: true,  format: "market ticker"}
       - {name: depth,  required: false, format: "int, levels per side", example: 10}
     gotchas:
-      - "Returns orderbook_fp with yes_dollars/no_dollars arrays of [price_decimal_string, qty]; empty arrays = no resting orders"
+      - "Levels are [price_dollars_string, quantity_string] pairs; empty arrays = no resting orders"
     example: '{"name":"kalshi_market_orderbook","params":{"ticker":"<ticker>","depth":10}}'
 
   - name: "kalshi_trades"
-    summary: "Public trade tape (all markets or filtered to one)"
+    summary: "Public trade tape (all markets or one) — also the best way to discover active markets"
     params:
       - {name: ticker, required: false, format: "market ticker filter"}
       - {name: limit,  required: false, format: "int 1-1000, default 100", example: 100}
       - {name: cursor, required: false, format: "pagination cursor"}
       - {name: min_ts, required: false, format: "unix s", note: "also max_ts"}
-    example: '{"name":"kalshi_trades","params":{"ticker":"<ticker>","limit":100}}'
+    gotchas:
+      - "Fields: taker_side, yes_price_dollars/no_price_dollars (decimal strings), count_fp, created_time"
+    example: '{"name":"kalshi_trades","params":{"limit":50}}'
 
   - name: "kalshi_events"
-    summary: "List events (an event groups related markets, e.g. one game / one election day)"
+    summary: "List events (an event groups related markets)"
     params:
       - {name: limit,               required: false, format: "int 1-200, default 200", example: 50}
       - {name: cursor,              required: false, format: "pagination cursor"}
@@ -87,7 +96,7 @@ interfaces:
     example: '{"name":"kalshi_events","params":{"status":"open","with_nested_markets":true,"limit":20}}'
 
   - name: "kalshi_event"
-    summary: "Single event with markets — the ONLY place to get series_ticker for candlesticks"
+    summary: "Single event — the ONLY place to get series_ticker for candlesticks"
     params:
       - {name: event_ticker,        required: true,  format: "from kalshi_markets.markets[].event_ticker"}
       - {name: with_nested_markets, required: false, format: "true|false"}
@@ -96,33 +105,34 @@ interfaces:
   - name: "kalshi_series_list"
     summary: "Series catalog (recurring market templates) by category"
     params:
-      - {name: category,                 required: false, format: "e.g. Politics|Economics|Sports|Climate and Weather|Financials|Companies|World", example: "Economics"}
+      - {name: category,                 required: false, format: "CAPITALIZED: Economics|Politics|Sports|Financials|Companies|World|Entertainment|Elections", example: "Economics"}
       - {name: tags,                     required: false, format: "tag filter"}
       - {name: include_product_metadata, required: false, format: "true|false"}
       - {name: include_volume,           required: false, format: "true|false"}
     gotchas:
-      - "Unfiltered response is ~550KB — pass category to avoid truncation"
+      - "lowercase category returns {series:null}; filter is approximate; unfiltered ~1.7MB"
     example: '{"name":"kalshi_series_list","params":{"category":"Economics"}}'
 
   - name: "kalshi_series"
     summary: "Single series detail (frequency, category, settlement sources)"
     params:
-      - {name: series_ticker, required: true, format: "e.g. from kalshi_event.event.series_ticker", example: "KXHIGHNY"}
-    example: '{"name":"kalshi_series","params":{"series_ticker":"KXHIGHNY"}}'
+      - {name: series_ticker, required: true, format: "e.g. from kalshi_event.event.series_ticker", example: "KXHIGHTSFO"}
+    example: '{"name":"kalshi_series","params":{"series_ticker":"KXHIGHTSFO"}}'
 
   - name: "kalshi_candlesticks"
-    summary: "OHLC candlesticks for a market (yes-side price history)"
+    summary: "OHLC candlesticks: price/yes_bid/yes_ask groups of *_dollars OHLC + volume_fp per candle"
     params:
       - {name: series_ticker,   required: true, format: "via kalshi_event of the market's event_ticker"}
       - {name: ticker,          required: true, format: "market ticker"}
-      - {name: start_ts,        required: true, format: "unix s", example: 1784489000}
-      - {name: end_ts,          required: true, format: "unix s", example: 1784575000}
-      - {name: period_interval, required: true, format: "1|60|1440 (minutes: 1m|1h|1d)", example: 60}
+      - {name: start_ts,        required: true, format: "unix s", example: 1784580000}
+      - {name: end_ts,          required: true, format: "unix s", example: 1784590000}
+      - {name: period_interval, required: true, format: "1|60|1440 (minutes: 1m|1h|1d)", example: 1}
       - {name: include_latest_before_start, required: false, format: "true|false, default false"}
     gotchas:
-      - "All three of start_ts/end_ts/period_interval are required — omitting any returns an error"
+      - "Match period to market lifespan: 15-min binaries (KXBTC15M/KXETH15M) only have period_interval=1 data; multi-day markets support 60/1440"
+      - "Candle: end_period_ts + price{open/high/low/close/mean_dollars} + yes_bid{...} + yes_ask{...} + volume_fp + open_interest_fp"
       - "Markets settled before Kalshi's historical cutoff return no data here"
-    example: '{"name":"kalshi_candlesticks","params":{"series_ticker":"<series>","ticker":"<ticker>","start_ts":1784489000,"end_ts":1784575000,"period_interval":60}}'
+    example: '{"name":"kalshi_candlesticks","params":{"series_ticker":"KXBTC15M","ticker":"<ticker>","start_ts":1784580000,"end_ts":1784590000,"period_interval":1}}'
 
   - name: "kalshi_exchange_status"
     summary: "Exchange/trading active flags"
