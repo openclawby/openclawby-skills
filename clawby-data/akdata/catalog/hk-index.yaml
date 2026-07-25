@@ -1,0 +1,138 @@
+# ============================================================================
+# 港股 + 指数（沪深/申万/中证） — local akshare via `ak.py call`
+# ============================================================================
+category: "Hong Kong equities & Chinese indices"
+transport: "local akshare (ak.py call) — NOT /api/relay"
+verified_ak_version: "1.18.78"
+verified_at: "2026-07-25"
+
+gotchas_for_all:
+  - "⚠️ **港股代码是 5 位**（`00700` `00593` `03900`），带前导零；A 股是 6 位。别把 `700` 或 `0700` 传进来。"
+  - "⚠️ 本组多数东财接口走 `push2*.eastmoney.com`（含分片 `33.push2` `72.push2` `81.push2` `80.push2` `48.push2`）。2026-07-25 开发环境不可达，故 measured 标 unverified；实测可用的是 `stock_hk_financial_indicator_em`、`index_hist_sw`、`stock_zh_index_value_csindex` 三个（走别的域名）。"
+  - "指数代码有三种体系：东财 `index_zh_a_hist` 用裸代码（`000300`）；`stock_zh_index_daily_em` 要带市场前缀（`sh000300` / `sz399006` / `csi931151`）；申万用自己的 `801030`；中证估值用 `H30374`。"
+
+interfaces:
+  - func: stock_hk_hist
+    summary: "港股日/周/月 K 线（东财，港股历史行情主接口）"
+    params:
+      - {name: symbol, required: false, format: "港股 5 位代码", example: "00700", default: "00593"}
+      - {name: period, required: false, choices: [daily, weekly, monthly], default: daily}
+      - {name: start_date, required: false, format: YYYYMMDD, example: "20260101", default: "19700101 (=全部历史)"}
+      - {name: end_date, required: false, format: YYYYMMDD, example: "20260720", default: "22220101"}
+      - {name: adjust, required: false, choices: ["qfq", "hfq", ""], note: "docstring 把取值写成 {\"qfq\":\"1\",\"hfq\":\"2\"}，实际仍填 qfq/hfq/空"}
+    returns: "日期 开盘 收盘 最高 最低 成交量 成交额 振幅 涨跌幅 涨跌额 换手率（中文列名）"
+    measured: {status: unverified, note: "2026-07-25 33.push2his 不可达"}
+    example: "ak.py call stock_hk_hist --symbol 00700 --period daily --start_date 20260101 --end_date 20260720"
+    gotchas:
+      - "不给区间会拉全部历史 —— 一定给 start_date/end_date。"
+
+  - func: stock_hk_spot_em
+    summary: "港股全市场实时快照（东财，含主板+创业板）"
+    params: []
+    returns: "序号 代码 名称 最新价 涨跌额 涨跌幅 今开 最高 最低 昨收 成交量 成交额"
+    measured: {status: unverified, note: "2026-07-25 72.push2 分片不可达"}
+    example: "ak.py call stock_hk_spot_em --summary"
+    gotchas:
+      - "⚠️ 数千行 —— 用 `--summary` 或 `--out`。只要主板用 `stock_hk_main_board_spot_em`。"
+
+  - func: stock_hk_main_board_spot_em
+    summary: "港股主板实时快照（比全市场版更少噪音）"
+    params: []
+    returns: "序号 代码 名称 最新价 涨跌额 涨跌幅 今开 最高 最低 昨收 成交量 成交额"
+    measured: {status: unverified, note: "2026-07-25 81.push2 分片不可达"}
+    example: "ak.py call stock_hk_main_board_spot_em --summary"
+
+  - func: stock_hk_hist_min_em
+    summary: "港股分时 K 线（1/5/15/30/60 分钟，东财）"
+    params:
+      - {name: symbol, required: false, format: "港股 5 位代码", example: "01611"}
+      - {name: period, required: false, choices: ["1", "5", "15", "30", "60"], default: "1"}
+      - {name: start_date, required: false, format: "YYYY-MM-DD HH:MM:SS", example: "2026-07-20 09:30:00"}
+      - {name: end_date, required: false, format: "YYYY-MM-DD HH:MM:SS", example: "2026-07-24 16:00:00"}
+      - {name: adjust, required: false, choices: ["", "qfq", "hfq"]}
+    returns: "时间 开盘 收盘 最高 最低 涨跌幅 涨跌额 成交量 成交额 振幅 换手率"
+    measured: {status: unverified, note: "2026-07-25 push2his 不可达"}
+    example: "ak.py call stock_hk_hist_min_em --symbol 00700 --period 5 --start_date '2026-07-24 09:30:00' --end_date '2026-07-24 16:00:00'"
+    gotchas:
+      - "⚠️ 日期要带时间（`2026-07-24 09:30:00`），与日线接口的 `20260724` 不同。港股午休与收盘时间与 A 股不同（16:00 收盘）。"
+
+  - func: stock_hk_ggt_components_em
+    summary: "港股通成份股清单（东财）"
+    params: []
+    returns: "序号 代码 名称 最新价 涨跌幅 涨跌额 成交量 成交额 …"
+    measured: {status: unverified, note: "2026-07-25 33.push2 分片不可达"}
+    example: "ak.py call stock_hk_ggt_components_em --summary"
+    gotchas:
+      - "用来判断某只港股「能不能通过港股通买」；配合 `stock_hsgt_hist_em --symbol 南向资金` 看南向资金流。"
+
+  - func: stock_hk_financial_indicator_em
+    summary: "港股核心财务指标快照（东财，单股一行 21 列）"
+    params:
+      - {name: symbol, required: false, format: "港股 5 位代码", example: "03900", default: "03900"}
+    returns: "基本每股收益(元) 每股净资产(元) 法定股本(股) 每手股 每股股息TTM(港元) 派息比率(%) 已发行股本(股) 已发行股本-H股(股) 每股经营现金流(元) 股息率TTM(%) 总市值(港元) 港股市值(港元) 营业总收入 营业总收入滚动环比增长(%) 销售净利率(%) 净利润 净利润滚动环比增长(%) 股东权益回报率(%) 市盈率 市净率 总资产回报率(%)"
+    measured: {elapsed: 0.14, rows: 1, cols: 21, verified_at: "2026-07-25"}
+    example: "ak.py call stock_hk_financial_indicator_em --symbol 00700"
+    gotchas:
+      - "只有 1 行（最新快照），不是时间序列。列名自带单位与币种（港元/元混用，注意换算）。"
+      - "`每手股` 是港股特有的最小交易单位，下单前必须看。"
+
+  - func: index_zh_a_hist
+    summary: "沪深指数日/周/月 K 线（东财，指数历史行情主接口）"
+    params:
+      - {name: symbol, required: false, format: "裸指数代码", example: "000300", default: "000859"}
+      - {name: period, required: false, choices: [daily, weekly, monthly], default: daily}
+      - {name: start_date, required: false, format: YYYYMMDD, example: "20260101"}
+      - {name: end_date, required: false, format: YYYYMMDD, example: "20260720"}
+    returns: "日期 开盘 收盘 最高 最低 成交量 成交额 振幅 涨跌幅 涨跌额 换手率"
+    measured: {status: unverified, note: "2026-07-25 80.push2 分片不可达"}
+    example: "ak.py call index_zh_a_hist --symbol 000300 --start_date 20260101 --end_date 20260720"
+    gotchas:
+      - "常用代码：`000001` 上证、`399001` 深成、`399006` 创业板、`000300` 沪深300、`000905` 中证500、`000852` 中证1000。"
+      - "⚠️ 这里是**裸代码**；`stock_zh_index_daily_em` 要 `sh000300` 带前缀。"
+
+  - func: stock_zh_index_spot_em
+    summary: "沪深京指数实时行情（按系列分组）"
+    params:
+      - {name: symbol, required: false, default: "上证系列指数",
+         choices: ["沪深重要指数", "上证系列指数", "深证系列指数", "指数成份", "中证系列指数"]}
+    returns: "序号 代码 名称 最新价 涨跌幅 涨跌额 成交量 成交额 振幅 最高 最低 今开 昨收 量比"
+    measured: {status: unverified, note: "2026-07-25 48.push2 分片不可达"}
+    example: "ak.py call stock_zh_index_spot_em --symbol 沪深重要指数"
+    gotchas:
+      - "⚠️ `symbol` 是**指数系列名**不是指数代码。要「今天沪深300涨了多少」用 `沪深重要指数` 然后本地筛。"
+
+  - func: stock_zh_index_daily_em
+    summary: "指数日线（东财，支持中证/深证/上证三套代码体系）"
+    params:
+      - {name: symbol, required: false, format: "⚠️ 带市场前缀：`sh`+代码 / `sz`+代码 / `csi`+代码", example: "sh000300", default: "csi931151"}
+      - {name: start_date, required: false, format: YYYYMMDD, example: "20260101"}
+      - {name: end_date, required: false, format: YYYYMMDD, example: "20260720"}
+    returns: "date open close high low volume amount"
+    measured: {status: unverified, note: "2026-07-25 push2his 不可达"}
+    example: "ak.py call stock_zh_index_daily_em --symbol sh000300 --start_date 20260101 --end_date 20260720"
+    gotchas:
+      - "⚠️ 前缀决定源：`csi` 是中证指数（如 `csi931151` 中证白酒），`sh`/`sz` 是交易所指数。与 `index_zh_a_hist` 的裸代码不通用。"
+
+  - func: index_hist_sw
+    summary: "申万行业指数历史行情（研究行业轮动的标准数据）"
+    params:
+      - {name: symbol, required: false, format: "申万指数代码（6 位，801/802 开头）", example: "801030", default: "801030"}
+      - {name: period, required: false, choices: ["day", "week", "month"], default: "day", note: "⚠️ 英文 day/week/month，不是 daily"}
+    returns: "代码 日期 收盘 开盘 最高 最低 成交量 成交额"
+    measured: {elapsed: 0.73, rows: 6419, cols: 8, verified_at: "2026-07-25", note: "全历史，无区间参数"}
+    example: "ak.py call index_hist_sw --symbol 801030 --period day --rows 30"
+    gotchas:
+      - "⚠️ `period` 取值是 `day`/`week`/`month`（不是 `daily`/`weekly`）—— 又一处 akshare 内部不一致。"
+      - "⚠️ 返回全历史 6419 行且**没有日期区间参数** —— 用 `--rows` 或 `--out`。"
+      - "申万一级行业代码用 `ak.py find 申万 指数` 找 `index_realtime_sw` / `sw_index_first_info` 之类的清单接口。"
+
+  - func: stock_zh_index_value_csindex
+    summary: "中证指数官方估值（市盈率/股息率两种口径）"
+    params:
+      - {name: symbol, required: false, format: "中证指数代码", example: "H30374", default: "H30374"}
+    returns: "日期 指数代码 指数中文全称 指数中文简称 指数英文全称 指数英文简称 市盈率1 市盈率2 股息率1 股息率2"
+    measured: {elapsed: 1.2, rows: 20, cols: 10, verified_at: "2026-07-25"}
+    example: "ak.py call stock_zh_index_value_csindex --symbol H30374"
+    gotchas:
+      - "`市盈率1`/`市盈率2` 是中证的两种口径（1=最近一期，2=滚动），官方未在返回里说明，取用时以中证官网定义为准。"
+      - "只返回最近 20 个交易日。"

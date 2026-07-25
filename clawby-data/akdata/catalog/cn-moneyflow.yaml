@@ -1,0 +1,141 @@
+# ============================================================================
+# A股 资金流 / 龙虎榜 / 沪深港通 / 盘口异动 — local akshare via `ak.py call`
+# ============================================================================
+category: "A-share money flow, dragon-tiger list, northbound (Stock Connect)"
+transport: "local akshare (ak.py call) — NOT /api/relay"
+verified_ak_version: "1.18.78"
+verified_at: "2026-07-25"
+
+gotchas_for_all:
+  - "本组走 `datacenter-web.eastmoney.com`（东财数据中心）和 `data.10jqka.com.cn`（同花顺），2026-07-25 实测均可达 —— 与走 push2 的行情组不同。"
+  - "⚠️ 同花顺 `stock_fund_flow_*` 的 `symbol='即时'` 是**当前时点排行**；`3日排行/5日排行/10日排行/20日排行` 是区间排行。参数名叫 symbol 但语义是「口径」，不是股票代码。"
+  - "⚠️ 全市场级资金流接口动辄 5000 行且需 10 秒（`stock_fund_flow_individual` / `stock_fund_flow_big_deal`）—— 先 `--summary`，要全量用 `--out`。"
+  - "北向资金相关接口有多个：市场总览用 `stock_hsgt_fund_flow_summary_em`（4 行，最轻），历史序列用 `stock_hsgt_hist_em`，个股持股用 `stock_hsgt_individual_em`，分时用 `stock_hsgt_fund_min_em`。"
+
+interfaces:
+  - func: stock_lhb_detail_em
+    summary: "龙虎榜详情（东财，最主流的龙虎榜接口）"
+    params:
+      - {name: start_date, required: false, format: YYYYMMDD, example: "20260701"}
+      - {name: end_date, required: false, format: YYYYMMDD, example: "20260710"}
+    returns: "序号 代码 名称 上榜日 解读 收盘价 涨跌幅 龙虎榜净买额 龙虎榜买入额 龙虎榜卖出额 龙虎榜成交额 市场总成交额 净买额占总成交比 成交额占总成交比 换手率 流通市值 上榜原因 上榜后1日 上榜后2日 上榜后5日 上榜后10日（21 列）"
+    measured: {elapsed: 2.71, rows: 3764, cols: 21, window: "20260601-20260720 (50 天)", verified_at: "2026-07-25"}
+    example: "ak.py call stock_lhb_detail_em --start_date 20260701 --end_date 20260710 --rows 30"
+    gotchas:
+      - "行数随区间线性增长：10 天 ≈ 900 行，50 天 ≈ 3800 行 —— 长区间务必 `--out` 或收窄。"
+      - "`上榜后N日` 列是上榜后的涨跌幅，用于复盘游资效果；近期上榜的这几列可能为空。"
+
+  - func: stock_hsgt_fund_flow_summary_em
+    summary: "沪深港通资金流向总览（最轻的北向资金接口，4 行）"
+    params: []
+    returns: "交易日 类型 板块 资金方向 交易状态 成交净买额 资金净流入 当日资金余额 上涨数 持平数 下跌数 相关指数 指数涨跌幅"
+    measured: {elapsed: 0.12, rows: 4, cols: 13, verified_at: "2026-07-25"}
+    example: "ak.py call stock_hsgt_fund_flow_summary_em"
+    gotchas:
+      - "只有 4 行（沪股通/深股通 × 沪深港通两个方向），最快拿到「今天北向净流入多少」。"
+
+  - func: stock_hsgt_hist_em
+    summary: "沪深港通历史资金流序列（北向/南向逐日）"
+    params:
+      - {name: symbol, required: false, choices: ["北向资金", "沪股通", "深股通", "南向资金", "港股通沪", "港股通深"], default: "北向资金"}
+    returns: "日期 当日成交净买额 买入成交额 卖出成交额 历史累计净买额 当日资金流入 当日余额 持股市值 领涨股 领涨股-涨跌幅 沪深300 沪深300-涨跌幅 领涨股-代码"
+    measured: {elapsed: 1.34, rows: 2716, cols: 13, verified_at: "2026-07-25", note: "全历史逐日"}
+    example: "ak.py call stock_hsgt_hist_em --symbol 北向资金 --rows 30"
+    gotchas:
+      - "返回全部历史（2716 行）且**没有日期区间参数** —— 用 `--rows` 取最近若干日，或 `--out` 落盘后自行筛区间。"
+
+  - func: stock_hsgt_individual_em
+    summary: "单只股票的沪深港通持股历史"
+    params:
+      - {name: symbol, required: false, format: "裸 6 位代码", example: "002008"}
+    returns: "持股日期 当日收盘价 当日涨跌幅 持股数量 持股市值 持股数量占A股百分比 今日增持股数 今日增持资金 今日持股市值变化"
+    measured: {elapsed: 1.08, rows: 1672, cols: 9, verified_at: "2026-07-25"}
+    example: "ak.py call stock_hsgt_individual_em --symbol 002008 --rows 20"
+    gotchas:
+      - "返回该股全部持股历史（1672 行），无区间参数 —— 用 `--rows` 取最近。"
+
+  - func: stock_hsgt_fund_min_em
+    summary: "北向/南向资金当日分时（每分钟一点）"
+    params:
+      - {name: symbol, required: false, choices: ["北向资金", "南向资金"], default: "北向资金"}
+    returns: "日期 时间 沪股通 深股通 北向资金"
+    measured: {elapsed: 0.19, rows: 241, cols: 5, verified_at: "2026-07-25"}
+    example: "ak.py call stock_hsgt_fund_min_em --symbol 北向资金 --rows 20"
+    gotchas:
+      - "241 行 = 一个交易日的分钟数；只有当日数据。"
+
+  - func: stock_fund_flow_individual
+    summary: "个股资金流排行（同花顺，全市场）"
+    params:
+      - {name: symbol, required: false, choices: ["即时", "3日排行", "5日排行", "10日排行", "20日排行"], default: "即时"}
+    returns: "序号 股票代码 股票简称 最新价 涨跌幅 换手率 流入资金 流出资金 净额 成交额"
+    measured: {elapsed: 10.25, rows: 5197, cols: 10, verified_at: "2026-07-25"}
+    example: "ak.py call stock_fund_flow_individual --symbol 即时 --summary\nak.py call stock_fund_flow_individual --symbol 5日排行 --out flow5.csv --timeout 120"
+    gotchas:
+      - "⚠️ 5197 行、约 10 秒 —— 默认 60s 超时够，但一定配 `--summary` 或 `--out`。"
+
+  - func: stock_fund_flow_concept
+    summary: "概念板块资金流排行（同花顺）"
+    params:
+      - {name: symbol, required: false, choices: ["即时", "3日排行", "5日排行", "10日排行", "20日排行"], default: "即时"}
+    returns: "序号 行业 行业指数 行业-涨跌幅 流入资金 流出资金 净额 公司家数 领涨股 领涨股-涨跌幅 当前价"
+    measured: {elapsed: 0.54, rows: 386, cols: 11, verified_at: "2026-07-25"}
+    example: "ak.py call stock_fund_flow_concept --symbol 即时 --rows 20"
+    gotchas:
+      - "列名叫「行业」但内容是概念板块名（与 stock_fund_flow_industry 共用同一套列名）。"
+
+  - func: stock_fund_flow_industry
+    summary: "行业板块资金流排行（同花顺）"
+    params:
+      - {name: symbol, required: false, choices: ["即时", "3日排行", "5日排行", "10日排行", "20日排行"], default: "即时"}
+    returns: "序号 行业 行业指数 行业-涨跌幅 流入资金 流出资金 净额 公司家数 领涨股 领涨股-涨跌幅 当前价"
+    measured: {elapsed: 0.31, rows: 90, cols: 11, verified_at: "2026-07-25"}
+    example: "ak.py call stock_fund_flow_industry --symbol 即时"
+    gotchas:
+      - "90 行覆盖同花顺全部一级行业，最轻的板块资金流视图。"
+
+  - func: stock_fund_flow_big_deal
+    summary: "大单追踪（同花顺，逐笔大单流水）"
+    params: []
+    returns: "成交时间 股票代码 股票简称 成交价格 成交量 成交额 大单性质 涨跌幅 涨跌额"
+    measured: {elapsed: 9.87, rows: 5000, cols: 9, verified_at: "2026-07-25"}
+    example: "ak.py call stock_fund_flow_big_deal --summary\nak.py call stock_fund_flow_big_deal --out bigdeal.csv --timeout 120"
+    gotchas:
+      - "⚠️ 固定返回最近 5000 笔、约 10 秒。`大单性质` 区分买盘/卖盘。"
+
+  - func: stock_changes_em
+    summary: "盘口异动（东财，实时异动事件流）"
+    params:
+      - {name: symbol, required: false, default: "大笔买入",
+         choices: ["火箭发射", "快速反弹", "大笔买入", "封涨停板", "打开跌停板", "有大买盘", "竞价上涨", "高开5日线", "向上缺口", "60日新高", "60日大幅上涨", "加速下跌", "高台跳水", "大笔卖出", "封跌停板", "打开涨停板", "有大卖盘", "竞价下跌", "低开5日线", "向下缺口", "60日新低", "60日大幅下跌"],
+         note: "docstring 只列出部分，实际支持上述 22 种异动类型（正向 11 + 反向 11）"}
+    returns: "时间 代码 名称 板块 相关信息"
+    measured: {elapsed: 0.24, rows: 832, cols: 5, verified_at: "2026-07-25"}
+    example: "ak.py call stock_changes_em --symbol 封涨停板 --rows 30"
+    gotchas:
+      - "只有当日盘中数据，收盘后仍可查当日；非交易时段可能返回 0 行。"
+
+  - func: stock_hsgt_hold_stock_em
+    status: broken
+    summary: "沪深港通个股持股排行（东财）—— 2026-07-25 实测失效"
+    params:
+      - {name: market, required: false, choices: ["北向", "沪股通", "深股通"]}
+      - {name: indicator, required: false, choices: ["今日排行", "3日排行", "5日排行", "10日排行", "月排行", "季排行", "年排行"]}
+    measured: {status: broken, verified_at: "2026-07-25",
+               error: "TypeError: 'NoneType' object is not subscriptable（上游返回空，akshare 解析崩）",
+               tried: "market 北向/沪股通/深股通 × indicator 今日排行/5日排行/月排行 全部失败"}
+    gotchas:
+      - "⚠️ 所有合法参数组合都失败，判定为东财改版导致的接口失效（不是参数问题）。"
+      - "替代：个股维度用 `stock_hsgt_individual_em`（单只股票的持股历史），市场维度用 `stock_hsgt_hist_em`。也可 `pip install -U akshare` 后重试。"
+
+  - func: stock_hsgt_board_rank_em
+    status: broken
+    summary: "北向资金增持板块排行（东财）—— 2026-07-25 实测失效"
+    params:
+      - {name: symbol, required: false, choices: ["北向资金增持行业板块排行", "北向资金增持概念板块排行", "北向资金增持地域板块排行"]}
+      - {name: indicator, required: false, choices: ["今日", "3日", "5日", "10日", "1月", "1季", "1年"]}
+    measured: {status: broken, verified_at: "2026-07-25",
+               error: "TypeError: 'NoneType' object is not subscriptable",
+               tried: "行业/概念板块 × 今日/5日 全部失败"}
+    gotchas:
+      - "⚠️ 同 `stock_hsgt_hold_stock_em`，上游改版失效。板块资金流替代：`stock_fund_flow_industry` / `stock_fund_flow_concept`（同花顺源，实测可用）。"

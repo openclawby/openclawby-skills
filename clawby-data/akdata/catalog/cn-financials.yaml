@@ -1,0 +1,129 @@
+# ============================================================================
+# A股 财报 / 财务指标 / 盈利预测 — local akshare via `ak.py call`
+# ============================================================================
+category: "A-share financial statements, ratios & earnings forecasts"
+transport: "local akshare (ak.py call) — NOT /api/relay"
+verified_ak_version: "1.18.78"
+verified_at: "2026-07-25"
+
+gotchas_for_all:
+  - "⚠️ **本组接口普遍超宽**：实测 `stock_profit_sheet_by_report_em` **203 列**、`stock_financial_report_sina` 147 列、`stock_financial_analysis_indicator_em` 141 列、`stock_financial_abstract` 109 列。默认字符预算必然截断 —— 先 `--summary` 看列名，再用 `--cols` 精确取。"
+  - "⚠️ **列名语言随源变**：东财 `_em` 系返回**英文大写代码**（`EPSJB` 基本每股收益 / `TOTALOPERATEREVE` 营业总收入 / `PARENTNETPROFIT` 归母净利润 / `REPORT_DATE` 报告期），新浪与同花顺系返回中文列名。要可读字段就用新浪/同花顺，要机器处理用东财。"
+  - "⚠️ **symbol 格式四种并存**：`stock_financial_abstract` 裸 6 位 `600000`；`stock_financial_report_sina` 用 `stock` 参数且要 `sh600600`；`stock_financial_analysis_indicator_em` 要 `301389.SZ`（点后缀）；`stock_profit_sheet_by_report_em` 要 `SH600519`（大写前缀）。逐个照本文件填。"
+  - "全市场横截面（`stock_lrb_em`）与单股时间序列（其余）是两类用途：找「全市场谁利润增长最快」用前者，看「某股历年财务」用后者。"
+
+interfaces:
+  - func: stock_financial_abstract
+    summary: "财务关键指标摘要（新浪，中文列名，按报告期横排）"
+    params:
+      - {name: symbol, required: false, format: "裸 6 位代码", example: "600000", default: "600004"}
+    returns: "选项 指标 + 每个报告期一列（`20260331` `20251231` …），中文指标名"
+    measured: {elapsed: 0.51, rows: 80, cols: 109, verified_at: "2026-07-25"}
+    example: "ak.py call stock_financial_abstract --symbol 600000 --summary\nak.py call stock_financial_abstract --symbol 600000 --cols 选项,指标,20260331,20251231"
+    gotchas:
+      - "⚠️ **列是报告期、行是指标**（转置结构）—— 想看某期数据就 `--cols 选项,指标,<报告期>`。"
+      - "109 列 = 27 年历史报告期，全取必然超预算。"
+
+  - func: stock_financial_abstract_ths
+    summary: "财务主要指标（同花顺，中文列名，25 个常用比率）"
+    params:
+      - {name: symbol, required: false, format: "裸 6 位代码", example: "000063"}
+      - {name: indicator, required: false, choices: ["按报告期", "按年度", "按单季度"], default: "按报告期"}
+    returns: "报告期 净利润 净利润同比增长率 扣非净利润 营业总收入 营业总收入同比增长率 基本每股收益 每股净资产 每股经营现金流 销售净利率 销售毛利率 净资产收益率 存货周转率 流动比率 速动比率 产权比率 …（25 列）"
+    measured: {elapsed: 0.49, rows: 110, cols: 25, verified_at: "2026-07-25"}
+    example: "ak.py call stock_financial_abstract_ths --symbol 000063 --indicator 按年度 --rows 10"
+    gotchas:
+      - "结构最友好的一个：行=报告期、列=指标、全中文，25 列不超预算。**首选这个做单股财务分析**。"
+      - "`按单季度` 是单季数值（非累计），`按报告期` 是累计值 —— 算同比要看清口径。"
+
+  - func: stock_financial_analysis_indicator
+    summary: "财务分析指标全集（新浪，86 列中文，带单位）"
+    params:
+      - {name: symbol, required: false, format: "裸 6 位代码", example: "600000"}
+      - {name: start_year, required: false, format: "YYYY 年份", example: "2024", default: "1900 (=全部历史)"}
+    returns: "日期 + 85 个中文指标（摊薄每股收益(元) 加权每股收益(元) 总资产利润率(%) 营业利润率(%) 销售毛利率(%) 三项费用比重 …）"
+    measured: {elapsed: 0.44, rows: 9, cols: 86, verified_at: "2026-07-25", note: "start_year=2024 时 9 行"}
+    example: "ak.py call stock_financial_analysis_indicator --symbol 600000 --start_year 2024 --summary"
+    gotchas:
+      - "⚠️ 不给 `start_year` 会拉 1900 年起的全部历史（几十行 × 86 列）—— 一定给年份。"
+      - "列名自带单位（元/%），做数值处理前要剥。"
+
+  - func: stock_financial_analysis_indicator_em
+    summary: "财务主要指标（东财，141 列**英文代码**列名）"
+    params:
+      - {name: symbol, required: false, format: "⚠️ 点后缀格式 `代码.交易所`", example: "301389.SZ", default: "301389.SZ"}
+      - {name: indicator, required: false, choices: ["按报告期", "按单季度"], default: "按报告期"}
+    returns: "SECUCODE SECURITY_CODE SECURITY_NAME_ABBR REPORT_DATE REPORT_DATE_NAME EPSJB(基本每股收益) EPSKCJB(扣非每股收益) BPS(每股净资产) MGJYXJJE(每股经营现金流) TOTALOPERATEREVE(营业总收入) PARENTNETPROFIT(归母净利润) KCFJCXSYJLR(扣非净利润) …（141 列）"
+    measured: {elapsed: 0.25, rows: 24, cols: 141, verified_at: "2026-07-25"}
+    example: "ak.py call stock_financial_analysis_indicator_em --symbol 301389.SZ --summary\nak.py call stock_financial_analysis_indicator_em --symbol 600519.SH --cols REPORT_DATE,EPSJB,BPS,TOTALOPERATEREVE,PARENTNETPROFIT"
+    gotchas:
+      - "⚠️ symbol 是 `301389.SZ` 这种**点后缀**格式，与本组其它接口都不同。"
+      - "⚠️ 141 列全是拼音首字母缩写；要可读列名请改用 `stock_financial_abstract_ths`。"
+
+  - func: stock_financial_report_sina
+    summary: "三大报表原始科目（新浪，中文科目名，147 列）"
+    params:
+      - {name: stock, required: false, format: "⚠️ 参数名是 `stock` 不是 `symbol`；小写前缀格式", example: "sh600600", default: "sh600600"}
+      - {name: symbol, required: false, choices: ["资产负债表", "利润表", "现金流量表"], default: "资产负债表", note: "⚠️ symbol 在这里是「报表类型」不是股票代码"}
+    returns: "报告日 + 全部会计科目（流动资产 货币资金 应收账款 存货 …），中文列名"
+    measured: {elapsed: 0.84, rows: 116, cols: 147, verified_at: "2026-07-25"}
+    example: "ak.py call stock_financial_report_sina --stock sh600600 --symbol 利润表 --summary"
+    gotchas:
+      - "⚠️ **两个参数的名字都反直觉**：股票代码放 `stock`（要 `sh` 前缀），`symbol` 放报表类型。"
+      - "116 行 = 全部历史报告期，147 列 = 全部科目。要具体科目用 `--cols 报告日,货币资金,应收账款`。"
+
+  - func: stock_profit_sheet_by_report_em
+    summary: "利润表按报告期（东财，203 列英文代码，含同比 YOY）"
+    params:
+      - {name: symbol, required: false, format: "⚠️ 大写前缀格式", example: "SH600519", default: "SH600519"}
+    returns: "SECUCODE REPORT_DATE REPORT_DATE_NAME TOTAL_OPERATE_INCOME(营业总收入) TOTAL_OPERATE_INCOME_YOY(同比) OPERATE_INCOME INTEREST_INCOME FEE_COMMISSION_INCOME …（203 列，每个科目配一个 _YOY）"
+    measured: {elapsed: 6.09, rows: 102, cols: 203, verified_at: "2026-07-25"}
+    example: "ak.py call stock_profit_sheet_by_report_em --symbol SH600519 --summary\nak.py call stock_profit_sheet_by_report_em --symbol SH600519 --cols REPORT_DATE,TOTAL_OPERATE_INCOME,TOTAL_OPERATE_INCOME_YOY --rows 12"
+    gotchas:
+      - "⚠️ symbol 要 `SH600519`（大写前缀），与 `_analysis_indicator_em` 的 `600519.SH` 不同 —— 同为东财接口却两种格式。"
+      - "⚠️ 203 列 × 102 期，约 6 秒。**必须** `--summary` 或 `--cols`。"
+      - "每个科目都有配套 `_YOY` 同比列，不必自己算。"
+
+  - func: stock_profit_sheet_by_quarterly_em
+    summary: "利润表按单季度（东财，204 列，含环比 QOQ）"
+    params:
+      - {name: symbol, required: false, format: "大写前缀格式", example: "SH600519"}
+    returns: "同 by_report_em，但同比列换成 `_QOQ`（环比），数值为单季而非累计"
+    measured: {elapsed: 6.27, rows: 97, cols: 204, verified_at: "2026-07-25"}
+    example: "ak.py call stock_profit_sheet_by_quarterly_em --symbol SH600519 --cols REPORT_DATE,TOTAL_OPERATE_INCOME,TOTAL_OPERATE_INCOME_QOQ --rows 12"
+    gotchas:
+      - "与 `by_report_em` 的区别：这里是**单季数值 + 环比**，那里是累计值 + 同比。做季度趋势用这个。"
+
+  - func: stock_lrb_em
+    summary: "全市场利润表横截面（东财业绩快报，一次拿全部 A 股某一期）"
+    params:
+      - {name: date, required: false, format: "⚠️ 必须是季末日 YYYYMMDD（0331/0630/0930/1231），从 20100331 开始", example: "20260331", default: "20240331"}
+    returns: "序号 股票代码 股票简称 净利润 净利润同比 营业总收入 营业总收入同比 营业总支出-营业支出 营业总支出-销售费用 营业总支出-管理费用 营业总支出-财务费用 营业利润 利润总额 公告日期（15 列）"
+    measured: {elapsed: 3.6, rows: 5220, cols: 15, verified_at: "2026-07-25", date_used: "20260331"}
+    example: "ak.py call stock_lrb_em --date 20260331 --summary\nak.py call stock_lrb_em --date 20260331 --out lrb.csv   # 全市场排序用"
+    gotchas:
+      - "⚠️ `date` 只接受季末日；传 `20260315` 这类非季末日会返回空或报错。"
+      - "⚠️ 5220 行（全市场）—— 找「净利润同比最高的 20 只」应 `--out` 后本地排序，别指望 `--rows` 是排好序的。"
+      - "报告期越近，已披露的公司越少（进度不全）。"
+
+  - func: stock_profit_forecast_em
+    summary: "机构盈利预测与评级汇总（东财，全市场 2810 只）"
+    params:
+      - {name: symbol, required: false, format: "空字符串=全市场；或行业板块名", example: "船舶制造", default: "\"\" (全部)"}
+    returns: "序号 代码 名称 研报数 机构投资评级(近六个月)-买入/增持/中性/减持/卖出 2025预测每股收益 2026预测每股收益 2027预测每股收益 2028预测每股收益"
+    measured: {elapsed: 1.95, rows: 2810, cols: 13, verified_at: "2026-07-25"}
+    example: "ak.py call stock_profit_forecast_em --rows 30\nak.py call stock_profit_forecast_em --symbol 船舶制造"
+    gotchas:
+      - "预测年份列名随年份滚动（当前是 2025–2028），别硬编码列名。"
+      - "给 `--symbol 行业名` 可大幅缩小结果；行业名取自东财行业分类。"
+
+  - func: stock_profit_forecast_ths
+    summary: "单股盈利预测明细（同花顺，含机构数与区间）"
+    params:
+      - {name: symbol, required: false, format: "裸 6 位代码", example: "600519"}
+      - {name: indicator, required: false, choices: ["预测年报每股收益", "预测年报净利润", "业绩预测详表-机构", "业绩预测详表-详细指标预测"], default: "预测年报每股收益"}
+    returns: "年度 预测机构数 最小值 均值 最大值 行业平均数"
+    measured: {elapsed: 0.39, rows: 3, cols: 6, verified_at: "2026-07-25"}
+    example: "ak.py call stock_profit_forecast_ths --symbol 600519 --indicator 预测年报净利润"
+    gotchas:
+      - "`业绩预测详表-机构` 会换一套列（逐机构明细），行数与列数都不同 —— 换 indicator 后重新看 colnames。"

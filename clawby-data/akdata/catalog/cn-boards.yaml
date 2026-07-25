@@ -1,0 +1,70 @@
+# ============================================================================
+# A股 行业板块 / 概念板块 — local akshare via `ak.py call`
+# ============================================================================
+category: "A-share industry & concept boards"
+transport: "local akshare (ak.py call) — NOT /api/relay"
+verified_ak_version: "1.18.78"
+verified_at: "2026-07-25"
+
+gotchas_for_all:
+  - "⚠️ 本组**全部**走 `push2*.eastmoney.com`（含随机分片 `NN.push2`）。2026-07-25 开发环境该域名两路皆不可达，因此 measured 全部标 unverified —— params/format 来自签名与 docstring，可信。调用失败先跑 `ak.py doctor`。"
+  - "⚠️ **同一个 period 参数，行业板块和概念板块的取值不同**：`stock_board_industry_hist_em` 要中文 `日k`/`周k`/`月k`，`stock_board_concept_hist_em` 要英文 `daily`。这是 akshare 的历史遗留不一致，不是笔误。"
+  - "板块的 symbol 用**板块名称**（如 `小金属`、`绿色电力`），不是代码；先用 `*_name_em` 拿到可用名称清单再查。"
+  - "同花顺也有一整套板块接口（`stock_board_industry_name_ths` / `_index_ths` / `_cons_ths` 等，走 `data.10jqka.com.cn`）。东财系不可达时用 `ak.py find 板块 同花顺` 找它们。"
+
+interfaces:
+  - func: stock_board_industry_name_em
+    summary: "东财行业板块名称与实时行情列表（拿板块清单的入口）"
+    params: []
+    returns: "排名 板块名称 板块代码 最新价 涨跌额 涨跌幅 总市值 换手率 上涨家数 下跌家数 领涨股票 领涨股票-涨跌幅"
+    measured: {status: unverified, note: "2026-07-25 17.push2 分片域名不可达"}
+    example: "ak.py call stock_board_industry_name_em --rows 30"
+    gotchas:
+      - "先调这个拿到 `板块名称`，再喂给 `stock_board_industry_cons_em` / `_hist_em`。"
+
+  - func: stock_board_industry_cons_em
+    summary: "行业板块成份股"
+    params:
+      - {name: symbol, required: false, format: "板块名称或板块代码", example: "小金属", default: "小金属"}
+    returns: "序号 代码 名称 最新价 涨跌幅 涨跌额 成交量 成交额 振幅 最高 最低 今开 昨收 换手率 市盈率-动态 市净率"
+    measured: {status: unverified, note: "2026-07-25 push2 分片不可达"}
+    example: "ak.py call stock_board_industry_cons_em --symbol 小金属 --rows 30"
+    gotchas:
+      - "板块名称要与 `stock_board_industry_name_em` 返回的完全一致（含繁简与空格）。"
+
+  - func: stock_board_industry_hist_em
+    summary: "行业板块历史 K 线"
+    params:
+      - {name: symbol, required: false, format: "板块名称", example: "小金属"}
+      - {name: start_date, required: false, format: YYYYMMDD, example: "20260101"}
+      - {name: end_date, required: false, format: YYYYMMDD, example: "20260720"}
+      - {name: period, required: false, choices: ["日k", "周k", "月k"], default: "日k", note: "⚠️ 中文取值，与概念板块的 daily 不同"}
+      - {name: adjust, required: false, choices: ["", "qfq", "hfq"]}
+    returns: "日期 开盘 收盘 最高 最低 涨跌幅 涨跌额 成交量 成交额 振幅 换手率"
+    measured: {status: unverified, note: "2026-07-25 push2 分片不可达"}
+    example: "ak.py call stock_board_industry_hist_em --symbol 小金属 --start_date 20260101 --end_date 20260720 --period 日k"
+    gotchas:
+      - "⚠️ `period=日k` 不是 `daily` —— 传 `daily` 会报错或返回空。"
+
+  - func: stock_board_concept_name_em
+    summary: "东财概念板块名称与实时行情列表"
+    params: []
+    returns: "排名 板块名称 板块代码 最新价 涨跌额 涨跌幅 总市值 换手率 上涨家数 下跌家数 领涨股票 领涨股票-涨跌幅"
+    measured: {status: unverified, note: "2026-07-25 push2 不可达"}
+    example: "ak.py call stock_board_concept_name_em --rows 30"
+    gotchas:
+      - "概念板块有 300+ 个，`--rows` 默认 30 只是一页 —— 找特定概念用 `--out` 后本地 grep。"
+
+  - func: stock_board_concept_hist_em
+    summary: "概念板块历史 K 线"
+    params:
+      - {name: symbol, required: false, format: "板块名称", example: "绿色电力"}
+      - {name: period, required: false, choices: ["daily", "weekly", "monthly"], default: "daily", note: "⚠️ 英文取值，与行业板块的 日k 不同；docstring 把这个参数的说明误写成「板块名称」"}
+      - {name: start_date, required: false, format: YYYYMMDD, example: "20260101"}
+      - {name: end_date, required: false, format: YYYYMMDD, example: "20260720"}
+      - {name: adjust, required: false, choices: ["", "qfq", "hfq"]}
+    returns: "日期 开盘 收盘 最高 最低 涨跌幅 涨跌额 成交量 成交额 振幅 换手率"
+    measured: {status: unverified, note: "2026-07-25 push2 不可达"}
+    example: "ak.py call stock_board_concept_hist_em --symbol 绿色电力 --period daily --start_date 20260101 --end_date 20260720"
+    gotchas:
+      - "⚠️ 与 `stock_board_industry_hist_em` 的 period 取值不同（这里 `daily`，那里 `日k`）。"

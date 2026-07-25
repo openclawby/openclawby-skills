@@ -1,0 +1,57 @@
+# ============================================================================
+# A股 估值水位 / 技术选股 — local akshare via `ak.py call`
+# ============================================================================
+category: "A-share valuation percentiles & technical screens"
+transport: "local akshare (ak.py call) — NOT /api/relay"
+verified_ak_version: "1.18.78"
+verified_at: "2026-07-25"
+
+gotchas_for_all:
+  - "⚠️ 估值水位接口（`stock_a_all_pb` / `stock_a_ttm_lyr`）来自 legulegu，返回**英文驼峰列名**且是**全市场历史序列**（5200+ 行，每行一个交易日），不是个股估值。个股估值用 `stock_zh_valuation_baidu`。"
+  - "两个估值接口最有价值的列是 `quantileInAllHistory*` / `quantileInRecent10Years*`（历史分位数）—— 直接回答「当前 A 股整体估值处于历史什么位置」。"
+  - "同花顺技术选股是一整套（`stock_rank_*_ths`）：创新高/创新低/连涨/连跌/持续放量/持续缩量/量价齐升/量价齐跌/向上突破/向下突破/险资举牌。本文件只精写创新高一个，其余同构，用 `ak.py cat cn-screen` 列全。"
+
+interfaces:
+  - func: stock_a_all_pb
+    summary: "全部 A 股市净率历史水位（等权/中位数 + 历史分位数）"
+    params: []
+    returns: "date middlePB equalWeightAveragePB close quantileInAllHistoryMiddlePB quantileInRecent10YearsMiddlePB quantileInAllHistoryEqualWeightAveragePB quantileInRecent10YearsEqualWeightAveragePB（8 列，**英文驼峰**）"
+    measured: {elapsed: 0.64, rows: 5228, cols: 8, verified_at: "2026-07-25"}
+    example: "ak.py call stock_a_all_pb --rows 5           # 最近 5 个交易日的水位\nak.py call stock_a_all_pb --out pb.csv       # 全历史做图"
+    gotchas:
+      - "⚠️ 5228 行是**全市场逐日历史**（约 20 年），不是 5228 只股票。取当前水位用 `--rows 5`（返回的是最早的 5 行还是最近的取决于源排序 —— 用 `--summary` 看 head/tail 确认方向）。"
+      - "`quantileInAllHistoryMiddlePB` 是 0–1 的分位数，0.2 表示比历史 80% 的时间更便宜。"
+
+  - func: stock_a_ttm_lyr
+    summary: "全部 A 股市盈率历史水位（TTM 与 LYR 两种口径 + 分位数）"
+    params: []
+    returns: "date middlePETTM averagePETTM middlePELYR averagePELYR close + 8 个 quantileIn* 列（14 列，英文驼峰）"
+    measured: {elapsed: 0.67, rows: 5230, cols: 14, verified_at: "2026-07-25"}
+    example: "ak.py call stock_a_ttm_lyr --rows 5\nak.py call stock_a_ttm_lyr --cols date,middlePETTM,quantileInAllHistoryMiddlePeTtm --rows 10"
+    gotchas:
+      - "TTM = 滚动 12 个月，LYR = 上一年度。做「当前 PE 分位」通常看 `middlePETTM` + `quantileInAllHistoryMiddlePeTtm`。"
+      - "⚠️ 分位数列名的大小写不规则（`MiddlePeTtm` 而非 `MiddlePETTM`）—— 照 colnames 原样拷。"
+
+  - func: stock_zh_valuation_baidu
+    summary: "单股估值时间序列（百度股市通：总市值/PE/PB/PS 可选）"
+    params:
+      - {name: symbol, required: false, format: "裸 6 位代码", example: "002044", default: "002044"}
+      - {name: indicator, required: false, choices: ["总市值", "市盈率(TTM)", "市盈率(静)", "市净率", "市现率"], default: "总市值"}
+      - {name: period, required: false, choices: ["近一年", "近三年", "近五年", "近十年", "全部"], default: "近一年"}
+    returns: "date value（只有两列）"
+    measured: {elapsed: 0.43, rows: 365, cols: 2, verified_at: "2026-07-25"}
+    example: "ak.py call stock_zh_valuation_baidu --symbol 600519 --indicator 市盈率(TTM) --period 近五年 --rows 10"
+    gotchas:
+      - "⚠️ `indicator` 的取值带括号（`市盈率(TTM)`），shell 里要加引号：`--indicator '市盈率(TTM)'`。"
+      - "一次只返回一个指标的序列；要 PE+PB 就调两次。"
+
+  - func: stock_rank_cxg_ths
+    summary: "技术选股-创新高（同花顺）"
+    params:
+      - {name: symbol, required: false, choices: ["创月新高", "半年新高", "一年新高", "历史新高"], default: "创月新高"}
+    returns: "序号 股票代码 股票简称 涨跌幅 换手率 最新价 前期高点 前期高点日期"
+    measured: {elapsed: 0.86, rows: 53, cols: 8, verified_at: "2026-07-25", symbol_used: "创月新高"}
+    example: "ak.py call stock_rank_cxg_ths --symbol 历史新高"
+    gotchas:
+      - "结果是当日盘后快照，行数随市场情绪波动（实测 53 行）。"
+      - "同族接口同构、参数各异：`stock_rank_cxd_ths`(创新低) `stock_rank_lxsz_ths`(连续上涨) `stock_rank_lxxd_ths`(连续下跌) `stock_rank_cxfl_ths`(持续放量) `stock_rank_cxsl_ths`(持续缩量) `stock_rank_ljqs_ths`(量价齐升) `stock_rank_ljqd_ths`(量价齐跌) `stock_rank_xstp_ths`(向上突破，需 `--symbol 500日均线` 这类) `stock_rank_xxtp_ths`(向下突破) `stock_rank_xzjp_ths`(险资举牌)。"

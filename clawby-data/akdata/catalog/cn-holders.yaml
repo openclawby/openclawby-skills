@@ -1,0 +1,69 @@
+# ============================================================================
+# A股 股东 / 股本 / 高管持股 — local akshare via `ak.py call`
+# ============================================================================
+category: "A-share shareholders, holder counts & insider holdings"
+transport: "local akshare (ak.py call) — NOT /api/relay"
+verified_ak_version: "1.18.78"
+verified_at: "2026-07-25"
+
+gotchas_for_all:
+  - "⚠️ **本组有两个极慢极大的全市场接口**：`stock_gdfx_holding_analyse_em` 66361 行 / **113 秒**，`stock_hold_management_detail_em` 170548 行 / **169 秒**。默认 `--timeout 60` 会直接超时 —— 必须 `--timeout 300` 且配 `--out`。"
+  - "⚠️ 报告期参数一律是季末日 `YYYYMMDD`（0331/0630/0930/1231）。半年报/年报披露有滞后，最近一期可能数据不全。"
+  - "⚠️ `stock_zh_a_gdhs` 的 `symbol` 参数放的是**报告期或「最新」**，不是股票代码 —— 这是本组最容易踩的坑。"
+  - "单股维度（`stock_gdfx_top_10_em` / `_free_top_10_em`）秒回，全市场维度（`_holding_analyse_em`）要两分钟 —— 能用单股就别拉全市场。"
+
+interfaces:
+  - func: stock_zh_a_gdhs
+    summary: "全市场股东户数（东财特色数据，含户均持股与增减）"
+    params:
+      - {name: symbol, required: false, format: "⚠️ 报告期 YYYYMMDD 或字符串 `最新`（**不是股票代码**）", example: "20260331", default: "20230930"}
+    returns: "代码 名称 最新价 涨跌幅 股东户数-本次 股东户数-上次 股东户数-增减 股东户数-增减比例 区间涨跌幅 股东户数统计截止日-本次 股东户数统计截止日-上次 户均持股市值 户均持股数量 总市值 总股本 公告日期（16 列）"
+    measured: {elapsed: 3.36, rows: 5342, cols: 16, size: "约 2.76MB", verified_at: "2026-07-25", symbol_used: "20260331"}
+    example: "ak.py call stock_zh_a_gdhs --symbol 20260331 --summary\nak.py call stock_zh_a_gdhs --symbol 最新 --out gdhs.csv"
+    gotchas:
+      - "⚠️ `--symbol 600000` 是**错的**（那会被当成报告期）；要查单只股票请拉全市场后本地筛，或用 `stock_zh_a_gdhs_detail_em`。"
+      - "⚠️ 5342 行 × 16 列 ≈ 2.76MB —— 必须 `--summary` 或 `--out`。「股东户数下降 = 筹码集中」这类筛选在本地做。"
+
+  - func: stock_gdfx_top_10_em
+    summary: "单股十大股东（东财，秒回）"
+    params:
+      - {name: symbol, required: false, format: "⚠️ 小写前缀 + 6 位", example: "sh688686", default: "sh688686"}
+      - {name: date, required: false, format: "报告期 YYYYMMDD（季末）", example: "20260331", default: "20210630"}
+    returns: "名次 股东名称 股份类型 持股数 占总股本持股比例 增减 变动比率"
+    measured: {elapsed: 0.17, rows: 10, cols: 7, verified_at: "2026-07-25", date_used: "20260331"}
+    example: "ak.py call stock_gdfx_top_10_em --symbol sh600519 --date 20260331"
+    gotchas:
+      - "⚠️ symbol 要 `sh688686` 带小写前缀，与东财行情接口的裸代码不同。"
+      - "固定 10 行；`增减` 为空表示新进股东。"
+
+  - func: stock_gdfx_free_top_10_em
+    summary: "单股十大流通股东（东财，比十大股东多「股东性质」）"
+    params:
+      - {name: symbol, required: false, format: "小写前缀 + 6 位", example: "sh688686"}
+      - {name: date, required: false, format: "报告期 YYYYMMDD（季末）", example: "20260331", default: "20240930"}
+    returns: "名次 股东名称 股东性质 股份类型 持股数 占总流通股本持股比例 增减 变动比率"
+    measured: {elapsed: 0.17, rows: 10, cols: 8, verified_at: "2026-07-25", date_used: "20260331"}
+    example: "ak.py call stock_gdfx_free_top_10_em --symbol sh600519 --date 20260331"
+    gotchas:
+      - "`股东性质` 区分基金/社保/QFII/个人 —— 看机构持仓变化用这个而不是十大股东。"
+
+  - func: stock_gdfx_holding_analyse_em
+    summary: "全市场十大股东持股分析（东财，逐股东×逐股票明细）"
+    params:
+      - {name: date, required: false, format: "报告期 YYYYMMDD（季末）", example: "20260331", default: "20230331"}
+    returns: "序号 股东名称 股东类型 股票代码 股票简称 报告期 期末持股-数量 期末持股-数量变化 期末持股-数量变化比例 期末持股-持股变动 …（15 列）"
+    measured: {elapsed: 112.5, rows: 66361, cols: 15, verified_at: "2026-07-25", date_used: "20260331"}
+    example: "ak.py call stock_gdfx_holding_analyse_em --date 20260331 --timeout 300 --out holders.csv"
+    gotchas:
+      - "⚠️ **113 秒 / 66361 行** —— 默认 60s 超时必失败。固定写法：`--timeout 300 --out holders.csv`，然后本地按股东名聚合（如「某私募本季新进哪些股票」）。"
+      - "这是「按股东找股票」的唯一全市场视图；只看某一只股票请用 `stock_gdfx_top_10_em`。"
+
+  - func: stock_hold_management_detail_em
+    summary: "全市场董监高持股变动明细（东财特色数据）"
+    params: []
+    returns: "序号 代码 名称 变动日期 变动人 变动股数 成交均价 变动金额 变动原因 变动后持股数 董监高management …（16 列）"
+    measured: {elapsed: 169.0, rows: 170548, cols: 16, verified_at: "2026-07-25"}
+    example: "ak.py call stock_hold_management_detail_em --timeout 300 --out insiders.csv"
+    gotchas:
+      - "⚠️ **169 秒 / 170548 行**（本组最重）—— 必须 `--timeout 300 --out`，绝不要不带 `--out` 调用。"
+      - "无参数、无区间过滤，返回全部历史明细 —— 时间筛选只能落盘后本地做。"

@@ -26,10 +26,11 @@ curl -s -X POST https://api.openclawby.com/api/relay \
 **Completeness is the goal.** A thin answer from a single source is a failure even when correct — go broad first, analyze second. Apply this to **every** request.
 
 1. **Turn the request into a data checklist.** Ask "what would a thorough analyst pull?" and list every relevant dimension. Over-collect on purpose (a stock → quote, short data, dark pool, options, financials, sentiment, peers; a token → DEX price/liquidity, holders, funding & OI, odds, social buzz).
-2. **For each item, sweep ALL THREE source layers — never stop at the first hit:**
+2. **For each item, sweep ALL FOUR source layers — never stop at the first hit:**
    - **Layer 1 — Clawby data** (`/api/relay` + on-chain `/api/rpc`): scan the catalog for *every* interface that touches the item and call them all. Primary, authoritative.
-   - **Layer 2 — Execution connectors** (`exec/`, read-only use): the Binance / Bitget / OKX / Polymarket CLIs expose market data, order books, funding, smart-money and news Layer 1 may not have. Read-only needs no confirmation.
-   - **Layer 3 — Your own web access**: news, filings, official docs, macro context — fill every remaining gap.
+   - **Layer 2 — Local akshare** (`akdata/`, read-only): China markets (A-shares · HK · futures · convertible bonds · ETFs · boards · northbound flows · dragon-tiger list · shareholder data) and global macro (CPI · non-farm · PMI · rate decisions) — 1080 interfaces Layer 1 does not carry. Runs locally on the user's machine with no Clawby key and no credits. Guide: `akdata/akshare.md`.
+   - **Layer 3 — Execution connectors** (`exec/`, read-only use): the Binance / Bitget / OKX / Polymarket CLIs expose market data, order books, funding, smart-money and news the other layers may not have. Read-only needs no confirmation.
+   - **Layer 4 — Your own web access**: news, filings, official docs, macro context — fill every remaining gap.
 3. **Maximize coverage.** If two layers supply the same metric, fetch both and cross-check. Fire independent fetches in parallel. Never skip a reachable source.
 4. **Track coverage, then analyze.** Ground every claim in collected data; if a source failed, say so instead of silently dropping the dimension.
 5. **Offer a formal report when it fits** — for substantial asset analysis, offer a professional PDF research report (see *Professional analysis reports*). Ask first.
@@ -45,6 +46,7 @@ clawby-data/
 │   ├── catalog/        ← per-category interface docs (params + gotchas) — READ before calling
 │   ├── clawby.yaml     ← full machine catalog (all interfaces)
 │   └── index.yaml      ← catalog registry
+├── akdata/             ← local akshare executor: China markets + global macro; guide akdata/akshare.md
 ├── exec/               ← trade-execution connectors; registry exec/index.yaml
 ├── report/             ← PDF report guide + stylesheet
 ├── data/               ← misc reference data
@@ -110,6 +112,40 @@ curl -s -X POST https://api.openclawby.com/api/rpc \
 ```
 
 EVM chains use standard `eth_*`; non-EVM chains have their own namespaces (sui → `suix_*`, solana → `getTokenSupply` …); `chain:"multichain"` = aggregated ankr token methods (EVM only). Don't assume a chain is unsupported — try it; a truly unavailable one returns a clear error.
+
+## China markets & global macro (akdata/ — runs locally)
+
+`akdata/` wraps the akshare Python library on the **user's own machine**: 1080
+read-only interfaces for A-shares, HK, CN futures & options, convertible bonds,
+ETFs & funds, industry/concept boards, northbound (Stock Connect) flows, the
+dragon-tiger list, shareholder data, and global macro. No Clawby key, no
+credits. Full guide: **`akdata/akshare.md`** — read it before the first call.
+
+```bash
+P=~/.clawby/akvenv/bin/python; cd akdata
+$P ak.py doctor                           # first use in a session (see below)
+$P ak.py find 龙虎榜                       # locate an interface (Chinese or English)
+$P ak.py doc stock_lhb_detail_em           # params + formats + gotchas — ALWAYS read first
+$P ak.py call stock_lhb_detail_em --start_date 20260701 --end_date 20260710 --rows 30
+```
+
+**Routing — which layer owns which asset:**
+
+| Ask | Use |
+|---|---|
+| US equities · options · dark pool · short interest | Layer 1 relay (paid, faster, maintained) |
+| crypto · DEX · on-chain · prediction markets · social | Layer 1 relay |
+| A-shares · HK · CN futures · convertible bonds · ETFs | `akdata/` |
+| dragon-tiger list · northbound flows · limit-up pool · shareholder counts | `akdata/` (relay has no equivalent) |
+| global macro: CPI · non-farm · PMI · rate decisions | `akdata/` (relay has no equivalent) |
+
+Prefer the relay wherever both can answer — akshare mirrors public Chinese
+websites and breaks when they change layout. `akdata/` also needs a local
+akshare install (lazy: `python3 -m venv ~/.clawby/akvenv && ~/.clawby/akvenv/bin/pip install akshare`,
+~20 s) and network reach to Chinese sources. `ak.py doctor` reports both, and
+probes every upstream host twice — through the proxy and direct — so you can
+tell whether to add `--no-proxy` for a given host. Large results: default budget
+is 30 rows / 20 000 chars, then use `--summary` or `--out data.csv`.
 
 ## Trade execution (exec/)
 

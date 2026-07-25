@@ -1,0 +1,70 @@
+# ============================================================================
+# 新闻 / 市场情绪 / 涨停池 / 交易日历 — local akshare via `ak.py call`
+# （含 spec 预留的 2 个缓冲槽：交易日历 + 涨停股池，均由 2026-07-25 实测选入）
+# ============================================================================
+category: "News, sentiment, limit-up pool & the trading calendar"
+transport: "local akshare (ak.py call) — NOT /api/relay"
+verified_ak_version: "1.18.78"
+verified_at: "2026-07-25"
+
+gotchas_for_all:
+  - "情绪类接口都是**当日快照**，收盘后仍可查当日，但没有历史回溯（人气榜、千股千评都是如此）。要历史趋势用 `stock_hot_rank_detail_em`（个股人气历史）。"
+  - "⚠️ 8 个接口需要登录 cookie（`news_economic_baidu` / `news_report_time_baidu` / `news_trade_notify_*_baidu` / `bond_cb_jsl` / `qdii_a_index_jsl` 等），CLI 会在调用前拦成 `needs_credential`，用 `--cookie '<cookie 串>'` 传入。本文件收录的都不需要 cookie。"
+
+interfaces:
+  - func: news_cctv
+    summary: "新闻联播文字稿（研究政策风向的原始文本）"
+    params:
+      - {name: date, required: false, format: "YYYYMMDD（单日）", example: "20260724", default: "20240424"}
+    returns: "date title content（3 列，content 是全文）"
+    measured: {elapsed: 2.0, rows: 14, cols: 3, verified_at: "2026-07-25", date_used: "20260724"}
+    example: "ak.py call news_cctv --date 20260724 --cols date,title\nak.py call news_cctv --date 20260724 --out cctv.json   # 要全文就落盘"
+    gotchas:
+      - "一天约 14 条；`content` 是长文本，默认字符预算会截断 —— 只要标题就 `--cols date,title`，要全文用 `--out cctv.json`。"
+      - "内部逐条抓取（实测 2 秒 / 14 次请求），别对连续多日循环调用。"
+      - "只能按单日查，没有区间参数。"
+
+  - func: stock_hot_rank_em
+    summary: "东财个股人气榜 TOP100（散户关注度的实时代理）"
+    params: []
+    returns: "当前排名 代码 股票名称 最新价 涨跌额 涨跌幅"
+    measured: {elapsed: 0.35, rows: 100, cols: 6, verified_at: "2026-07-25"}
+    example: "ak.py call stock_hot_rank_em --rows 30"
+    gotchas:
+      - "固定 100 行，实时刷新。想看单只股票的人气历史用 `stock_hot_rank_detail_em --symbol SZ000665`（⚠️ 那个要**大写前缀**格式）。"
+      - "同族：`stock_hot_up_em`（飙升榜）、`stock_hot_keyword_em`（个股热门关键词）、雪球的 `stock_hot_follow_xq` / `stock_hot_tweet_xq` / `stock_hot_deal_xq`。"
+
+  - func: stock_comment_em
+    summary: "千股千评全市场（东财；机构参与度 + 综合得分 + 关注指数）"
+    params: []
+    returns: "序号 代码 名称 最新价 涨跌幅 换手率 市盈率 主力成本 机构参与度 综合得分 上升 目前排名 关注指数 交易日（14 列）"
+    measured: {elapsed: 3.34, rows: 5187, cols: 14, verified_at: "2026-07-25"}
+    example: "ak.py call stock_comment_em --summary\nak.py call stock_comment_em --out comment.csv   # 全市场筛机构参与度"
+    gotchas:
+      - "⚠️ 5187 行（全市场）—— 用 `--out` 后本地筛，别指望 `--rows` 拿到的是排好序的。"
+      - "`机构参与度` 与 `主力成本` 是这个接口独有的东财测算值，relay 侧没有对应数据。"
+      - "单股的明细维度另有四个接口：`stock_comment_detail_zlkp_jgcyd_em`（机构参与度历史）、`stock_comment_detail_zhpj_lspf_em`（历史评分）、`stock_comment_detail_scrd_focus_em`（关注指数）、`stock_comment_detail_scrd_desire_em`（市场参与意愿）。"
+
+  - func: stock_zt_pool_em
+    summary: "涨停股池（东财；含连板数、封板资金、炸板次数）"
+    params:
+      - {name: date, required: false, format: "⚠️ 交易日 YYYYMMDD，且只保留**近期**数据", example: "20260724"}
+    returns: "序号 代码 名称 涨跌幅 最新价 成交额 流通市值 总市值 换手率 封板资金 首次封板时间 最后封板时间 炸板次数 涨停统计 连板数 所属行业（16 列）"
+    measured: {elapsed: 0.5, rows: 40, cols: 16, verified_at: "2026-07-25", date_used: "20260724",
+               note: "20260720 → 53 行；一年前的日期 → 0 行"}
+    example: "ak.py call stock_zt_pool_em --date 20260724"
+    gotchas:
+      - "⚠️ **只保留近期数据**：实测近日正常（40–53 行），传一年前的日期返回 0 行 —— 空结果先怀疑日期太旧，而不是接口坏了。"
+      - "⚠️ 必须是交易日；周末/节假日返回 0 行。用 `tool_trade_date_hist_sina` 确认。"
+      - "`连板数` 是打板策略的核心；`炸板次数` 反映封板质量。同族：`stock_zt_pool_previous_em`（昨日涨停今日表现）、`stock_zt_pool_dtgc_em`（跌停池）、`stock_zt_pool_strong_em`（强势股池）。"
+
+  - func: tool_trade_date_hist_sina
+    summary: "A 股交易日历全历史（诊断「0 行」的第一工具）"
+    params: []
+    returns: "trade_date（单列，8797 行）"
+    measured: {elapsed: 0.3, rows: 8797, cols: 1, verified_at: "2026-07-25"}
+    example: "ak.py call tool_trade_date_hist_sina --out caldays.csv\ngrep 2026-07-24 caldays.csv    # 是交易日吗?"
+    gotchas:
+      - "**任何接口返回 0 行时，先用它确认你传的日期是不是交易日** —— 这是 `empty` 错误最常见的原因（周末、节假日、或数据尚未发布）。"
+      - "⚠️ 8797 行（1990 年至今全部交易日）—— 用 `--out` 落盘后 grep，别 `--rows` 翻页找。"
+      - "返回的是 `YYYY-MM-DD` 格式，而多数接口的入参是 `YYYYMMDD` —— 要去掉横线。"

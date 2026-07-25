@@ -1,0 +1,117 @@
+# ============================================================================
+# A股 行情 / K线 — local akshare via `ak.py call`
+# Read this BEFORE calling. These params override any guess from the signature.
+# ============================================================================
+category: "A-share quotes & candles"
+transport: "local akshare (ak.py call) — NOT /api/relay"
+verified_ak_version: "1.18.78"
+verified_at: "2026-07-25"
+
+gotchas_for_all:
+  - "⚠️ symbol 格式每个函数不同 —— 东财 `_em` 系用裸 6 位 `600000`，新浪/腾讯系要带前缀 `sh600000`。照本文件每条的 format 填，别跨函数套用。"
+  - "⚠️ 日期是 YYYYMMDD 字符串；分时接口（`*_min_em`）要 `2026-07-24 09:30:00` 这种带时间的格式。"
+  - "⚠️ 列名语言随源变：东财 `_em` 系返回中文列名，新浪 `stock_zh_a_daily` 与腾讯 `_tx` 系返回英文列名（date/open/close…）。"
+  - "⚠️ 复权：回测一律 `adjust=qfq`；空字符串 = 不复权。新浪 `stock_zh_a_daily` 额外支持 `qfq-factor`/`hfq-factor` 只取复权因子。"
+  - "⚠️ 本组多数东财接口走 `push2*.eastmoney.com`（含随机分片 `NN.push2`）。2026-07-25 该域名在开发环境两路皆不可达 —— 若报 proxy/network，先跑 `ak.py doctor` 看双路矩阵，必要时加 `--no-proxy`。"
+
+interfaces:
+  - func: stock_zh_a_hist
+    summary: "沪深京 A 股日/周/月 K 线（东财，最常用的历史行情接口）"
+    params:
+      - {name: symbol, required: false, format: "裸 6 位代码，不带交易所前缀", example: "600000", default: "000001"}
+      - {name: period, required: false, choices: [daily, weekly, monthly], default: daily}
+      - {name: start_date, required: false, format: YYYYMMDD, example: "20260101", default: "19700101 (=全部历史)"}
+      - {name: end_date, required: false, format: YYYYMMDD, example: "20260720", default: "20500101"}
+      - {name: adjust, required: false, choices: ["qfq", "hfq", ""], note: "回测必用 qfq；默认空=不复权"}
+      - {name: timeout, required: false, note: "CLI 的 --timeout 会自动透传到这里，通常不用手填"}
+    returns: "日期 股票代码 开盘 收盘 最高 最低 成交量 成交额 振幅 涨跌幅 涨跌额 换手率（中文列名，12 列）"
+    measured: {status: unverified, note: "2026-07-25 push2his 不可达；params 来自签名与 docstring，可信"}
+    example: "ak.py call stock_zh_a_hist --symbol 600000 --period daily --start_date 20260101 --end_date 20260720 --adjust qfq"
+    gotchas:
+      - "不传 start_date/end_date 会拉全部历史（默认 19700101–20500101），几千行 —— 一定给区间。"
+
+  - func: stock_zh_a_spot_em
+    summary: "沪深京 A 股全市场实时快照（东财，一次拿全市场 5000+ 只）"
+    params: []
+    returns: "序号 代码 名称 最新价 涨跌幅 涨跌额 成交量 成交额 振幅 最高 最低 今开 昨收 量比 换手率 市盈率-动态 市净率 总市值 流通市值 …（中文列名）"
+    measured: {status: unverified, note: "2026-07-25 push2 分片域名不可达"}
+    example: "ak.py call stock_zh_a_spot_em --summary        # 先看结构\nak.py call stock_zh_a_spot_em --out snapshot.csv   # 全量落盘再本地筛"
+    gotchas:
+      - "⚠️ 5000+ 行 × 20+ 列，必然超预算 —— 用 `--summary` 或 `--out snapshot.csv`，不要直接吐。"
+      - "内部随机使用 `NN.push2.eastmoney.com` 分片域名，代理规则只匹配主域名时会失败。"
+
+  - func: stock_zh_a_hist_min_em
+    summary: "A 股分时 K 线（1/5/15/30/60 分钟，东财）"
+    params:
+      - {name: symbol, required: false, format: "裸 6 位代码", example: "600000"}
+      - {name: period, required: false, choices: ["1", "5", "15", "30", "60"], default: "5", note: "字符串不是数字"}
+      - {name: start_date, required: false, format: "YYYY-MM-DD HH:MM:SS（注意含横线与时间）", example: "2026-07-20 09:30:00"}
+      - {name: end_date, required: false, format: "YYYY-MM-DD HH:MM:SS", example: "2026-07-24 15:00:00"}
+      - {name: adjust, required: false, choices: ["", "qfq", "hfq"]}
+    returns: "时间 开盘 收盘 最高 最低 涨跌幅 涨跌额 成交量 成交额 振幅 换手率"
+    measured: {status: unverified, note: "2026-07-25 push2his 不可达"}
+    example: "ak.py call stock_zh_a_hist_min_em --symbol 600000 --period 5 --start_date '2026-07-20 09:30:00' --end_date '2026-07-24 15:00:00' --rows 20"
+    gotchas:
+      - "⚠️ 日期格式与日线接口**不同**：这里要 `2026-07-20 09:30:00`，日线接口要 `20260720`。"
+      - "`period=1` 只保留最近几个交易日；越细的周期回溯越短。"
+
+  - func: stock_zh_a_hist_pre_min_em
+    summary: "A 股当日分时（含盘前集合竞价，东财）"
+    params:
+      - {name: symbol, required: false, format: "裸 6 位代码", example: "600000"}
+      - {name: start_time, required: false, format: "HH:MM:SS（只有时间，没有日期）", default: "09:00:00"}
+      - {name: end_time, required: false, format: "HH:MM:SS", default: "15:50:00"}
+    returns: "时间 开盘 收盘 最高 最低 成交量 成交额 最新价"
+    measured: {status: unverified, note: "2026-07-25 push2 不可达"}
+    example: "ak.py call stock_zh_a_hist_pre_min_em --symbol 600000 --start_time 09:00:00 --end_time 09:30:00"
+    gotchas:
+      - "⚠️ 参数是 `start_time`/`end_time`（时间），不是 `start_date`/`end_date`；只能取当日。"
+
+  - func: stock_bid_ask_em
+    summary: "个股五档买卖盘口 + 实时快照（东财）"
+    params:
+      - {name: symbol, required: false, format: "裸 6 位代码", example: "600000"}
+    returns: "item value 两列的长表（sell_5…sell_1 / buy_1…buy_5 / 最新 均价 涨幅 涨跌 总手 金额 换手 量比 最高 最低 今开 昨收 涨停 跌停 外盘 内盘）"
+    measured: {status: unverified, note: "2026-07-25 push2 不可达"}
+    example: "ak.py call stock_bid_ask_em --symbol 600000"
+    gotchas:
+      - "返回是 item/value 长表（约 40 行 2 列），不是一行宽表 —— 取值要按 item 名过滤。"
+
+  - func: stock_zh_a_daily
+    summary: "A 股日线（新浪源；东财 stock_zh_a_hist 不可用时的备份）"
+    params:
+      - {name: symbol, required: false, format: "小写交易所前缀 + 6 位", example: "sh600000", default: "sh603843"}
+      - {name: start_date, required: false, format: YYYYMMDD, example: "20260101"}
+      - {name: end_date, required: false, format: YYYYMMDD, example: "20260720"}
+      - {name: adjust, required: false, choices: ["", "qfq", "hfq", "qfq-factor", "hfq-factor"], note: "`*-factor` 只返回复权因子表，不是行情"}
+    returns: "date open high low close volume amount outstanding_share turnover（**英文列名**，9 列）"
+    measured: {elapsed: 0.51, rows: 35, cols: 9, window: "20260601-20260720", verified_at: "2026-07-25"}
+    example: "ak.py call stock_zh_a_daily --symbol sh600000 --start_date 20260601 --end_date 20260720"
+    gotchas:
+      - "⚠️ symbol 必须带小写前缀 `sh`/`sz`/`bj`，与东财接口的裸代码**不通用**。"
+      - "⚠️ docstring 自带警告：大量抓取容易被新浪封 IP —— 不要循环遍历全市场，批量场景改用东财 `stock_zh_a_hist`。"
+      - "列名是英文，与东财系的中文列名不同；`turnover` 是换手率、`amount` 是成交额。"
+
+  - func: stock_zh_a_hist_tx
+    summary: "A 股日线（腾讯源；第三个独立备份，volume 统一为股、amount 统一为元）"
+    params:
+      - {name: symbol, required: false, format: "小写交易所前缀 + 6 位", example: "sh600000", default: "sz000001"}
+      - {name: start_date, required: false, format: YYYYMMDD, example: "20260101"}
+      - {name: end_date, required: false, format: YYYYMMDD, example: "20260720"}
+      - {name: adjust, required: false, choices: ["qfq", "hfq", ""]}
+      - {name: timeout, required: false, note: "CLI --timeout 自动透传"}
+    returns: "date open close high low volume turnover amount（英文列名，8 列）"
+    measured: {elapsed: 0.87, rows: 35, cols: 8, window: "20260601-20260720", verified_at: "2026-07-25"}
+    example: "ak.py call stock_zh_a_hist_tx --symbol sh600000 --start_date 20260601 --end_date 20260720"
+    gotchas:
+      - "symbol 带前缀（同新浪系）。支持指数代码（如 `sh000919`）。"
+
+  - func: stock_zh_a_spot_tx
+    summary: "沪深京全市场实时快照（腾讯源；push2 不可用时替代 stock_zh_a_spot_em）"
+    params: []
+    returns: "28 列**英文缩写**：code name turnover(成交额) volume zdf(涨跌幅) zd(涨跌额) zf(振幅) hsl(换手率) lb(量比) ltsz(流通市值) pe_ttm speed(涨速) zljlr(主力净流入) zllc(主力流出) zdf_d5/d10/d20/d60/w52/y(区间涨跌幅) stock_type state pn"
+    measured: {elapsed: 7.16, rows: 5531, cols: 28, verified_at: "2026-07-25"}
+    example: "ak.py call stock_zh_a_spot_tx --summary\nak.py call stock_zh_a_spot_tx --cols code,name,zdf,hsl,ltsz --rows 30"
+    gotchas:
+      - "⚠️ 5531 行 × 28 列、约 7 秒 —— 用 `--summary`/`--out`/`--cols`，别直接吐。"
+      - "列名是拼音缩写：`zdf`=涨跌幅 `hsl`=换手率 `ltsz`=流通市值 `lb`=量比 `zljlr`=主力净流入。"

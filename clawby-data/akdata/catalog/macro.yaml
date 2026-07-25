@@ -1,0 +1,129 @@
+# ============================================================================
+# 宏观经济数据（中国 / 美国 / 央行利率决议） — local akshare via `ak.py call`
+# ============================================================================
+category: "Macro: China, US, and central-bank rate decisions"
+transport: "local akshare (ak.py call) — NOT /api/relay"
+verified_ak_version: "1.18.78"
+verified_at: "2026-07-25"
+
+gotchas_for_all:
+  - "⚠️ **宏观接口几乎全部无参数，且返回全部历史** —— 没有日期区间可传。要最近几期就 `--rows 12`（注意确认排序方向，用 `--summary` 看 head/tail），要做图就 `--out macro.csv` 后本地筛。"
+  - "⚠️ **两种返回结构**：①**金十系**（函数名多为 `*_monthly` `*_yearly` `*_yoy` `macro_usa_*` `macro_bank_*`）统一是 5 列 `商品 日期 今值 预测值 前值`；②**东财系**（`macro_china_cpi` `macro_china_consumer_goods_retail`）是中文宽表，按月份 + 分项展开。混用时先看 colnames。"
+  - "**金十系的 `预测值` 是发布前的市场一致预期** —— `今值 - 预测值` 就是 surprise，做事件驱动直接可用。这是 relay 侧没有的数据。"
+  - "⚠️ **金十系普遍慢**（每次抓全历史）：实测 `macro_usa_non_farm` 14.5s、`macro_china_exports_yoy` 12.1s、`macro_usa_cpi_monthly` 6.1s。默认 60s 够，但别在循环里连续调多个 —— 会很慢也容易被限流。东财系反而只要 0.2s。"
+  - "更多国家/指标：`ak.py cat macro-china`（85 个）· `macro-usa`（49 个）· `macro-other`（92 个，含欧元区/英国/日本/加拿大/澳洲及各国央行利率）。本文件只精写最常用的 12 个。"
+
+interfaces:
+  - func: macro_china_cpi
+    summary: "中国 CPI 全分项（东财；全国/城市/农村 × 当月/同比/环比/累计）"
+    params: []
+    returns: "月份 全国-当月 全国-同比增长 全国-环比增长 全国-累计 城市-当月 城市-同比增长 城市-环比增长 城市-累计 农村-当月 农村-同比增长 农村-环比增长 农村-累计（13 列）"
+    measured: {elapsed: 0.19, rows: 222, cols: 13, verified_at: "2026-07-25"}
+    example: "ak.py call macro_china_cpi --rows 12"
+    gotchas:
+      - "东财系宽表，一次拿到城乡分项 —— 比金十系的 `macro_china_cpi_monthly`（只有单一数值）信息量大且快 18 倍。**看中国 CPI 优先用这个**。"
+      - "222 行 ≈ 18 年月度数据。"
+
+  - func: macro_china_cpi_monthly
+    summary: "中国 CPI 月率（金十；带市场预期值）"
+    params: []
+    returns: "商品 日期 今值 预测值 前值"
+    measured: {elapsed: 3.39, rows: 357, cols: 5, verified_at: "2026-07-25", range: "19960201-至今"}
+    example: "ak.py call macro_china_cpi_monthly --rows 12"
+    gotchas:
+      - "与 `macro_china_cpi` 的区别：这里有**市场预期值**（可算 surprise），但只有单一数值、没有城乡分项，且慢 18 倍。"
+
+  - func: macro_china_cx_pmi_yearly
+    summary: "中国财新制造业 PMI（金十；民间口径，与官方 PMI 互补）"
+    params: []
+    returns: "商品 日期 今值 预测值 前值"
+    measured: {elapsed: 4.19, rows: 219, cols: 5, verified_at: "2026-07-25", range: "20120120-至今"}
+    example: "ak.py call macro_china_cx_pmi_yearly --rows 12"
+    gotchas:
+      - "财新 PMI 偏中小企业与出口，官方 PMI（`macro_china_pmi_yearly`）偏大型国企 —— 两者背离本身是信号。"
+      - "50 是荣枯线。"
+
+  - func: macro_china_consumer_goods_retail
+    summary: "中国社会消费品零售总额（东财；含累计与同比）"
+    params: []
+    returns: "月份 当月 同比增长 环比增长 累计 累计-同比增长"
+    measured: {elapsed: 0.18, rows: 207, cols: 6, verified_at: "2026-07-25"}
+    example: "ak.py call macro_china_consumer_goods_retail --rows 12"
+    gotchas:
+      - "⚠️ 1-2 月常合并公布（春节因素），当月值可能缺失而累计值有 —— 做同比要用 `累计-同比增长`。"
+
+  - func: macro_china_exports_yoy
+    summary: "中国出口年率（美元计价，金十）"
+    params: []
+    returns: "商品 日期 今值 预测值 前值"
+    measured: {elapsed: 12.07, rows: 542, cols: 5, verified_at: "2026-07-25", range: "19820201-至今"}
+    example: "ak.py call macro_china_exports_yoy --rows 12"
+    gotchas:
+      - "⚠️ **12 秒**（542 行全历史）—— 本文件最慢的之一。"
+      - "进口对应 `macro_china_imports_yoy`，贸易差额 `macro_china_trade_balance`。"
+
+  - func: macro_china_central_bank_balance
+    summary: "中国央行货币当局资产负债表（新浪，28 列全科目）"
+    params: []
+    returns: "统计时间 国外资产 外汇 货币黄金 对政府债权 对其他存款性公司债权 其他资产 总资产 储备货币 发行货币 金融性公司存款 准备金存款 债券 国外负债 …（28 列）"
+    measured: {elapsed: 3.26, rows: 354, cols: 28, verified_at: "2026-07-25"}
+    example: "ak.py call macro_china_central_bank_balance --summary\nak.py call macro_china_central_bank_balance --cols 统计时间,总资产,对其他存款性公司债权,储备货币 --rows 12"
+    gotchas:
+      - "`对其他存款性公司债权` 是 MLF/OMO 等结构性工具余额的代理指标，看央行投放看这一列。"
+      - "28 列宽表，用 `--cols` 取需要的科目。"
+
+  - func: macro_usa_non_farm
+    summary: "美国非农就业人数（金十；最重要的美国就业数据）"
+    params: []
+    returns: "商品 日期 今值 预测值 前值"
+    measured: {elapsed: 14.52, rows: 669, cols: 5, verified_at: "2026-07-25", range: "19700102-至今"}
+    example: "ak.py call macro_usa_non_farm --rows 12"
+    gotchas:
+      - "⚠️ **14.5 秒**（本文件最慢）—— 只调一次，别放循环。"
+      - "`今值 - 预测值` 是驱动美元/黄金/美债的核心 surprise。ADP（`macro_usa_adp_employment`）是它的前瞻指标。"
+
+  - func: macro_usa_cpi_monthly
+    summary: "美国 CPI 月率（金十）"
+    params: []
+    returns: "商品 日期 今值 预测值 前值"
+    measured: {elapsed: 6.12, rows: 669, cols: 5, verified_at: "2026-07-25", range: "19700101-至今"}
+    example: "ak.py call macro_usa_cpi_monthly --rows 12"
+    gotchas:
+      - "核心 CPI 是 `macro_usa_core_cpi_monthly`；年率是 `macro_usa_cpi_yoy`（东财源，更快）。"
+
+  - func: macro_usa_core_pce_price
+    summary: "美国核心 PCE 物价指数年率（金十；美联储的政策锚）"
+    params: []
+    returns: "商品 日期 今值 预测值 前值"
+    measured: {elapsed: 6.03, rows: 670, cols: 5, verified_at: "2026-07-25", range: "19700101-至今"}
+    example: "ak.py call macro_usa_core_pce_price --rows 12"
+    gotchas:
+      - "美联储 2% 通胀目标盯的是**核心 PCE**（不是 CPI）—— 判断降息路径优先看这个。"
+
+  - func: macro_usa_adp_employment
+    summary: "美国 ADP 就业人数（金十；非农的前瞻指标）"
+    params: []
+    returns: "商品 日期 今值 预测值 前值"
+    measured: {elapsed: 2.89, rows: 293, cols: 5, verified_at: "2026-07-25", range: "20010601-至今"}
+    example: "ak.py call macro_usa_adp_employment --rows 12"
+    gotchas:
+      - "通常比非农早两天公布，是非农的抢跑交易依据；但两者口径不同，历史相关性并不稳定。"
+
+  - func: macro_bank_usa_interest_rate
+    summary: "美联储利率决议历史（金十）"
+    params: []
+    returns: "商品 日期 今值 预测值 前值"
+    measured: {elapsed: 2.66, rows: 294, cols: 5, verified_at: "2026-07-25", range: "19820927-至今"}
+    example: "ak.py call macro_bank_usa_interest_rate --rows 12"
+    gotchas:
+      - "`今值` 是决议后的目标利率（%）；`前值` 是上次利率 —— 相减就是加/降息幅度。"
+      - "其他央行同族同构：`macro_bank_euro_interest_rate` `macro_bank_english_interest_rate` `macro_bank_japan_interest_rate` `macro_bank_australia_interest_rate` 等（见 `ak.py cat macro-other`）。"
+
+  - func: macro_bank_china_interest_rate
+    summary: "中国央行利率决议历史（金十）"
+    params: []
+    returns: "商品 日期 今值 预测值 前值"
+    measured: {elapsed: 2.09, rows: 218, cols: 5, verified_at: "2026-07-25", range: "19990105-至今"}
+    example: "ak.py call macro_bank_china_interest_rate --rows 12"
+    gotchas:
+      - "这是存贷款基准利率口径。LPR 与 MLF 另有接口：`ak.py find LPR` / `find MLF`。"

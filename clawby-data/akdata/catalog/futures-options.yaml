@@ -1,0 +1,147 @@
+# ============================================================================
+# 期货 + 期权 — local akshare via `ak.py call`
+# ============================================================================
+category: "CN futures & options"
+transport: "local akshare (ak.py call) — NOT /api/relay"
+verified_ak_version: "1.18.78"
+verified_at: "2026-07-25"
+
+gotchas_for_all:
+  - "⚠️ **期货 symbol 有三套写法**：品种名（`futures_zh_realtime` 要 `PTA`）· 主连代码（`futures_main_sina`/`futures_zh_daily_sina` 要 `RB0` `V0`，品种+0）· 品种代码或中文名（`futures_inventory_em` 接受 `a` 或 `豆一`）。清单接口：`futures_symbol_mark()`（品种命名表）、`futures_display_main_sina()`（主连清单）—— 用 `ak.py call futures_symbol_mark` 拿。"
+  - "⚠️ `vars_list` 是 **list 类型参数**，CLI 写法是逗号分隔：`--vars_list RB,CU,AL`。不传则用默认的 96 个品种全集。"
+  - "⚠️ **日期敏感**：`futures_rule` 和 `futures_dce_position_rank` 要「近期已完成的交易日」。实测 `futures_rule --date 20260724` 报 `No tables found`，而 `20260720` 正常返回 158 行 —— 遇到这个错就换前一个交易日重试，不要判定接口坏了。"
+  - "⚠️ 列名语言随源变：新浪系 `futures_zh_daily_sina` / `futures_zh_realtime` 是英文列名，东财与九期网系是中文。"
+
+interfaces:
+  - func: futures_zh_realtime
+    summary: "某品种全部在交易合约的实时行情（新浪，一次拿一个品种的整条曲线）"
+    params:
+      - {name: symbol, required: false, format: "⚠️ **品种中文/英文名**（不是合约代码）", example: "PTA", default: "PTA",
+         note: "可用名称见 futures_symbol_mark()；如 螺纹钢 / 沪铜 / PTA"}
+    returns: "symbol exchange name trade settlement presettlement open high low close bidprice1 askprice1 bidvol1 askvol1 volume position(持仓) ticktime tradedate preclose changepercent bid ask prevsettlement（23 列，英文）"
+    measured: {elapsed: 0.29, rows: 13, cols: 23, verified_at: "2026-07-25", symbol_used: "PTA"}
+    example: "ak.py call futures_zh_realtime --symbol PTA"
+    gotchas:
+      - "行数 = 该品种当前挂牌的合约数（实测 PTA 13 个月份）。要做跨期价差/期限结构，这个接口一次给全。"
+      - "⚠️ symbol 传合约代码（如 `TA2609`）会失败 —— 必须是品种名。"
+
+  - func: futures_main_sina
+    summary: "主力连续合约日线（新浪，回测常用的连续价格序列）"
+    params:
+      - {name: symbol, required: false, format: "主连代码 = 品种字母 + 0", example: "RB0", default: "V0",
+         note: "清单见 futures_display_main_sina()"}
+      - {name: start_date, required: false, format: YYYYMMDD, example: "20260101", default: "19900101 (=全部历史)"}
+      - {name: end_date, required: false, format: YYYYMMDD, example: "20260720"}
+    returns: "日期 开盘价 最高价 最低价 收盘价 成交量 持仓量 动态结算价（中文列名）"
+    measured: {elapsed: 0.36, rows: 35, cols: 8, verified_at: "2026-07-25", window: "20260601-20260720"}
+    example: "ak.py call futures_main_sina --symbol RB0 --start_date 20260101 --end_date 20260720"
+    gotchas:
+      - "主连是拼接序列，换月处会有跳空 —— 做回测要自行处理换月价差。"
+      - "不给区间会拉全部历史。"
+
+  - func: futures_zh_daily_sina
+    summary: "指定合约日线（新浪，含持仓量与结算价）"
+    params:
+      - {name: symbol, required: false, format: "合约代码或主连代码", example: "RB0", default: "RB0"}
+    returns: "date open high low close volume hold(持仓量) settle(结算价)（英文列名）"
+    measured: {elapsed: 0.32, rows: 4207, cols: 8, verified_at: "2026-07-25"}
+    example: "ak.py call futures_zh_daily_sina --symbol RB0 --rows 30"
+    gotchas:
+      - "⚠️ 返回全部历史（实测 4207 行）且**没有日期区间参数** —— 用 `--rows` 取最近或 `--out` 落盘。要区间就改用 `futures_main_sina`。"
+
+  - func: futures_inventory_em
+    summary: "期货品种交易所库存（东财，最轻的基本面指标）"
+    params:
+      - {name: symbol, required: false, format: "品种代码或中文名", example: "RB", default: "a",
+         note: "中文名清单见 https://data.eastmoney.com/ifdata/kcsj.html"}
+    returns: "日期 库存 增减（只有 3 列）"
+    measured: {elapsed: 0.26, rows: 69, cols: 3, verified_at: "2026-07-25", symbol_used: "a"}
+    example: "ak.py call futures_inventory_em --symbol RB --rows 20"
+    gotchas:
+      - "库存是周频/不定期数据，69 行覆盖约一年多。库存去化配合基差是商品多空的常用组合。"
+
+  - func: futures_spot_price
+    summary: "指定交易日的商品现货价 + 期货基差（跨品种横截面）"
+    params:
+      - {name: date, required: false, format: "YYYYMMDD 或 YYYY-MM-DD；留空=当天", example: "20260720", default: "20240430"}
+      - {name: vars_list, required: false, type: list, format: "逗号分隔的**商品**品种代码；不传=全部 96 个品种", example: "RB,CU,AL",
+         note: "⚠️ 只对商品期货有现货价"}
+    returns: "date symbol spot_price near_contract near_contract_price dominant_contract dominant_contract_price near_month dominant_month near_basis dom_basis near_basis_rate dom_basis_rate（13 列，英文）"
+    measured: {elapsed: 0.23, rows: 54, cols: 13, verified_at: "2026-07-25", date_used: "20260720"}
+    example: "ak.py call futures_spot_price --date 20260720\nak.py call futures_spot_price --date 20260720 --vars_list RB,CU,AL"
+    gotchas:
+      - "⚠️ **传股指期货品种会返回 0 行**：实测 `--vars_list IF,IC,IM` → 0 行，因为股指没有「现货价」这个概念。要基差就传商品品种（RB/CU/AL/M/Y…），或干脆不传 vars_list 拿全部 54 个有现货的品种。"
+      - "`dom_basis_rate` = 主力合约基差率，是商品套保/套利的核心字段。"
+      - "非交易日返回 0 行 —— 这时 `empty: true` 且响应带 hint，换交易日重试。"
+
+  - func: futures_comm_info
+    summary: "全市场期货手续费与保证金表（九期网，含每跳毛利/净利）"
+    params:
+      - {name: symbol, required: false, default: "所有",
+         choices: ["所有", "上海期货交易所", "大连商品交易所", "郑州商品交易所", "上海国际能源交易中心", "中国金融期货交易所", "广州期货交易所"]}
+    returns: "交易所名称 合约名称 合约代码 现价 涨停板 跌停板 保证金-买开 保证金-卖开 保证金-每手 手续费标准-开仓-万分之 手续费标准-开仓-元 手续费标准-平昨-万分之 手续费标准-平昨-元 手续费标准-平今-万分之 手续费标准-平今-元 每跳毛利 手续费 每跳净利 备注 手续费更新时间 价格更新时间（21 列）"
+    measured: {elapsed: 12.72, rows: 826, cols: 21, verified_at: "2026-07-25", symbol_used: "所有"}
+    example: "ak.py call futures_comm_info --symbol 上海期货交易所 --rows 30\nak.py call futures_comm_info --summary --timeout 120"
+    gotchas:
+      - "⚠️ **12.7 秒**（`symbol=所有` 时 826 行）—— 指定交易所可大幅加速。配 `--timeout 120` 更稳。"
+      - "`平今` 与 `平昨` 手续费常常差一个量级（日内交易成本核算必看）。`每跳净利` 已扣手续费。"
+
+  - func: futures_rule
+    summary: "期货交易日历与合约参数表（国泰君安）"
+    params:
+      - {name: date, required: false, format: "⚠️ 近期**已完成的**交易日 YYYYMMDD", example: "20260720", default: "20231205"}
+    returns: "交易所 品种 代码 交易保证金比例 涨跌停板幅度 合约乘数 最小变动价位 限价单每笔最大下单手数 市价单每笔最大下单手数 …"
+    measured: {elapsed: 1.2, rows: 158, cols: "约 12", verified_at: "2026-07-25", date_used: "20260720",
+               note: "20231205 → 122 行；20260724 → No tables found"}
+    example: "ak.py call futures_rule --date 20260720"
+    gotchas:
+      - "⚠️ **日期挑食**：实测 `20260724` 报 `upstream_broken: ValueError: No tables found`，而 `20260720` 与 `20231205` 都正常 —— 这不是接口失效，换前一个交易日重试即可。"
+      - "行数随时间增长（新品种上市）：2023 年 122 行 → 2026 年 158 行。"
+
+  - func: futures_dce_position_rank
+    status: broken
+    summary: "大商所每日持仓排名（会员多空持仓）—— 2026-07-25 实测失效"
+    params:
+      - {name: date, required: false, format: YYYYMMDD, example: "20240430"}
+      - {name: vars_list, required: false, type: list, note: "逗号分隔品种"}
+    returns: "⚠️ **返回 dict 而不是表格**（按合约分组的多个 DataFrame）——`--cols`/`--summary` 不适用，`--out` 只能 `.json`"
+    measured: {status: broken, verified_at: "2026-07-25",
+               error: "BadZipFile: File is not a zip file（上游返回 HTML 而非 zip）",
+               tried: "date 20260724 与 20240430 均失败"}
+    gotchas:
+      - "⚠️ 大商所改了下载接口，akshare 拿到 HTML 却按 zip 解析。多个日期都失败，判定为接口失效。"
+      - "替代：`ak.py cat futures` 里的 `futures_dce_position_rank_other`（补充版），或郑商所/上期所的对应接口（`get_czce_rank_table` / `get_shfe_rank_table` 系）。也可 `pip install -U akshare` 后重试。"
+
+  - func: option_finance_board
+    summary: "ETF 期权当日合约清单（上交所/深交所各标的）"
+    params:
+      - {name: symbol, required: false, default: "嘉实沪深300ETF期权",
+         choices: ["华夏上证50ETF期权", "华泰柏瑞沪深300ETF期权", "南方中证500ETF期权", "华夏科创50ETF期权", "易方达科创50ETF期权", "嘉实沪深300ETF期权", "易方达深证100ETF期权", "嘉实中证500ETF期权", "中证1000股指期权", "上证50股指期权", "沪深300股指期权"],
+         note: "docstring 只列了前几个，实际支持上述各标的"}
+      - {name: end_month, required: false, format: "⚠️ 4 位 `YYMM`（到期年月）", example: "2608", default: "2306",
+         note: "2608 = 2026 年 8 月到期"}
+    returns: "合约编码 合约简称 标的名称 类型 行权价 合约单位 期权行权日 行权交收日（8 列）"
+    measured: {elapsed: 1.57, rows: 122, cols: 8, verified_at: "2026-07-25", params_used: "嘉实沪深300ETF期权 / 2608"}
+    example: "ak.py call option_finance_board --symbol 嘉实沪深300ETF期权 --end_month 2608"
+    gotchas:
+      - "⚠️ 返回的是**合约清单（行权价/到期日）而不是行情报价** —— 要报价用 `option_current_em`（东财，走 push2）或 `option_finance_minute_sina`（分钟行情）。"
+      - "⚠️ `end_month` 是 `2608` 这种 4 位年月，传 `202608` 会失败。"
+      - "`类型` 区分认购/认沽；`行权价` + `合约单位` 用来算名义金额。"
+
+  - func: option_current_em
+    summary: "全市场期权实时行情（东财）"
+    params: []
+    returns: "序号 代码 名称 最新价 涨跌额 涨跌幅 成交量 成交额 持仓量 行权价 剩余日 日增 昨结 …"
+    measured: {status: unverified, note: "2026-07-25 23.push2 分片域名不可达"}
+    example: "ak.py call option_current_em --summary"
+    gotchas:
+      - "走 push2 分片域名，代理规则只匹配主域名时会失败 —— 先 `ak.py doctor`。要合约清单可先用 `option_finance_board`（走上交所，实测可用）。"
+
+  - func: option_risk_analysis_em
+    summary: "期权风险分析（东财：希腊字母与隐含波动率）"
+    params: []
+    returns: "序号 期权代码 期权名称 最新价 时间价值 内在价值 隐含波动率 理论价格 标的名称 标的最新价 标的近一年波动率 杠杆比率 delta gamma vega theta rho"
+    measured: {status: unverified, note: "2026-07-25 push2 不可达"}
+    example: "ak.py call option_risk_analysis_em --summary"
+    gotchas:
+      - "这是唯一一次拿到全套希腊字母 + 隐含波动率的接口（agent 做期权分析的首选）。走 push2，失败先 `ak.py doctor`。"

@@ -1,0 +1,54 @@
+# ============================================================================
+# akdata curated catalog — index
+#
+# These files document the LOCAL akshare interfaces (`ak.py call`), NOT the
+# Clawby relay. They cover the high-frequency subset; the full machine-readable
+# index of all ~1080 interfaces is generated locally by `ak.py index` and
+# searched with `ak.py find` / `ak.py doc` / `ak.py cat`.
+#
+# `ak.py doc <func>` automatically attaches the block from these files, so the
+# normal flow (find -> doc -> call) surfaces them without reading the yaml by hand.
+#
+# Each entry carries: params (format + example + choices) · returns (colnames) ·
+# measured (real elapsed/rows/cols from a dated run) · gotchas · a CLI example.
+# `status: broken` marks an interface that failed on every legal parameter
+# combination, with the replacement named in its gotchas.
+# ============================================================================
+transport: "local akshare via ak.py — no Clawby key, no credits"
+verified_ak_version: "1.18.78"
+verified_at: "2026-07-25"
+
+files:
+  - file: cn-equities.yaml
+    desc: "A股 行情/K线：日线·分时·盘前·五档盘口 + 新浪/腾讯备份源"
+    count: 8
+  - file: cn-moneyflow.yaml
+    desc: "A股 资金流/龙虎榜/沪深港通北向/盘口异动"
+    count: 12
+  - file: cn-boards.yaml
+    desc: "A股 行业板块/概念板块：名称·成份·历史行情"
+    count: 5
+  - file: cn-financials.yaml
+    desc: "A股 财报/财务指标/盈利预测（新浪·同花顺·东财三源，列宽 25–203）"
+    count: 10
+  - file: cn-holders.yaml
+    desc: "A股 股东户数/十大股东/十大流通股东/高管持股变动"
+    count: 5
+  - file: cn-screen.yaml
+    desc: "A股 估值历史水位（全市场 PB/PE 分位）+ 同花顺技术选股"
+    count: 4
+  - file: hk-index.yaml
+    desc: "港股行情/财务 + 指数（沪深指数·申万行业·中证估值）"
+    count: 11
+  - file: fund-bond.yaml
+    desc: "ETF/场内外基金净值持仓 + 可转债（打新·溢价率·强赎）+ 国债收益率曲线"
+    count: 13
+  - file: futures-options.yaml
+    desc: "期货（主连·合约·库存·基差·手续费·交易日历）+ 期权（合约清单·希腊字母）"
+    count: 11
+  - file: macro.yaml
+    desc: "宏观：中国 CPI/PMI/社零/出口/央行资产负债 + 美国 CPI/非农/核心PCE/ADP + 中美利率决议"
+    count: 12
+  - file: news-sentiment.yaml
+    desc: "新闻联播 · 人气榜 · 千股千评 + 涨停股池 · 交易日历（含 2 个缓冲槽）"
+    count: 5

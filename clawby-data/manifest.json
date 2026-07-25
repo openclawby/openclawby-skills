@@ -1,5 +1,5 @@
 {
-  "version": "1.0.36",
+  "version": "1.0.41",
   "base_url": "https://www.openclawby.com/clawby-skill/",
   "managed": [
     "SKILL.md",
@@ -150,7 +150,26 @@
     "exec/gmgn/gmgn.md",
     "report/report-guide.md",
     "report/report.css",
-    "data/README.md"
+    "data/README.md",
+    "akdata/ak.py",
+    "akdata/_akenv.py",
+    "akdata/_akindex.py",
+    "akdata/_akcall.py",
+    "akdata/_akout.py",
+    "akdata/build_ak_index.py",
+    "akdata/akshare.md",
+    "akdata/catalog/_index.yaml",
+    "akdata/catalog/cn-equities.yaml",
+    "akdata/catalog/cn-moneyflow.yaml",
+    "akdata/catalog/cn-boards.yaml",
+    "akdata/catalog/cn-financials.yaml",
+    "akdata/catalog/cn-holders.yaml",
+    "akdata/catalog/cn-screen.yaml",
+    "akdata/catalog/hk-index.yaml",
+    "akdata/catalog/fund-bond.yaml",
+    "akdata/catalog/futures-options.yaml",
+    "akdata/catalog/macro.yaml",
+    "akdata/catalog/news-sentiment.yaml"
   ],
   "keep_local": [
     "local/"

@@ -1,0 +1,164 @@
+# ============================================================================
+# ETF / 开放式基金 + 可转债 / 国债收益率 — local akshare via `ak.py call`
+# ============================================================================
+category: "ETFs, mutual funds, convertible bonds & the CN yield curve"
+transport: "local akshare (ak.py call) — NOT /api/relay"
+verified_ak_version: "1.18.78"
+verified_at: "2026-07-25"
+
+gotchas_for_all:
+  - "⚠️ **基金净值接口的列名内嵌具体日期**：`fund_etf_fund_daily_em` / `fund_open_fund_daily_em` 返回 `2026-07-24-单位净值`、`2026-07-23-累计净值` 这样的列。**绝不要硬编码列名** —— 先读返回里的 `colnames`，或用 `--summary` 看一眼。"
+  - "⚠️ 全量基金接口很重：`fund_open_fund_daily_em` **23718 行 / 15 秒**、`fund_name_em` **27321 行 / 5 秒**、`fund_etf_spot_em` 1555 行 × 37 列 / **17 秒**（内部 15 次分页）。默认 60s 超时勉强够，但必须配 `--summary` 或 `--out`。"
+  - "场内（ETF/LOF，有行情）与场外（开放式基金，只有净值）是两套接口：场内用 `fund_etf_*`，场外用 `fund_open_fund_*`。"
+  - "⚠️ 新浪源的 `bond_zh_hs_cov_spot` 返回**英文列名**且 docstring 自带封 IP 警告；东财源的 `bond_zh_cov` 是中文列名。"
+
+interfaces:
+  - func: fund_etf_spot_em
+    summary: "ETF 全市场实时行情（东财，含 IOPV 估值与折价率、主力资金流）"
+    params: []
+    returns: "代码 名称 最新价 IOPV实时估值 基金折价率 涨跌额 涨跌幅 成交量 成交额 开盘价 最高价 最低价 昨收 振幅 换手率 量比 委比 外盘 内盘 主力净流入-净额 主力净流入-净占比 超大单净流入-净额 …（37 列）"
+    measured: {elapsed: 17.05, rows: 1555, cols: 37, size: "约 1.39MB", verified_at: "2026-07-25", note: "内部 15 次分页"}
+    example: "ak.py call fund_etf_spot_em --summary --timeout 120\nak.py call fund_etf_spot_em --out etf.csv --timeout 120   # 全量落盘筛折价"
+    gotchas:
+      - "⚠️ **本组最慢的接口（17 秒）**，且 1555 行 × 37 列 ≈ 1.39MB。固定写法：`--timeout 120` 配 `--summary` 或 `--out`。"
+      - "`基金折价率` + `IOPV实时估值` 是做 ETF 折溢价套利的核心两列。"
+
+  - func: fund_etf_hist_em
+    summary: "单只 ETF 日/周/月 K 线（东财）"
+    params:
+      - {name: symbol, required: false, format: "ETF 6 位代码（裸码）", example: "510300", default: "159707"}
+      - {name: period, required: false, choices: [daily, weekly, monthly], default: daily}
+      - {name: start_date, required: false, format: YYYYMMDD, example: "20260101", default: "19700101 (=全部历史)"}
+      - {name: end_date, required: false, format: YYYYMMDD, example: "20260720"}
+      - {name: adjust, required: false, choices: ["qfq", "hfq", ""]}
+    returns: "日期 开盘 收盘 最高 最低 成交量 成交额 振幅 涨跌幅 涨跌额 换手率"
+    measured: {status: unverified, note: "2026-07-25 push2his 不可达"}
+    example: "ak.py call fund_etf_hist_em --symbol 510300 --start_date 20260101 --end_date 20260720 --adjust qfq"
+    gotchas:
+      - "ETF 代码不带前缀（`510300` 不是 `sh510300`）；LOF 用 `fund_lof_hist_em`。"
+
+  - func: fund_etf_hist_min_em
+    summary: "单只 ETF 分时 K 线（1/5/15/30/60 分钟，东财）"
+    params:
+      - {name: symbol, required: false, format: "ETF 6 位代码", example: "510300"}
+      - {name: period, required: false, choices: ["1", "5", "15", "30", "60"], default: "5"}
+      - {name: start_date, required: false, format: "YYYY-MM-DD HH:MM:SS", example: "2026-07-24 09:30:00"}
+      - {name: end_date, required: false, format: "YYYY-MM-DD HH:MM:SS", example: "2026-07-24 15:00:00"}
+      - {name: adjust, required: false, choices: ["", "qfq", "hfq"]}
+    returns: "时间 开盘 收盘 最高 最低 涨跌幅 涨跌额 成交量 成交额 振幅 换手率"
+    measured: {status: unverified, note: "2026-07-25 push2his 不可达"}
+    example: "ak.py call fund_etf_hist_min_em --symbol 510300 --period 5 --start_date '2026-07-24 09:30:00' --end_date '2026-07-24 15:00:00'"
+
+  - func: fund_etf_fund_daily_em
+    summary: "场内交易基金净值一览（ETF/LOF，含市价与折价率）"
+    params: []
+    returns: "基金代码 基金简称 类型 `<日期>-单位净值` `<日期>-累计净值` `<前一日>-单位净值` `<前一日>-累计净值` 增长值 增长率 市价 折价率（11 列，⚠️ 列名含日期）"
+    measured: {elapsed: 0.49, rows: 1589, cols: 11, verified_at: "2026-07-25", note: "当日列名形如 2026-07-24-单位净值"}
+    example: "ak.py call fund_etf_fund_daily_em --summary       # 先看列名里的日期\nak.py call fund_etf_fund_daily_em --rows 30"
+    gotchas:
+      - "⚠️ **列名内嵌日期**（`2026-07-24-单位净值`），每天变 —— 先看 `colnames` 再取列，别硬编码。"
+      - "比 `fund_etf_spot_em` 轻 35 倍（0.5s vs 17s），只要净值与折价率就用这个。"
+
+  - func: fund_open_fund_daily_em
+    summary: "场外开放式基金全量净值一览（含申赎状态与手续费）"
+    params: []
+    returns: "基金代码 基金简称 `<日期>-单位净值` `<日期>-累计净值` `<前一日>-单位净值` `<前一日>-累计净值` 日增长值 日增长率 申购状态 赎回状态 手续费（11 列，⚠️ 列名含日期）"
+    measured: {elapsed: 15.43, rows: 23718, cols: 11, verified_at: "2026-07-25"}
+    example: "ak.py call fund_open_fund_daily_em --summary --timeout 120\nak.py call fund_open_fund_daily_em --out funds.csv --timeout 120"
+    gotchas:
+      - "⚠️ **23718 行 / 15 秒** —— 必须 `--out` 或 `--summary`，配 `--timeout 120`。"
+      - "⚠️ 列名含日期，同 `fund_etf_fund_daily_em`。"
+      - "`申购状态`/`赎回状态` 能看出基金是否限购/暂停赎回。"
+
+  - func: fund_open_fund_info_em
+    summary: "单只开放式基金的净值历史/累计收益等（时间序列）"
+    params:
+      - {name: symbol, required: false, format: "基金 6 位代码", example: "710001", default: "710001",
+         note: "代码清单来自 fund_open_fund_daily_em 或 fund_name_em"}
+      - {name: indicator, required: false, default: "单位净值走势",
+         note: "常用：单位净值走势 / 累计净值走势 / 累计收益率走势 / 同类排名走势 / 分红送配详情 / 拆分详情。不同 indicator 返回的列完全不同"}
+      - {name: period, required: false, choices: ["1月", "3月", "6月", "1年", "3年", "5年", "今年来", "成立来"], default: "成立来"}
+    returns: "随 indicator 变；`单位净值走势` = 净值日期 单位净值 日增长率（3 列）"
+    measured: {elapsed: 0.39, rows: 3599, cols: 3, verified_at: "2026-07-25", indicator_used: "单位净值走势"}
+    example: "ak.py call fund_open_fund_info_em --symbol 710001 --indicator 单位净值走势 --period 1年 --rows 20"
+    gotchas:
+      - "⚠️ 默认 `period=成立来` 会返回全部历史（实测 3599 行）—— 给 `--period 1年` 或用 `--rows`。"
+      - "⚠️ 换 `indicator` 会换整套列 —— 换了要重新看 `colnames`。"
+
+  - func: fund_name_em
+    summary: "全部基金代码与名称清单（查代码的入口）"
+    params: []
+    returns: "基金代码 拼音缩写 基金简称 基金类型 拼音全称"
+    measured: {elapsed: 5.29, rows: 27321, cols: 5, verified_at: "2026-07-25"}
+    example: "ak.py call fund_name_em --out fundlist.csv\ngrep 沪深300 fundlist.csv | head"
+    gotchas:
+      - "⚠️ 27321 行 —— 用 `--out` 落盘后 grep，别指望 `--rows` 能找到目标基金。"
+      - "`基金类型` 可区分股票型/混合型/债券型/指数型/QDII/FOF。"
+
+  - func: fund_portfolio_hold_em
+    summary: "基金季度股票持仓明细（看基金买了什么）"
+    params:
+      - {name: symbol, required: false, format: "基金 6 位代码", example: "000001", default: "000001"}
+      - {name: date, required: false, format: "⚠️ 只要**年份** YYYY；传空字符串返回最新可用年份", example: "2026", default: "2024"}
+    returns: "序号 股票代码 股票名称 占净值比例 持股数 持仓市值 季度"
+    measured: {elapsed: 0.38, rows: 20, cols: 7, verified_at: "2026-07-25", date_used: "2026"}
+    example: "ak.py call fund_portfolio_hold_em --symbol 000001 --date 2026"
+    gotchas:
+      - "⚠️ `date` 是**年份**（`2026`）不是完整日期；一年返回该年各季度合并的明细，用 `季度` 列区分。"
+      - "只披露前十大重仓（每季 10 行左右），不是完整持仓。"
+
+  - func: bond_zh_hs_cov_spot
+    summary: "沪深可转债实时行情（新浪，英文列名）"
+    params: []
+    returns: "symbol name trade(现价) pricechange changepercent buy sell settlement(昨收) open high low volume amount code ticktime（15 列，**英文列名**）"
+    measured: {elapsed: 0.56, rows: 320, cols: 15, verified_at: "2026-07-25"}
+    example: "ak.py call bond_zh_hs_cov_spot --rows 30"
+    gotchas:
+      - "⚠️ docstring 自带警告：大量抓取容易被新浪封 IP —— 不要循环轮询。"
+      - "只有行情没有转股价/溢价率；要那些用 `bond_zh_cov`（打新信息）或 `bond_zh_cov_value_analysis`（单券溢价率序列）。"
+
+  - func: bond_zh_cov
+    summary: "可转债打新与基本信息全表（东财，含转股价与溢价率）"
+    params: []
+    returns: "债券代码 债券简称 申购日期 申购代码 申购上限 正股代码 正股简称 正股价 转股价 转股价值 债现价 转股溢价率 原股东配售-股权登记日 原股东配售-每股配售额 发行规模 中签号发布日 中签率 上市时间 信用评级（19 列）"
+    measured: {elapsed: 1.95, rows: 1038, cols: 19, verified_at: "2026-07-25"}
+    example: "ak.py call bond_zh_cov --rows 30\nak.py call bond_zh_cov --cols 债券代码,债券简称,转股溢价率,债现价,信用评级 --rows 30"
+    gotchas:
+      - "1038 行 = 历史全部可转债（含已退市/已强赎），不只是在交易的 —— 用 `上市时间`/`债现价` 是否为空过滤。"
+      - "这是唯一一次拿到「转股价 + 转股价值 + 转股溢价率 + 信用评级」的接口。"
+
+  - func: bond_zh_cov_value_analysis
+    summary: "单只可转债的纯债价值与溢价率时间序列（东财）"
+    params:
+      - {name: symbol, required: false, format: "可转债 6 位代码", example: "113527", default: "113527"}
+    returns: "日期 收盘价 纯债价值 转股价值 纯债溢价率 转股溢价率"
+    measured: {elapsed: 0.25, rows: 1457, cols: 6, verified_at: "2026-07-25"}
+    example: "ak.py call bond_zh_cov_value_analysis --symbol 113527 --rows 20"
+    gotchas:
+      - "返回该券全部历史（1457 行），无区间参数 —— `--rows` 取最近或 `--out` 落盘。"
+      - "「双低」策略需要的 `债现价 + 转股溢价率` 在这里是逐日的，`bond_zh_cov` 里是当前快照。"
+
+  - func: bond_cb_redeem_jsl
+    summary: "可转债强赎状态全表（集思录，18 列含强赎触发进度）"
+    params: []
+    returns: "代码 名称 现价 正股代码 正股名称 规模 剩余规模 转股起始日 最后交易日 到期日 转股价 强赎触发比 强赎触发价 正股价 强赎价 强赎天计数 强赎条款 强赎状态"
+    measured: {elapsed: 0.4, rows: 318, cols: 18, verified_at: "2026-07-25"}
+    example: "ak.py call bond_cb_redeem_jsl --rows 30\nak.py call bond_cb_redeem_jsl --cols 代码,名称,强赎状态,强赎天计数,强赎触发价,正股价 --rows 30"
+    gotchas:
+      - "`强赎天计数` 形如「15/30」= 已满足触发条件的天数 / 需要的天数，是强赎博弈的关键。"
+      - "本接口**不需要 cookie**；集思录同族的 `bond_cb_jsl`（全量可转债）**需要 cookie**，会被 CLI 拦成 `needs_credential`。"
+
+  - func: bond_china_yield
+    summary: "国债及其他债券收益率曲线（中国债券信息网，3M–30Y 各期限）"
+    params:
+      - {name: start_date, required: false, format: "YYYYMMDD", example: "20260101",
+         note: "⚠️ 语义特殊：返回**该日期之后一年内**的数据"}
+      - {name: end_date, required: false, format: "YYYYMMDD", example: "20260720",
+         note: "⚠️ 语义特殊：返回**该日期之前一年内**的数据"}
+    returns: "曲线名称 日期 3月 6月 1年 3年 5年 7年 10年 30年"
+    measured: {elapsed: 1.96, rows: 105, cols: 10, verified_at: "2026-07-25", window: "20260601-20260720"}
+    example: "ak.py call bond_china_yield --start_date 20260601 --end_date 20260720 --rows 20"
+    gotchas:
+      - "⚠️ 两个日期参数**不是普通区间**：按 docstring，start_date 返回其后一年内、end_date 返回其前一年内的数据。跨度超过一年时结果可能不是你以为的区间 —— 分段查询更稳。"
+      - "`曲线名称` 区分国债/国开债等多条曲线，同一天会有多行 —— 用它过滤。"
+      - "「10年-1年」期限差是常用的经济周期指标，直接减两列即可。"
