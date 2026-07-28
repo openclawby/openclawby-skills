@@ -7,6 +7,14 @@ note: >
   Discovery interfaces are for browsing events, markets, and category tags. Start with polymarket_events (event level,
   each event can include multiple markets), then take token_id from clobTokenIds and pass it to clob.yaml endpoints.
 
+  ⚠️ CRITICAL — clobTokenIds, outcomes and outcomePrices are JSON-ENCODED STRINGS, not arrays.
+  Verified 2026-07-29: the field value is literally '["9802249...", "5383155..."]' with type string.
+  Indexing it directly gives you the character "[", which upstream rejects with
+  404 'No orderbook exists'. You MUST JSON-parse the field first:
+      ids = JSON.parse(market.clobTokenIds)   // then ids[0] is the real 77-78 digit token_id
+  This single mistake accounted for a 38.96% failure rate on polymarket_orderbook in production
+  (one key sent 3998 bad calls in a day — all of them still billed).
+
 interfaces:
   - name: "polymarket_events"
     summary: "Browse prediction market event list (each event contains one or more sub-markets)"
@@ -22,7 +30,8 @@ interfaces:
       - {name: slug,      required: false, format: "event slug string",                  note: "exact match for a specific event"}
     gotchas:
       - "Prefer events over markets: one event aggregates multiple markets, reducing call count"
-      - "Each market has a clobTokenIds array — the only source of token_ids for CLOB endpoints"
+      - "⚠️ event.markets[i].clobTokenIds is a JSON-encoded STRING, not an array — JSON-parse it before indexing (see the note at the top of this file). Same for outcomes and outcomePrices."
+      - "Each market's clobTokenIds is the only source of token_ids for CLOB endpoints"
       - "Pagination: use offset to continue when has_more=true"
     example:
       name: "polymarket_events"
@@ -39,10 +48,12 @@ interfaces:
       - {name: order,     required: false, format: "liquidity|volume24hr"}
       - {name: ascending, required: false, format: "true|false"}
     gotchas:
-      - "Key field clobTokenIds: JSON array where each element is an outcome token's token_id; pass to orderbook / price / midpoint / spread / price_history"
+      - "⚠️ clobTokenIds is a JSON-encoded STRING (not an array). JSON-parse it, THEN index: JSON.parse(m.clobTokenIds)[0]. Indexing the raw string yields \"[\" and upstream answers 404. outcomes and outcomePrices have the same problem — outcomes is '[\"Yes\", \"No\"]', outcomePrices is '[\"0.505\", \"0.495\"]'."
+      - "After parsing both: JSON.parse(clobTokenIds)[i] pairs with JSON.parse(outcomes)[i] — index 0 = Yes, index 1 = No"
+      - "⚠️ Do NOT pass conditionId as token_id — both are long ID strings and are easily confused. token_id is 77-78 DIGITS (no 0x); conditionId is a 66-char 0x-prefixed hex. Passing conditionId returns 404 'No orderbook exists'."
       - "Markets with enableOrderBook=false cannot use order book endpoints; only lastTradePrice is available"
       - "neg_risk=true indicates a negative-risk market; outcome token pricing logic is inverted vs. normal markets"
-      - "conditionId is the unique market identifier; used as the market param in polymarket_trades"
+      - "conditionId is the unique market identifier; used as the market param in polymarket_trades (NOT for CLOB endpoints)"
     example:
       name: "polymarket_markets"
       params: {limit: 5, active: true}

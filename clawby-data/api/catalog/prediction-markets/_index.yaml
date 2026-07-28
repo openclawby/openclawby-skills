@@ -42,11 +42,17 @@ files:
 # ── Critical Field Map ────────────────────────────────────────────────────────────
 critical_field_map:
   token_id:
-    source: "market.clobTokenIds[] array returned by polymarket_events or polymarket_markets"
+    source: "JSON.parse(market.clobTokenIds) from polymarket_events / polymarket_markets"
+    format: "77-78 DIGITS, no 0x prefix"
     used_by: [polymarket_orderbook, polymarket_price, polymarket_midpoint, polymarket_spread]
     note: "price_history's param name is market, but the value is still a token_id"
+    warning: >
+      ⚠️ clobTokenIds is a JSON-ENCODED STRING, not an array (verified 2026-07-29).
+      Indexing it without parsing yields the character "[" and upstream answers 404.
+      outcomes and outcomePrices are strings too.
   conditionId:
     source: "market.conditionId field returned by polymarket_markets"
+    format: "66-char 0x-prefixed hex — NOT interchangeable with token_id"
     used_by: [polymarket_trades]
     note: "polymarket_trades' market param takes a conditionId, not a token_id"
   tag_id:
@@ -62,10 +68,10 @@ recommended_call_order:
     action: "(Optional) call polymarket_tags for category ids, or polymarket_sports for sports series ids"
   - step: 2
     action: "Call polymarket_events (recommended) or polymarket_markets to browse events/markets"
-    key_output: "Each market's clobTokenIds[] (outcome token ids) and conditionId"
+    key_output: "Each market's clobTokenIds (a JSON STRING — parse it) and conditionId"
   - step: 3
-    action: "Take token_id from clobTokenIds[n] and pass to CLOB endpoints (orderbook / price / midpoint / spread)"
-    note: "clobTokenIds[0] = first outcome (e.g. Yes); clobTokenIds[1] = second outcome (e.g. No)"
+    action: "ids = JSON.parse(market.clobTokenIds); pass ids[n] as token_id to CLOB endpoints (orderbook / price / midpoint / spread)"
+    note: "ids[0] = first outcome (pairs with JSON.parse(outcomes)[0], usually Yes); ids[1] = second (No)"
   - step: 4
     action: "Price history: pass the same token_id as the market param in polymarket_price_history"
   - step: 5
@@ -75,7 +81,8 @@ recommended_call_order:
 
 # ── Global Gotchas ──────────────────────────────────────────────────────────────────
 global_gotchas:
-  - "⚠️ token_id for all CLOB endpoints must come from the clobTokenIds array; guessing will return 400 Invalid token id"
+  - "⚠️ token_id must come from JSON.parse(clobTokenIds) — that field is a JSON-encoded STRING. Skipping the parse was the #1 production failure cause: 38.96% failure rate on polymarket_orderbook, one key burned 3998 billed calls in a day."
+  - "⚠️ Never hardcode a token_id: markets settle and their tokens start returning 404. Always fetch a fresh one from polymarket_markets."
   - "⚠️ polymarket_trades' market param takes a conditionId, not a token_id; the two look similar and are easily confused"
   - "⚠️ polymarket_price_history's param name is market, but the value is a token_id (inconsistent naming)"
   - "⚠️ polymarket_price_history's interval and startTs/endTs are mutually exclusive — pick one"

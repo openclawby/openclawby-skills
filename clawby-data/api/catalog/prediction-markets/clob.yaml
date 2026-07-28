@@ -5,13 +5,23 @@
 category: "Prediction Markets — CLOB (Order Book / Prices)"
 note: >
   All CLOB endpoints require a token_id (outcome token id).
-  token_id source: first call polymarket_events or polymarket_markets,
-  and take it from the clobTokenIds array; clobTokenIds[0] is the first outcome (e.g. Yes),
-  clobTokenIds[1] is the second outcome (e.g. No). Guessing a token_id returns 400 Invalid token id.
+
+  How to get one (verified end-to-end 2026-07-29):
+    1. polymarket_markets  {active: "true", closed: "false", order: "volume24hr", ascending: "false"}
+    2. ⚠️ JSON.parse(market.clobTokenIds) — it is a JSON-ENCODED STRING, NOT an array.
+       Indexing the raw string returns the character "[" and upstream answers 404.
+    3. ids[0] = first outcome (pairs with outcomes[0], usually "Yes"), ids[1] = second ("No")
+    4. pass that value as token_id
+
+  A valid token_id is 77-78 DIGITS with no 0x prefix, e.g.
+  "98022490269692409998126496127597032490334070080325855126491859374983463996227".
+  Guessing one returns 400 Invalid token id.
 
 gotchas_for_all:
-  - "⚠️ token_id must be taken from the clobTokenIds array returned by polymarket_markets/events; do not construct one yourself"
+  - "⚠️ token_id must come from JSON.parse(clobTokenIds) — that field is a JSON-encoded string, not an array. This was the single largest source of failures in production (38.96% failure rate on polymarket_orderbook; one key burned 3998 billed calls in a day on it)."
+  - "⚠️ Do NOT pass conditionId, market slug, or event id as token_id. token_id = 77-78 digits, no 0x. conditionId = 66-char 0x hex. Passing conditionId returns 404 'No orderbook exists', which looks identical to a genuinely empty book — check the format first."
   - "⚠️ Markets with enableOrderBook=false do not support CLOB endpoints; only lastTradePrice is readable"
+  - "Failed calls are still billed. Validate the token_id format before looping over markets."
 
 interfaces:
   - name: "polymarket_orderbook"
@@ -19,12 +29,19 @@ interfaces:
     params:
       - {name: token_id, required: true, format: "outcome token id string", note: "take from the clobTokenIds array"}
     gotchas:
-      - "⚠️ 404 'No orderbook' = no active order book for this token (very low liquidity or market ended)"
+      - "⚠️ 404 'No orderbook' has THREE causes, check in this order: (1) you passed an unparsed clobTokenIds / a conditionId / some other id — verify it is 77-78 digits; (2) enableOrderBook=false on that market; (3) genuinely no live book (market ended or near-zero liquidity)."
       - "Return fields: bids/asks are [{price, size}] arrays; price is a 0-1 probability value"
       - "neg_risk field indicates a negative-risk market; pricing logic differs"
     example:
-      name: "polymarket_orderbook"
-      params: {token_id: "71321045679252212594626385532706912750332728571942532289631379312455583992563"}
+      # ⚠️ 不要硬编码 token_id：市场结算后该 token 立即 404。
+      # 本文件原先写死的示例 token 已于 2026-07-29 实测在全部 CLOB 接口上返回 404。
+      step_1_get_token:
+        name: "polymarket_markets"
+        params: {active: "true", closed: "false", order: "volume24hr", ascending: "false", limit: 1}
+      step_2_parse: "ids = JSON.parse(resp[0].clobTokenIds)   # 字段是字符串,必须先 parse"
+      step_3_call:
+        name: "polymarket_orderbook"
+        params: {token_id: "<ids[0]>"}
 
   - name: "polymarket_price"
     summary: "Query the best price (implied probability, 0-1) for an outcome token"
@@ -36,7 +53,7 @@ interfaces:
       - "BUY price is higher than SELL price; their difference is the spread"
     example:
       name: "polymarket_price"
-      params: {token_id: "71321045679252212594626385532706912750332728571942532289631379312455583992563", side: "BUY"}
+      params: {token_id: "<JSON.parse(market.clobTokenIds)[0]>", side: "BUY"}
 
   - name: "polymarket_midpoint"
     summary: "Query the bid/ask midpoint (implied probability) for an outcome token"
@@ -46,7 +63,7 @@ interfaces:
       - "Returns {mid}; when spread > 0.10 it is common to use lastTradePrice instead"
     example:
       name: "polymarket_midpoint"
-      params: {token_id: "71321045679252212594626385532706912750332728571942532289631379312455583992563"}
+      params: {token_id: "<JSON.parse(market.clobTokenIds)[0]>"}
 
   - name: "polymarket_spread"
     summary: "Query the bid/ask spread (liquidity indicator) for an outcome token"
@@ -57,7 +74,7 @@ interfaces:
       - "spread > 0.10 is the liquidity warning threshold; midpoint is less meaningful at this level"
     example:
       name: "polymarket_spread"
-      params: {token_id: "71321045679252212594626385532706912750332728571942532289631379312455583992563"}
+      params: {token_id: "<JSON.parse(market.clobTokenIds)[0]>"}
 
   - name: "polymarket_price_history"
     summary: "Query the historical price (probability) time series for an outcome token"
@@ -73,4 +90,4 @@ interfaces:
       - "Each data point format: {t: Unix timestamp, p: price (0-1)}"
     example:
       name: "polymarket_price_history"
-      params: {market: "71321045679252212594626385532706912750332728571942532289631379312455583992563", interval: "1d"}
+      params: {market: "<JSON.parse(market.clobTokenIds)[0]>", interval: "1d"}
