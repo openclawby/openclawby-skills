@@ -8,6 +8,9 @@ note: >
   Option OHLC bars are under "Option aggregate OHLC bars (k-line)" in bars.yaml;
   option contract listing (valid expirations/strikes) is under "List of option contracts" in reference.yaml.
 
+gotchas_for_all:
+  - "⚠️ US EQUITIES ONLY — underlying must be a US-listed stock in US:TICKER form. There is no crypto or forex options coverage; do not pass BTC:USD / EUR:USD. See equities/_index.yaml → asset_class_routing."
+
 interfaces:
   - name: "Option chain summary (max pain, ITM/OTM)"
     summary: "options chain summary for a given stock and expiration: Max Pain price and ITM/OTM open interest by strike"

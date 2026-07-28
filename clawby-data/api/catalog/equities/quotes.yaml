@@ -6,6 +6,10 @@ category: "Quotes (stock / crypto / forex)"
 note: >
   Quotes are delayed 30 minutes by default. For real-time stock data use the screener endpoint in screener.yaml.
 
+gotchas_for_all:
+  - "⚠️ Pick the endpoint that matches the asset class — the three below are NOT interchangeable. Each accepts only its own symbol format; a mismatch returns HTTP 400 [\"Invalid symbol: ...\"] (stock endpoint) or an empty array (crypto endpoint). Verified 2026-07-29."
+  - "stock → 'Quote for a given stock' (US:TICKER) · crypto → 'Quote for a given crypto' (BTC:USD) · forex → 'Quote for a given forex' (EUR:USD)"
+
 interfaces:
   - name: "Quote for a given stock"
     summary: "latest quote for a given stock (price / change / change%)"
@@ -13,6 +17,7 @@ interfaces:
       - {name: symbol, required: true, format: "US:TICKER", example: "US:AAPL"}
     gotchas:
       - "data is delayed 30 minutes; use screener for real-time"
+      - "⚠️ US equities only — BTC:USD / EUR:USD return HTTP 400 [\"Invalid symbol\"]. Use 'Quote for a given crypto' / 'Quote for a given forex' instead."
     example:
       name: "Quote for a given stock"
       params: {symbol: "US:AAPL"}

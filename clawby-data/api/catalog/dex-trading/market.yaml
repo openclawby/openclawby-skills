@@ -36,9 +36,11 @@ interfaces:
   - name: "dex_token_signals"
     summary: "Token signals: price moves / smart money buys / large buys / DEX ads / CTO and other trigger events"
     params:
-      - {name: chain,  required: true, format: "chain identifier", example: "sol", note: "sol / bsc"}
+      - {name: chain,  required: true, format: "chain identifier", example: "sol", note: "ONLY sol / bsc / robinhood"}
       - {name: groups, required: true, format: "group array; each group may include signal_type[] / mc_min / mc_max etc.", example: "see example below"}
     gotchas:
+      - "⚠️ chain accepts ONLY sol, bsc or robinhood. Any other value (eth / base / tron / arbitrum / polygon / avax / sui …) returns HTTP 400 {\"message\":\"invalid chain: must be sol, bsc or robinhood\"}. Verified 2026-07-29 — do not loop this endpoint over a generic chain list."
+      - "⚠️ groups is REQUIRED and must be non-empty; omitting it returns HTTP 400 {\"message\":\"groups must not be empty\"}. Pass [{}] if you want no filter."
       - "body format: {\"chain\":\"sol\",\"groups\":[{\"signal_type\":[12,14]}]}; each group returns at most 50 entries, ordered by trigger_at descending"
       - "signal_type values 1–18: e.g. 6=price surge 7=new ATH 12=smart money buy 14=large buy 11=CTO 5=DexBoost; omit to get all"
       - "mc_min/mc_max = market cap (USD) range filter at trigger time"

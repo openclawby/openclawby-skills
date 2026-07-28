@@ -6,6 +6,7 @@ category: "Short Data"
 
 gotchas_for_all:
   - "⚠️ symbol format: stocks use US:TICKER (e.g. US:AAPL / US:SPY)"
+  - "⚠️ US EQUITIES ONLY — a crypto (BTC:USD) or forex (EUR:USD) symbol returns HTTP 400 [\"Invalid symbol: BTC:USD\"]. Short data does not exist for crypto/forex; there is no alternate endpoint to retry against. See equities/_index.yaml → asset_class_routing."
   - "time params timestamp_gte / timestamp_lt accept YYYY-MM-DD or Unix seconds"
   - "Cost-to-borrow path includes /ib/ — this is an Interactive Brokers-specific endpoint"
 

@@ -18,6 +18,27 @@ symbol_format:
   forex:  "BASE:USD        e.g. EUR:USD · GBP:USD"
   option: "option contract code  e.g. US:AAPL20240419C170  (underlying+expiryYYYYMMDD+C/P+strike)"
 
+# ⚠️⚠️ CRITICAL — symbol formats are NOT interchangeable between endpoints.
+# The list above tells you how to WRITE each symbol; it does NOT mean every endpoint
+# accepts every asset class. An endpoint named "... for a given stock" takes US:TICKER
+# ONLY. Passing a crypto or forex symbol returns HTTP 400 ["Invalid symbol: BTC:USD"].
+# Verified 2026-07-29 across every subcategory: quotes / short-data / dark-pool / reddit /
+# corporate / exchange-volume ALL rejected both BTC:USD and EUR:USD with 400.
+# In production this was the single largest source of wasted calls — one key sent 1132
+# calls in a day at 77.5% failure this way, while other keys on the same endpoint ran 0%.
+# Failed calls are still billed. Route by asset class instead:
+asset_class_routing:
+  stock:  "any endpoint whose name ends in '... for a given stock' — symbol=US:TICKER only"
+  crypto: >
+    Quote for a given crypto · Crypto aggregate OHLC bars (k-line) · Crypto level 2 snapshots ·
+    List of crypto pairs · List of crypto exchanges ·
+    Daily Reddit mention counts for a given crypto base · Reddit mentions for a given crypto base
+  forex:  "Quote for a given forex · Forex aggregate OHLC bars (k-line) · List of forex pairs"
+  no_coverage: >
+    Crypto and forex have NO short-data, dark-pool, options, corporate-actions,
+    exchange-volume or screener equivalent — those datasets are US-equities-only.
+    Do not retry such a call with a different symbol format; there is no endpoint for it.
+
 # Common optional params (all endpoints)
 common_params:
   page:      "page number (starting at 1)"

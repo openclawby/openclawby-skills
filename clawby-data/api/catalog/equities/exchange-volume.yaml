@@ -6,6 +6,7 @@ category: "Exchange Volume"
 
 gotchas_for_all:
   - "⚠️ stock symbol format: US:TICKER (e.g. US:AAPL / US:SPY)"
+  - "⚠️ US EQUITIES ONLY — a crypto (BTC:USD) or forex (EUR:USD) symbol returns HTTP 400 [\"Invalid symbol: BTC:USD\"]. Per-exchange volume does not exist for crypto/forex; there is no alternate endpoint to retry against. See equities/_index.yaml → asset_class_routing."
   - "exchange fields in responses are MIC codes (e.g. xnas-ltse), not full exchange names"
 
 interfaces:

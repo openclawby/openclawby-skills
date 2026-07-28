@@ -6,6 +6,7 @@ category: "Reddit mentions / sentiment"
 
 gotchas_for_all:
   - "⚠️ field names differ by asset type: stocks use symbol=US:TICKER; crypto uses base=BTC (not symbol!)"
+  - "⚠️ the '... for a given stock' endpoints are US EQUITIES ONLY — passing symbol=BTC:USD returns HTTP 400 [\"Invalid symbol: BTC:USD\"]. For crypto use the '... for a given crypto base' endpoints with base=BTC. Verified 2026-07-29."
   - "time-window params are Unix seconds: stocks/crypto use created_gte/created_lt, daily use date_gte/date_lt, top mentions use start/end"
 
 interfaces:

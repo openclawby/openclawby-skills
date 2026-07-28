@@ -7,6 +7,7 @@ category: "Dark Pool"
 gotchas_for_all:
   - "⚠️ date (trading day, YYYY-MM-DD) is required; must be an actual trading day (not a weekend or holiday)"
   - "symbol uses stock format US:TICKER (e.g. US:SPY)"
+  - "⚠️ US EQUITIES ONLY — a crypto (BTC:USD) or forex (EUR:USD) symbol returns HTTP 400 [\"Invalid symbol: BTC:USD\"]. Dark pool data does not exist for crypto/forex; there is no alternate endpoint to retry against. See equities/_index.yaml → asset_class_routing."
 
 interfaces:
   - name: "Dark Pool Levels for a given stock"

@@ -6,6 +6,7 @@ category: "Screener"
 
 gotchas_for_all:
   - "⚠️ screener returns real-time data; other quote endpoints are delayed 30 minutes"
+  - "⚠️ US EQUITIES ONLY — the screener covers US-listed stocks; there is no crypto or forex screener. Do not pass BTC:USD / EUR:USD style symbols. See equities/_index.yaml → asset_class_routing."
   - "filter values (equity_type / exchange / sector, etc.) must be fetched from the corresponding list endpoint first"
 
 interfaces:
