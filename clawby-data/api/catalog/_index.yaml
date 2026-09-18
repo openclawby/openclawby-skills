@@ -41,6 +41,9 @@ categories:
   - dir: "crypto-intel/"
     desc: "Crypto research intelligence: project/VC/people search & detail · fundraising rounds · calendar events · ecosystem & tag maps · X social signals · hot rankings (RootData)"
     count: 20
+  - dir: "mobula/"
+    desc: "Mobula on-chain data (PRO-ONLY): wallet PnL analysis / positions / trades / funding / smart-money labels / portfolio · token price / security / holders / OHLCV / first buyers / trades · universal search · new-token radar · trending · market overview · top pairs (80+ chains)"
+    count: 22
 
 # On-chain native RPC (/api/rpc — a different endpoint from /api/relay above):
 onchain_rpc:

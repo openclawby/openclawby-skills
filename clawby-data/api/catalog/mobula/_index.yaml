@@ -1,0 +1,69 @@
+# ============================================================================
+# Mobula — On-chain wallet / token / market data (80+ chains)
+# Call: POST /api/relay   {"name": "<interface name>", "params": {...}}
+#       header  X-API-Key: <your key>
+# ============================================================================
+category_group: "Mobula (on-chain wallet · token · market data)"
+
+plan: >
+  ⚠️ PRO-ONLY. Mobula interfaces are available only to Pro subscribers.
+  Standard / Pay-as-you-go / Free receive HTTP 403 (need_upgrade, reason=pro_only).
+
+chainId_format: >
+  ⚠️ #1 PITFALL — the chainId parameter format is NOT the same across endpoint
+  families. Call mobula_blockchains first to build a name↔id map, then use the
+  right form for the interface you are calling:
+    • token interfaces (price/security/holders/traders/ohlcv/price-history/trades)
+        → chainId = chain NAME (e.g. solana, ethereum). A numeric id returns HTTP 400.
+          ('solana:solana' namespaced form is also accepted.)
+    • mobula_wallet_analysis
+        → chainId = a single NUMERIC id string (e.g. 1, 8453, 4663).
+          Some chain NAMEs work (ethereum) but some do not (robinhood name → 400); prefer numeric.
+    • mobula_wallet_positions / mobula_wallet_trades
+        → chainIds = COMMA-separated numeric ids (e.g. 1 or 1,8453).
+    • mobula_token_trade
+        → chainId = "evm:<id>" (e.g. evm:1).
+    • mobula_wallet_portfolio
+        → blockchains = chain NAMEs (comma), or omit for all chains.
+    • mobula_token_first_buyers / mobula_trendings / mobula_market_pairs use `blockchain` = chain NAME.
+  Common: Ethereum id=1 name=ethereum · Base id=8453 name=base · Solana name=solana.
+
+size_warning: >
+  mobula_wallet_portfolio can exceed the 2MB response budget for whale wallets
+  (the response is then truncated) — narrow it with blockchains / minliq /
+  filterSpam / asset. mobula_pulse is ~1MB.
+
+files:
+  - file: wallet.yaml
+    description: "Wallet PnL analysis · positions · trades · funding · labels · portfolio (7)"
+    interfaces:
+      - {name: mobula_wallet_analysis,      summary: "Wallet trading analysis: PnL / win-rate / volume over a period"}
+      - {name: mobula_wallet_positions,     summary: "Per-position P&L (realized/unrealized) with cost basis"}
+      - {name: mobula_wallet_trades,        summary: "Wallet buy/sell trade flow with fees & platform"}
+      - {name: mobula_wallet_funding,       summary: "First funding source (tracing) + funder entity metadata"}
+      - {name: mobula_wallet_labels,        summary: "Wallet labels: proTrader/smartTrader/sniper/insider/bundler…"}
+      - {name: mobula_wallet_labels_search, summary: "Reverse-search wallets by entity name / label"}
+      - {name: mobula_wallet_portfolio,     summary: "Cross-chain portfolio net value & holdings + pnl history"}
+  - file: token.yaml
+    description: "Token price · security · holders · traders · OHLCV · first buyers · trades (9)"
+    interfaces:
+      - {name: mobula_token_price,            summary: "Price / market cap / liquidity"}
+      - {name: mobula_token_security,         summary: "Honeypot / tax / contract-holdings security check"}
+      - {name: mobula_token_holder_positions, summary: "Holder positions (up to 100) — concentration"}
+      - {name: mobula_token_trader_positions, summary: "Top-trader positions (up to 100)"}
+      - {name: mobula_token_ohlcv,            summary: "OHLCV candles"}
+      - {name: mobula_token_price_history,    summary: "TWAP price history"}
+      - {name: mobula_token_first_buyers,     summary: "First buyers of a token"}
+      - {name: mobula_token_trades,           summary: "Token trade flow with large-order (min/max USD) filter"}
+      - {name: mobula_token_trade,            summary: "Single trade looked up by transaction hash"}
+  - file: market.yaml
+    description: "Chains map · universal search · new-token radar · trending · market overview · top pairs (6)"
+    interfaces:
+      - {name: mobula_blockchains,        summary: "Supported chains + the chainId map (call this FIRST)"}
+      - {name: mobula_fast_search,        summary: "Universal search over tokens / assets / pairs"}
+      - {name: mobula_pulse,              summary: "New-token radar: new / bonding / bonded (~1MB)"}
+      - {name: mobula_trendings,          summary: "Trending tokens (top-level list)"}
+      - {name: mobula_market_lighthouse,  summary: "Whole-market aggregate metrics"}
+      - {name: mobula_market_pairs,       summary: "Top trading pairs by chain"}
+
+total_interfaces: 22

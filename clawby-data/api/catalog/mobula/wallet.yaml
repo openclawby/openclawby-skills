@@ -1,0 +1,122 @@
+# ============================================================================
+# Mobula — Wallet Intelligence
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Mobula — Wallet Intelligence"
+note: >
+  Wallet-level on-chain data: PnL analysis, per-position P&L, trade flow,
+  funding source (tracing), smart-money labels, and cross-chain portfolio.
+
+gotchas_for_all:
+  - "⚠️ PRO-ONLY — Standard / PAYG / Free get HTTP 403 (reason=pro_only)."
+  - "⚠️ chainId format is NOT uniform (see mobula/_index.yaml::chainId_format). analysis=single numeric id; positions/trades=comma numeric chainIds; portfolio=chain names or omit. Call mobula_blockchains first."
+  - "Boolean query flags (includeFees / useSwapRecipient / includeAllBalances / onlyOpen) must be passed EXPLICITLY as \"true\"/\"false\" strings."
+
+interfaces:
+  - name: "mobula_wallet_analysis"
+    summary: "Wallet trading analysis over a period: PnL, win-rate, buys/sells, volume, holdings, avg hold duration"
+    params:
+      - {name: wallet,  required: true,  format: "on-chain address", example: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"}
+      - {name: chainId, required: false, format: "SINGLE numeric chain-id string", example: "1", note: "1=ETH, 8453=Base, 4663=Robinhood. Numeric is safest; some names work, some 400."}
+      - {name: period,  required: false, format: "1d | 7d | 30d | 90d", example: "30d", note: "default 7d; there is NO 'all'."}
+      - {name: from,    required: false, format: "ms epoch", example: "1710000000000"}
+      - {name: to,      required: false, format: "ms epoch", example: "1712592000000"}
+    gotchas:
+      - "Missing wallet → HTTP 400 (Validation failed)."
+      - "Returns data.stat{totalValue, periodTotalPnlUSD, periodRealizedPnlUSD, periodRealizedRate, periodBuys, periodSells, holdingTokensCount, avgHoldDuration(sec), periodWinCount} + data.winRateDistribution / marketCapDistribution / labels / platform."
+    example:
+      name: "mobula_wallet_analysis"
+      params: {wallet: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", chainId: "1", period: "30d"}
+
+  - name: "mobula_wallet_positions"
+    summary: "Per-position P&L: realized/unrealized PnL, cost basis, avg buy/sell price, fees, labels"
+    params:
+      - {name: wallet,             required: true,  format: "address", example: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"}
+      - {name: chainIds,           required: false, format: "COMMA numeric ids", example: "1", note: "e.g. 1 or 1,8453"}
+      - {name: limit,              required: false, format: "1-500", example: "100"}
+      - {name: offset,             required: false, format: "int", example: "0"}
+      - {name: cursor,             required: false, format: "cursor", example: ""}
+      - {name: cursorDirection,    required: false, format: "before | after", example: "after"}
+      - {name: sortBy,             required: false, format: "lastActivity | realizedPnl", example: "realizedPnl"}
+      - {name: order,              required: false, format: "asc | desc", example: "desc"}
+      - {name: includeFees,        required: false, format: "\"true\"|\"false\"", example: "true"}
+      - {name: useSwapRecipient,   required: false, format: "\"true\"|\"false\"", example: "true"}
+      - {name: includeAllBalances, required: false, format: "\"true\"|\"false\"", example: "false"}
+      - {name: onlyOpen,           required: false, format: "\"true\"|\"false\"", example: "false"}
+      - {name: minPositionValueUSD,required: false, format: "number", example: "10"}
+    gotchas:
+      - "Returns data[]{token, balance, amountUSD, buys, sells, avgBuyPriceUSD, avgSellPriceUSD, realizedPnlUSD, unrealizedPnlUSD, totalPnlUSD, totalFeesPaidUSD, firstDate, lastDate, labels[]}, wallet{fundingInfo,entity,labels}, pagination."
+    example:
+      name: "mobula_wallet_positions"
+      params: {wallet: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", chainIds: "1", limit: 20, includeFees: "true", useSwapRecipient: "true", onlyOpen: "false", includeAllBalances: "false"}
+
+  - name: "mobula_wallet_trades"
+    summary: "Wallet buy/sell trade flow with USD amounts, fees, market cap at trade, platform, tx hash"
+    params:
+      - {name: wallet,       required: true,  format: "address", example: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"}
+      - {name: tokenAddress, required: false, format: "token address", example: ""}
+      - {name: chainIds,     required: false, format: "COMMA numeric ids", example: "1"}
+      - {name: limit,        required: false, format: "1-100", example: "50"}
+      - {name: offset,       required: false, format: "int", example: "0"}
+      - {name: order,        required: false, format: "asc | desc", example: "desc"}
+      - {name: from,         required: false, format: "ms epoch", example: ""}
+      - {name: to,           required: false, format: "ms epoch", example: ""}
+    gotchas:
+      - "Returns data[]{type(buy/sell), baseToken, quoteToken, baseTokenAmountUSD, baseTokenPriceUSD, baseTokenMarketCapUSD, date(ms), transactionHash, marketAddress, platform{id,name}, totalFeesUSD, gasFeesUSD, labels[]}."
+    example:
+      name: "mobula_wallet_trades"
+      params: {wallet: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", chainIds: "1", limit: 20}
+
+  - name: "mobula_wallet_funding"
+    summary: "First funding source of a wallet (fund tracing) with the funder's entity metadata"
+    params:
+      - {name: wallet, required: true, format: "address", example: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"}
+    gotchas:
+      - "Returns data{from, chainId, date, txHash, amount, fromWalletMetadata{entityName, entityLabels[], entityType, entityTwitter, entityWebsite}}. Powerful for attributing where a wallet's initial funds came from (CEX, bridge, another entity)."
+    example:
+      name: "mobula_wallet_funding"
+      params: {wallet: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"}
+
+  - name: "mobula_wallet_labels"
+    summary: "Smart-money labels for one or many wallets (proTrader/smartTrader/freshTrader/sniper/insider/bundler…)"
+    params:
+      - {name: walletAddresses, required: true,  format: "address, COMMA for multiple", example: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"}
+      - {name: tokenAddress,    required: false, format: "token address", example: ""}
+    gotchas:
+      - "Returns data[]{walletAddress, labels[], walletMetadata, platform, fundingInfo}. EVM & Solana both supported."
+    example:
+      name: "mobula_wallet_labels"
+      params: {walletAddresses: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"}
+
+  - name: "mobula_wallet_labels_search"
+    summary: "Reverse-search wallets by entity name or label (find e.g. all wallets tagged an exchange, or all Snipers)"
+    params:
+      - {name: entityName, required: false, format: "FUZZY entity name", example: "binance"}
+      - {name: entityType, required: false, format: "exact type", example: ""}
+      - {name: label,      required: false, format: "EXACT, Capitalized", example: "Sniper", note: "case-sensitive — 'sniper' returns empty; use 'Sniper' / 'proTrader'."}
+      - {name: offset,     required: false, format: "int", example: "0"}
+      - {name: limit,      required: false, format: "int", example: "20"}
+    gotchas:
+      - "Provide at least one of entityName / label / entityType, otherwise the result is empty."
+      - "label is exact & Capitalized (Sniper works, sniper does not). entityName is fuzzy (binance matches Binance…)."
+    example:
+      name: "mobula_wallet_labels_search"
+      params: {entityName: "binance", limit: 5}
+
+  - name: "mobula_wallet_portfolio"
+    summary: "Cross-chain portfolio: total balance, per-asset holdings, realized/unrealized PnL, win rate, pnl_history"
+    params:
+      - {name: wallet,         required: true,  format: "address (or use `wallets` comma)", example: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"}
+      - {name: blockchains,    required: false, format: "chain NAMEs, comma", example: "ethereum", note: "omit = all chains (can be huge)."}
+      - {name: asset,          required: false, format: "asset", example: ""}
+      - {name: pnl,            required: false, format: "string", example: ""}
+      - {name: filterSpam,     required: false, format: "string", example: "true"}
+      - {name: minliq,         required: false, format: "number", example: "1000"}
+      - {name: unlistedAssets, required: false, format: "string", example: ""}
+      - {name: period,         required: false, format: "string", example: ""}
+    gotchas:
+      - "⚠️ Whale wallets over all chains can exceed the 2MB response budget and get truncated — pass blockchains / minliq / filterSpam / asset to narrow it."
+      - "Returns data{total_wallet_balance, assets[], total_realized_pnl, total_unrealized_pnl, win_rate, tokens_distribution, pnl_history{24h,7d,30d,1y}, balances_length}."
+    example:
+      name: "mobula_wallet_portfolio"
+      params: {wallet: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", blockchains: "ethereum", filterSpam: "true", minliq: 1000}

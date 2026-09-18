@@ -1,5 +1,5 @@
 {
-  "version": "1.0.44",
+  "version": "1.0.45",
   "base_url": "https://www.openclawby.com/clawby-skill/",
   "managed": [
     "SKILL.md",
@@ -169,7 +169,11 @@
     "akdata/catalog/fund-bond.yaml",
     "akdata/catalog/futures-options.yaml",
     "akdata/catalog/macro.yaml",
-    "akdata/catalog/news-sentiment.yaml"
+    "akdata/catalog/news-sentiment.yaml",
+    "api/catalog/mobula/_index.yaml",
+    "api/catalog/mobula/wallet.yaml",
+    "api/catalog/mobula/token.yaml",
+    "api/catalog/mobula/market.yaml"
   ],
   "keep_local": [
     "local/"

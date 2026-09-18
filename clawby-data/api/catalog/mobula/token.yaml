@@ -1,0 +1,129 @@
+# ============================================================================
+# Mobula — Token Data
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Mobula — Token Data"
+note: >
+  Per-token on-chain data: price/market cap/liquidity, security (honeypot/tax),
+  holder & trader positions, OHLCV candles, price history, first buyers, and trades.
+
+gotchas_for_all:
+  - "⚠️ PRO-ONLY — Standard / PAYG / Free get HTTP 403 (reason=pro_only)."
+  - "⚠️ For every token interface here, chainId is the chain NAME (solana, ethereum, base…). A NUMERIC id returns HTTP 400 'Validation Error'. Exception: mobula_token_trade uses 'evm:<id>'. Call mobula_blockchains for names."
+  - "Missing address / asset → HTTP 400 (e.g. 'Address is required for token price')."
+
+interfaces:
+  - name: "mobula_token_price"
+    summary: "Current price, market cap (real & diluted), and liquidity for a token"
+    params:
+      - {name: chainId, required: true,  format: "chain NAME", example: "solana", note: "numeric id → 400; 'solana:solana' also accepted."}
+      - {name: address, required: true,  format: "token contract / mint", example: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"}
+    gotchas:
+      - "Returns data{name, symbol, priceUSD, marketCapUSD, marketCapDilutedUSD, liquidityUSD, liquidityMaxUSD}."
+    example:
+      name: "mobula_token_price"
+      params: {chainId: "solana", address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"}
+
+  - name: "mobula_token_security"
+    summary: "Security check: honeypot signals, buy/sell fees, contract & burned holdings"
+    params:
+      - {name: chainId, required: false, format: "chain NAME", example: "solana"}
+      - {name: address, required: true,  format: "token address", example: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"}
+    gotchas:
+      - "Returns data{contractHoldingsPercentage, contractBalanceRaw, burnedHoldingsPercentage, totalBurnedBalanceRaw, buyFeePercentage, sellFeePercentage}."
+    example:
+      name: "mobula_token_security"
+      params: {chainId: "solana", address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"}
+
+  - name: "mobula_token_holder_positions"
+    summary: "Positions of the token's holders (up to 100) — read concentration / whales"
+    params:
+      - {name: chainId,          required: false, format: "chain NAME", example: "solana"}
+      - {name: address,          required: true,  format: "token address", example: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"}
+      - {name: useSwapRecipient, required: false, format: "\"true\"|\"false\"", example: "true"}
+      - {name: includeFees,      required: false, format: "\"true\"|\"false\"", example: "true"}
+    gotchas:
+      - "Returns data[] up to 100 holder positions (can be ~160KB)."
+    example:
+      name: "mobula_token_holder_positions"
+      params: {chainId: "solana", address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", useSwapRecipient: "true", includeFees: "true"}
+
+  - name: "mobula_token_trader_positions"
+    summary: "Positions of the token's top traders (up to 100)"
+    params:
+      - {name: chainId,          required: false, format: "chain NAME", example: "solana"}
+      - {name: address,          required: true,  format: "token address", example: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"}
+      - {name: useSwapRecipient, required: false, format: "\"true\"|\"false\"", example: "true"}
+      - {name: includeFees,      required: false, format: "\"true\"|\"false\"", example: "true"}
+    gotchas:
+      - "Returns data[] up to 100 trader positions (can be ~180KB)."
+    example:
+      name: "mobula_token_trader_positions"
+      params: {chainId: "solana", address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", useSwapRecipient: "true", includeFees: "true"}
+
+  - name: "mobula_token_ohlcv"
+    summary: "OHLCV candles for a token"
+    params:
+      - {name: address, required: true,  format: "token address", example: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"}
+      - {name: chainId, required: false, format: "chain NAME", example: "solana"}
+      - {name: period,  required: false, format: "e.g. 1m/5m/1h/1d", example: "1h"}
+      - {name: amount,  required: false, format: "candle count", example: "24"}
+      - {name: from,    required: false, format: "ms epoch", example: ""}
+      - {name: to,      required: false, format: "ms epoch", example: ""}
+    gotchas:
+      - "Returns data[] candles. Available depth depends on the token — a short-lived token may return fewer candles than requested."
+    example:
+      name: "mobula_token_ohlcv"
+      params: {address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", chainId: "solana", period: "1h", amount: 24}
+
+  - name: "mobula_token_price_history"
+    summary: "TWAP price history for a token"
+    params:
+      - {name: address,   required: true,  format: "token address", example: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"}
+      - {name: chainId,   required: false, format: "chain NAME", example: "solana"}
+      - {name: timeframe, required: true,  format: "e.g. 1h / 1d", example: "1h"}
+    gotchas:
+      - "Returns data{priceHistory, address, chainId}."
+    example:
+      name: "mobula_token_price_history"
+      params: {address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", chainId: "solana", timeframe: "1h"}
+
+  - name: "mobula_token_first_buyers"
+    summary: "The first buyers of a token"
+    params:
+      - {name: asset,      required: true,  format: "token address", example: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", note: "param is `asset`, not `address`."}
+      - {name: blockchain, required: false, format: "chain NAME", example: "solana", note: "param is `blockchain`, not `chainId`."}
+      - {name: limit,      required: false, format: "int", example: "10"}
+    gotchas:
+      - "Note the param names differ from the other token endpoints: `asset` (token) + `blockchain` (chain name)."
+    example:
+      name: "mobula_token_first_buyers"
+      params: {asset: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", blockchain: "solana", limit: 10}
+
+  - name: "mobula_token_trades"
+    summary: "Token trade flow with an optional large-order (min/max USD) filter"
+    params:
+      - {name: chainId,      required: false, format: "chain NAME", example: "solana"}
+      - {name: address,      required: false, format: "token address", example: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"}
+      - {name: sortOrder,    required: false, format: "string", example: ""}
+      - {name: mode,         required: false, format: "string", example: ""}
+      - {name: minAmountUSD, required: false, format: "number", example: "1000", note: "filter to whale trades."}
+      - {name: maxAmountUSD, required: false, format: "number", example: ""}
+      - {name: fromDate,     required: false, format: "date/ms", example: ""}
+      - {name: toDate,       required: false, format: "date/ms", example: ""}
+    gotchas:
+      - "Returns data[] trades. Use minAmountUSD to surface large orders only."
+    example:
+      name: "mobula_token_trades"
+      params: {chainId: "solana", address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", minAmountUSD: 1000}
+
+  - name: "mobula_token_trade"
+    summary: "Look up a single trade by its on-chain transaction hash"
+    params:
+      - {name: chainId,         required: true, format: "\"evm:<id>\"", example: "evm:1", note: "this endpoint uses the evm:<id> form, NOT a chain name."}
+      - {name: transactionHash, required: true, format: "0x… tx hash", example: "0x9c7dbaa54fcb40bdba0d2080ef90f65ae8e9dcda09ca90cfe8e1d6736ec959d7"}
+    gotchas:
+      - "Returns data{operation, type, baseTokenAmount, baseTokenAmountUSD, quoteTokenAmount, quoteTokenAmountRaw}."
+    example:
+      name: "mobula_token_trade"
+      params: {chainId: "evm:1", transactionHash: "0x9c7dbaa54fcb40bdba0d2080ef90f65ae8e9dcda09ca90cfe8e1d6736ec959d7"}

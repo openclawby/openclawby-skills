@@ -1,0 +1,82 @@
+# ============================================================================
+# Mobula — Market / Discovery / Reference
+# Call: POST /api/relay   {"name": "<name>", "params": {...}}
+# ============================================================================
+category: "Mobula — Market / Discovery"
+note: >
+  Chain reference (the chainId map), universal search, new-token radar,
+  trending tokens, whole-market metrics, and top trading pairs by chain.
+
+gotchas_for_all:
+  - "⚠️ PRO-ONLY — Standard / PAYG / Free get HTTP 403 (reason=pro_only)."
+  - "⚠️ Call mobula_blockchains FIRST — the chainId parameter format differs per endpoint family (see mobula/_index.yaml::chainId_format)."
+
+interfaces:
+  - name: "mobula_blockchains"
+    summary: "List of supported chains + their ids/names — build the chainId map before other calls"
+    params: []
+    gotchas:
+      - "No params. Returns data[]{name, chainId(string), evmChainId(number), explorer, stable, routers[], isLayer2}."
+      - "Use this to resolve which chainId FORM to pass elsewhere: token/* want the NAME, wallet/analysis wants the numeric id, positions/trades want comma numeric ids, token/trade wants evm:<id>."
+    example:
+      name: "mobula_blockchains"
+      params: {}
+
+  - name: "mobula_fast_search"
+    summary: "Universal search across tokens / assets / pairs by name, symbol, or address"
+    params:
+      - {name: input, required: true,  format: "name / symbol / address", example: "BONK"}
+      - {name: type,  required: false, format: "filter type", example: ""}
+      - {name: limit, required: false, format: "int", example: "5"}
+    gotchas:
+      - "Returns data[]{name, symbol, address, blockchain, chainId} — note the chainId here is the namespaced form (e.g. 'solana:solana'); when you then call token endpoints, pass the bare chain NAME (solana)."
+    example:
+      name: "mobula_fast_search"
+      params: {input: "BONK", limit: 5}
+
+  - name: "mobula_pulse"
+    summary: "New-token launch radar: new / bonding / bonded pools"
+    params:
+      - {name: chainId,   required: false, format: "chain NAME", example: "solana"}
+      - {name: poolTypes, required: false, format: "string", example: ""}
+      - {name: assetMode, required: false, format: "string", example: ""}
+      - {name: views,     required: false, format: "string", example: ""}
+    gotchas:
+      - "⚠️ Response is ~1MB and the payload is at the TOP LEVEL as {new[], bonding[], bonded[]} — NOT wrapped under a `data` key."
+    example:
+      name: "mobula_pulse"
+      params: {chainId: "solana"}
+
+  - name: "mobula_trendings"
+    summary: "Trending tokens"
+    params:
+      - {name: platform,   required: false, format: "string", example: ""}
+      - {name: blockchain, required: false, format: "chain NAME", example: "solana"}
+    gotchas:
+      - "⚠️ Returns a TOP-LEVEL LIST (not wrapped under `data`)."
+    example:
+      name: "mobula_trendings"
+      params: {blockchain: "solana"}
+
+  - name: "mobula_market_lighthouse"
+    summary: "Whole-market aggregate metrics (by chain / dex / launchpad / platform)"
+    params: []
+    gotchas:
+      - "No params. Returns data{total, byChain, byDex, byLaunchpad, byPlatform} (~280KB)."
+    example:
+      name: "mobula_market_lighthouse"
+      params: {}
+
+  - name: "mobula_market_pairs"
+    summary: "Top trading pairs on a chain"
+    params:
+      - {name: blockchain,   required: true,  format: "chain NAME", example: "solana"}
+      - {name: sortBy,       required: false, format: "OMIT or 'liquidity'", example: "liquidity", note: "⚠️ 'volume' / 'volume24h' / 'trades24h' / 'createdAt' currently return HTTP 500 — omit sortBy or use 'liquidity'."}
+      - {name: limit,        required: false, format: "int", example: "10"}
+      - {name: offset,       required: false, format: "int", example: "0"}
+      - {name: excludeBonded, required: false, format: "string", example: ""}
+    gotchas:
+      - "⚠️ sortBy is fragile: only omitting it or 'liquidity' work today; volume/trades sort values return HTTP 500."
+    example:
+      name: "mobula_market_pairs"
+      params: {blockchain: "solana", limit: 10}

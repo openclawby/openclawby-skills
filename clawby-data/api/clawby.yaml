@@ -1,5 +1,5 @@
-version: 441
-generated_at: "2026-09-18T21:10:07.979364+00:00"
+version: 442
+generated_at: "2026-09-18T22:17:20.971629+00:00"
 base_url: https://api.openclawby.com
 auth_header: X-API-Key
 relay: POST /api/relay  body {name|id, params}
@@ -2974,3 +2974,157 @@ apis:
     description: "Kalshi standard trading hours + maintenance windows."
     docs: |
       No params.
+  - id: 556
+    name: "mobula_wallet_analysis"
+    asset_classes: "crypto,onchain"
+    data_types: "wallet,pnl,analysis"
+    description: "Wallet trading analysis (PnL/win-rate/volume)."
+    docs: |
+      Params: wallet* (address), chainId (SINGLE NUMERIC chain-id string, e.g. 1=ETH, 8453=Base, 4663=Robinhood; some chain NAMEs work (ethereum) but not all (robinhood name->400) — prefer numeric), period (1d/7d/30d/90d, default 7d, no 'all'), from/to (ms). Returns data.stat{totalValue,periodTotalPnlUSD,periodRealizedPnlUSD,periodRealizedRate,periodBuys,periodSells,holdingTokensCount,avgHoldDuration,periodWinCount}, data.winRateDistribution, data.marketCapDistribution, data.labels, data.platform. Missing wallet -> 400.
+  - id: 557
+    name: "mobula_wallet_positions"
+    asset_classes: "crypto,onchain"
+    data_types: "wallet,positions,pnl"
+    description: "Wallet positions with per-position PnL."
+    docs: |
+      Params: wallet*, chainIds (COMMA-separated numeric ids, e.g. 1 or 1,8453), limit(1-500,default100), offset, cursor+cursorDirection(before/after), sortBy(lastActivity/realizedPnl), order(asc/desc); BOOLEAN flags must be passed explicitly true/false: includeFees,useSwapRecipient,includeAllBalances,onlyOpen; minPositionValueUSD. Returns data[]{token,balance,amountUSD,buys,sells,avgBuyPriceUSD,avgSellPriceUSD,realizedPnlUSD,unrealizedPnlUSD,totalPnlUSD,totalFeesPaidUSD,firstDate,lastDate,labels[]}, wallet{fundingInfo,entity,labels}, pagination.
+  - id: 558
+    name: "mobula_wallet_trades"
+    asset_classes: "crypto,onchain"
+    data_types: "wallet,trades"
+    description: "Wallet trade flow."
+    docs: |
+      Params: wallet*, tokenAddress, chainIds(comma numeric), limit(1-100,default50), offset, order, from/to(ms). Returns data[]{type(buy/sell),baseToken,quoteToken,baseTokenAmountUSD,baseTokenPriceUSD,baseTokenMarketCapUSD,date(ms),transactionHash,marketAddress,platform{id,name},totalFeesUSD,gasFeesUSD,labels[]}.
+  - id: 559
+    name: "mobula_wallet_funding"
+    asset_classes: "crypto,onchain"
+    data_types: "wallet,funding,tracing"
+    description: "First funding source (fund tracing)."
+    docs: |
+      Params: wallet*. Returns data{from,chainId,date,txHash,amount,fromWalletMetadata{entityName,entityLabels[],entityType,entityTwitter,entityWebsite}}.
+  - id: 560
+    name: "mobula_wallet_labels"
+    asset_classes: "crypto,onchain"
+    data_types: "wallet,labels,smart-money"
+    description: "Wallet labels (smart-money identification)."
+    docs: |
+      Params: walletAddresses* (comma for multiple), tokenAddress(optional). Returns data[]{walletAddress,labels[](proTrader/smartTrader/freshTrader/sniper/insider/bundler...),walletMetadata,platform,fundingInfo}.
+  - id: 561
+    name: "mobula_wallet_labels_search"
+    asset_classes: "crypto,onchain"
+    data_types: "wallet,labels,search"
+    description: "Reverse-search wallets by label/entity."
+    docs: |
+      Params: entityName (FUZZY, e.g. 'binance'), entityType (exact), label (EXACT & Capitalized, e.g. 'Sniper'/'proTrader' — lowercase like 'sniper' returns EMPTY), offset, limit. Provide at least one filter or you get an empty list.
+  - id: 562
+    name: "mobula_wallet_portfolio"
+    asset_classes: "crypto,onchain"
+    data_types: "wallet,portfolio,balance"
+    description: "Cross-chain portfolio net value & holdings."
+    docs: |
+      Params: wallet (or wallets comma), blockchains (chain NAMEs), asset, pnl, filterSpam, minliq, unlistedAssets, period, from/to (all string). Omit blockchains = all chains. Returns data{total_wallet_balance,assets[],total_realized_pnl,total_unrealized_pnl,win_rate,tokens_distribution,pnl_history{24h,7d,30d,1y},balances_length}. WARNING: whale wallets can exceed the 2MB response budget and get truncated — narrow with blockchains / minliq / filterSpam / asset.
+  - id: 563
+    name: "mobula_blockchains"
+    asset_classes: "crypto,onchain"
+    data_types: "reference,chains"
+    description: "Supported chains list (build the chainId map first)."
+    docs: |
+      No params. Returns data[]{name,chainId(string),evmChainId(number),explorer,stable,routers[],isLayer2}. chainId FORMAT DIFFERS PER ENDPOINT FAMILY: /2/token/* use the chain NAME (solana/ethereum); /2/wallet/analysis uses a single numeric id string; /2/wallet/positions & /trades use comma-separated numeric ids; /2/token/trade uses 'evm:<id>'; /1/wallet/portfolio uses names or omit. e.g. Ethereum '1', Base '8453', Solana 'solana'.
+  - id: 564
+    name: "mobula_token_price"
+    asset_classes: "crypto,onchain"
+    data_types: "token,price,market"
+    description: "Token price / market cap / liquidity."
+    docs: |
+      Params: chainId* (chain NAME, e.g. solana / ethereum — a NUMERIC id returns HTTP 400; 'solana:solana' also accepted), address*. Returns data{name,symbol,priceUSD,marketCapUSD,marketCapDilutedUSD,liquidityUSD,liquidityMaxUSD}. Missing address -> 400 'Address is required for token price'.
+  - id: 565
+    name: "mobula_token_security"
+    asset_classes: "crypto,onchain"
+    data_types: "token,security,honeypot"
+    description: "Token security / honeypot check."
+    docs: |
+      Params: chainId (chain NAME), address*. Returns data{contractHoldingsPercentage,contractBalanceRaw,burnedHoldingsPercentage,totalBurnedBalanceRaw,buyFeePercentage,sellFeePercentage}. Missing address -> 400.
+  - id: 566
+    name: "mobula_token_holder_positions"
+    asset_classes: "crypto,onchain"
+    data_types: "token,holders,concentration"
+    description: "Holder positions (concentration)."
+    docs: |
+      Params: chainId (chain NAME), address*, useSwapRecipient(bool true/false), includeFees(bool). Returns data[] up to 100 holder positions.
+  - id: 567
+    name: "mobula_token_trader_positions"
+    asset_classes: "crypto,onchain"
+    data_types: "token,traders,positions"
+    description: "Top-trader positions for a token."
+    docs: |
+      Params: chainId (chain NAME), address*, useSwapRecipient(bool), includeFees(bool). Returns data[] up to 100 trader positions.
+  - id: 568
+    name: "mobula_token_ohlcv"
+    asset_classes: "crypto,onchain"
+    data_types: "token,ohlcv,kline"
+    description: "Token OHLCV candles."
+    docs: |
+      Params: address*, chainId (chain NAME), from, to, period (e.g. 1m/5m/1h/1d), amount. Returns data[] candles.
+  - id: 569
+    name: "mobula_token_price_history"
+    asset_classes: "crypto,onchain"
+    data_types: "token,price,history"
+    description: "Token TWAP price history."
+    docs: |
+      Params: address*, chainId (chain NAME), timeframe* (e.g. 1h/1d). Returns data{priceHistory,address,chainId}.
+  - id: 570
+    name: "mobula_token_first_buyers"
+    asset_classes: "crypto,onchain"
+    data_types: "token,buyers"
+    description: "First buyers of a token."
+    docs: |
+      Params: asset* (token address), blockchain (chain NAME), limit. Returns data[] first buyers.
+  - id: 571
+    name: "mobula_token_trades"
+    asset_classes: "crypto,onchain"
+    data_types: "token,trades"
+    description: "Token trade flow (large-order filter)."
+    docs: |
+      Params: chainId (chain NAME), address, sortOrder, mode, minAmountUSD, maxAmountUSD, fromDate, toDate. Returns data[] trades.
+  - id: 572
+    name: "mobula_token_trade"
+    asset_classes: "crypto,onchain"
+    data_types: "token,trade,tx"
+    description: "Single trade by transaction hash."
+    docs: |
+      Params: chainId* ('evm:<id>' format, e.g. evm:1 for Ethereum), transactionHash*. Returns data{operation,type,baseTokenAmount,baseTokenAmountUSD,quoteTokenAmount,quoteTokenAmountRaw}.
+  - id: 573
+    name: "mobula_fast_search"
+    asset_classes: "crypto,onchain"
+    data_types: "search,discovery"
+    description: "Universal search (tokens/assets/pairs)."
+    docs: |
+      Params: input* (name/symbol/address), type, limit. Returns data[]{name,symbol,address,blockchain,chainId('<ns>:<chain>' e.g. solana:solana)}.
+  - id: 574
+    name: "mobula_pulse"
+    asset_classes: "crypto,onchain"
+    data_types: "discovery,new-tokens,radar"
+    description: "New-token radar (new / bonding / bonded)."
+    docs: |
+      Params: chainId (chain NAME), poolTypes, assetMode, views. Returns {new[],bonding[],bonded[]} at the TOP LEVEL (NOT under data). WARNING: large (~1MB) — filter/paginate.
+  - id: 575
+    name: "mobula_trendings"
+    asset_classes: "crypto,onchain"
+    data_types: "discovery,trending"
+    description: "Trending tokens."
+    docs: |
+      Params: platform, blockchain (chain NAME). Returns a TOP-LEVEL LIST (not wrapped under data).
+  - id: 576
+    name: "mobula_market_lighthouse"
+    asset_classes: "crypto,onchain"
+    data_types: "market,overview"
+    description: "Whole-market aggregate metrics."
+    docs: |
+      No params. Returns data{total,byChain,byDex,byLaunchpad,byPlatform}.
+  - id: 577
+    name: "mobula_market_pairs"
+    asset_classes: "crypto,onchain"
+    data_types: "market,pairs"
+    description: "Top trading pairs by chain."
+    docs: |
+      Params: blockchain* (chain NAME), sortBy (OMIT it or use 'liquidity' ONLY — 'volume'/'volume24h'/'trades24h'/'createdAt' currently return HTTP 500), limit, offset, excludeBonded. Returns data[] pairs.
