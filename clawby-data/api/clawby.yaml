@@ -1,5 +1,5 @@
-version: 440
-generated_at: "2026-07-20T23:00:31.819465+00:00"
+version: 441
+generated_at: "2026-09-18T21:10:07.979364+00:00"
 base_url: https://api.openclawby.com
 auth_header: X-API-Key
 relay: POST /api/relay  body {name|id, params}
@@ -2301,7 +2301,7 @@ apis:
     data_types: "address_labels,attribution"
     description: "Address labels (deep, live upstream lookup)"
     docs: |
-      Address labels DEEP mode: live upstream attribution lookup for any supported chain (including SUI) then cache the result. Use when fast (local DB) returns no_data. Params: coin* (ETH/BNB/SOL/SUI/POL-Polygon/ETH-Base/ETH-Arbitrum/HYPE...), address*. Returns {label_list,label_type,cached:false} or no_data.
+      Address labels DEEP mode: live upstream attribution lookup (MistTrack) then cache the result. Use when fast (local DB) returns no_data. Params: coin* (ETH/BNB/SOL/POL-Polygon/ETH-Base/ETH-Arbitrum/HYPE...), address*. Returns {label_list,label_type,cached:false} or no_data. Note: SUI live attribution was discontinued 2026-09-19 — SUI returns cached labels via fast/auto only; deep for SUI returns no_data.
   - id: 459
     name: "dex_token_info"
     asset_classes: "crypto"
@@ -2378,7 +2378,7 @@ apis:
     data_types: "dex,signals,alerts"
     description: "DEX token signals (momentum / ATH / market-cap trigger events)."
     docs: |
-      Body: {chain*, groups: [{signal_type?:[int], mc_min?, mc_max?, trigger_mc_min?, trigger_mc_max?, total_fee_min?, total_fee_max?}]}. Returns signalled tokens with trigger_mc/ath.
+      Body: {chain*, groups*: [{signal_type?:[int], mc_min?, mc_max?, trigger_mc_min?, trigger_mc_max?, total_fee_min?, total_fee_max?}]}. chain (REQUIRED) must be one of: sol, bsc, robinhood — any other value returns HTTP 400 "invalid chain: must be sol, bsc or robinhood". groups (REQUIRED) must be a non-empty array — omitting it returns HTTP 400 "groups must not be empty"; pass [{}] to apply no filter. signal_type values 1-18: 5=DexBoost 6=price surge 7=new ATH 11=CTO 12=smart money buy 14=large buy; omit to get all. mc_min/mc_max filter market cap (USD) at trigger time. Each group returns at most 50 entries ordered by trigger_at descending. Returns signalled tokens with trigger_mc/ath. Example body: {"chain":"sol","groups":[{"signal_type":[12,14],"mc_min":50000}]}
   - id: 470
     name: "dex_new_launches"
     asset_classes: "crypto"

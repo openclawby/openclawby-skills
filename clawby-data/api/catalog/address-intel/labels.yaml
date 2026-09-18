@@ -45,12 +45,12 @@ interfaces:
   - name: "address_labels_deep"
     summary: "Address label lookup (deep mode: real-time upstream query with result caching, for when fast returns no_data)"
     params:
-      - {name: coin,    required: true,  format: "chain ID string", example: "SUI"}
-      - {name: address, required: true,  format: "on-chain address",     example: "0xac5bceec1b789ff840d7d4e6ce4ce61c90d190a7f8c4f4ddf0bff6ee2413c33c"}
+      - {name: coin,    required: true,  format: "chain ID string", example: "ETH"}
+      - {name: address, required: true,  format: "on-chain address",     example: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
     gotchas:
       - "Every call queries upstream in real time, consuming upstream quota; response is slower than fast (several seconds)."
       - "Recommended: use fast first; only switch to deep when fast returns no_data."
-      - "SUI addresses (0x + 64 hex) are case-sensitive; always pass them as-is."
+      - "⚠️ SUI live attribution was discontinued 2026-09-19: deep mode returns no_data for SUI. SUI labels remain available only from local cache via address_labels_fast / address_labels (auto). All other chains query MistTrack upstream in real time."
     example:
       name: "address_labels_deep"
-      params: {coin: "SUI", address: "0xac5bceec1b789ff840d7d4e6ce4ce61c90d190a7f8c4f4ddf0bff6ee2413c33c"}
+      params: {coin: "ETH", address: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
