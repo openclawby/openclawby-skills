@@ -23,9 +23,6 @@ categories:
   - dir: "prediction-markets/"
     desc: "Prediction markets: Polymarket (events / CLOB prices / trades) + 42.space eventcoins + Aster up/down binaries + Kalshi (CFTC-regulated US exchange)"
     count: 47
-  - dir: "social/"
-    desc: "Social search: X (Twitter) · Facebook · Instagram posts / comments / profiles / topics / trends"
-    count: 21
   - dir: "address-intel/"
     desc: "On-chain address intel: label attribution (local / live modes) · AML risk scoring · address profile · counterparties · supported-chain lookup"
     count: 10
@@ -44,15 +41,6 @@ categories:
   - dir: "mobula/"
     desc: "Mobula on-chain data (PRO-ONLY): wallet PnL analysis / positions / trades / funding / smart-money labels / portfolio · token price / security / holders / OHLCV / first buyers / trades · universal search · new-token radar · trending · market overview · top pairs (80+ chains)"
     count: 22
-
-# On-chain native RPC (/api/rpc — a different endpoint from /api/relay above):
-onchain_rpc:
-  dir: "rpc/"
-  how_to_call: 'POST /api/rpc  {"chain":"<chain>","method":"<method>","params":[...]}'
-  desc: >-
-    Native JSON-RPC relay for 80+ chains. EVM chains (standard eth_*/web3_/net_) are in rpc/evm/<chain>.yaml;
-    non-EVM (solana/near/btc/xrp/polkadot/kusama/ton/sui/nervos_ckb…) are in rpc/non-evm/<chain>.yaml;
-    the full chain list + availability status (ok/needs_plan/no_nodes/unverified) is in rpc/_index.yaml. Pass the chain name when calling.
 
 # Common conventions (see subdirectories for per-category detail):
 conventions:

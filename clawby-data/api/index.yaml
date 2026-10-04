@@ -6,10 +6,10 @@ catalogs:
       Per-category interface docs (RECOMMENDED — read before calling). Each category
       folder holds small yaml files documenting every interface's purpose, params
       (required / format / example) and ⚠️ gotchas. Start at catalog/_index.yaml.
-      Covers equities, derivatives, perps, prediction-markets, social, address-intel, dex, filings,
-      and on-chain RPC (rpc/ — 80+ chains for /api/rpc, EVM + non-EVM).
+      Covers equities, derivatives, perps, prediction-markets, address-intel, dex, filings,
+      crypto-intel and mobula on-chain data.
   - file: clawby.yaml
     description: >-
       Clawby aggregated data API — stocks/options/crypto/forex quotes, dark pool,
       short interest, screener, SEC company financials, Polymarket, Hyperliquid.
-      Server-generated full interface catalog (use with /api/relay and /api/rpc).
+      Server-generated full interface catalog (use with /api/relay).

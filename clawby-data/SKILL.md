@@ -1,6 +1,6 @@
 ---
 name: clawby-data
-description: Query and analyze real financial data for any asset (US stocks / options / crypto / forex / perps / prediction markets) — quotes, volume, short volume & short interest, borrow fee, dark pool, options chain, Reddit sentiment, OHLC bars, FTDs, dividends & splits, stock screener, company financials & SEC filings (income statement, balance sheet, cash flow, EPS, earnings), DEX pairs & token data (DexScreener — price, liquidity, volume, trending tokens, any chain), social search (X / Twitter, Facebook, Instagram), prediction-market events/odds/order books, Hyperliquid perps (funding, open interest, order books, candles), and more. Use this skill whenever the user asks about a stock/coin/asset's data, price, short interest, dark pool, options, sentiment, screening, company earnings / financial statements / fundamentals, prediction markets / betting odds, perps / funding rates / open interest, or wants analysis based on real data.
+description: Query and analyze real financial data for any asset (US stocks / options / crypto / forex / perps / prediction markets) — quotes, volume, short volume & short interest, borrow fee, dark pool, options chain, Reddit sentiment, OHLC bars, FTDs, dividends & splits, stock screener, company financials & SEC filings (income statement, balance sheet, cash flow, EPS, earnings), DEX pairs & token data (DexScreener — price, liquidity, volume, trending tokens, any chain), prediction-market events/odds/order books, Hyperliquid perps (funding, open interest, order books, candles), and more. Use this skill whenever the user asks about a stock/coin/asset's data, price, short interest, dark pool, options, sentiment, screening, company earnings / financial statements / fundamentals, prediction markets / betting odds, perps / funding rates / open interest, or wants analysis based on real data.
 ---
 
 # Clawby Data Analysis
@@ -27,7 +27,7 @@ curl -s -X POST https://api.openclawby.com/api/relay \
 
 1. **Turn the request into a data checklist.** Ask "what would a thorough analyst pull?" and list every relevant dimension. Over-collect on purpose (a stock → quote, short data, dark pool, options, financials, sentiment, peers; a token → DEX price/liquidity, holders, funding & OI, odds, social buzz).
 2. **For each item, sweep ALL FOUR source layers — never stop at the first hit:**
-   - **Layer 1 — Clawby data** (`/api/relay` + on-chain `/api/rpc`): scan the catalog for *every* interface that touches the item and call them all. Primary, authoritative.
+   - **Layer 1 — Clawby data** (`/api/relay`): scan the catalog for *every* interface that touches the item and call them all. Primary, authoritative.
    - **Layer 2 — Local akshare** (`akdata/`, read-only): China markets (A-shares · HK · futures · convertible bonds · ETFs · boards · northbound flows · dragon-tiger list · shareholder data) and global macro (CPI · non-farm · PMI · rate decisions) — 1080 interfaces Layer 1 does not carry. Runs locally on the user's machine with no Clawby key and no credits. Guide: `akdata/akshare.md`.
    - **Layer 3 — Execution connectors** (`exec/`, read-only use): the Binance / Bitget / OKX / Polymarket CLIs expose market data, order books, funding, smart-money and news the other layers may not have. Read-only needs no confirmation.
    - **Layer 4 — Your own web access**: news, filings, official docs, macro context — fill every remaining gap.
@@ -70,10 +70,10 @@ clawby-data/
 
 ## Interface index — locate before you read (local/index/)
 
-`local/index/` holds a machine-readable index of all 386 relay interfaces + the RPC chain map (derived from `api/clawby.yaml`; regenerate with `python3 local/index/build_index.py` after a skill update):
+`local/index/` holds a machine-readable index of all 365 relay interfaces (derived from `api/clawby.yaml`; regenerate with `python3 local/index/build_index.py` after a skill update):
 
 - `python3 local/index/query.py find <keywords>` — interface name + required params + which catalog yaml to read
-- `python3 local/index/query.py entity us_stock` — EVERY interface accepting that input; use as the completeness-sweep checklist (entities: `us_stock` `crypto_coin` `crypto_pair` `token_contract` `wallet_address` `sec_company` `pm_market` `social_query`)
+- `python3 local/index/query.py entity us_stock` — EVERY interface accepting that input; use as the completeness-sweep checklist (entities: `us_stock` `crypto_coin` `crypto_pair` `token_contract` `wallet_address` `sec_company` `pm_market`)
 - `python3 local/index/query.py flow` — ordered multi-step chains (SEC financials, Polymarket prices, token-by-contract)
 
 Plain JSON — grep/jq work without Python. **Locate here, then ALWAYS read the catalog yaml it points to before calling** (params + gotchas live there, and only there). Full guide: `local/index/INDEX.md`.
@@ -88,30 +88,15 @@ Interface details (params + ⚠️ gotchas) live in the catalog file — read it
 | Crypto derivatives (cross-exchange): funding · open interest · liquidations · long/short ratios · taker volume · ETF flows · market indicators (fear&greed, RSI…) · whale/exchange reserves | `funding_*` `open_interest_*` `liquidation_*` `etf_*` … | `api/catalog/derivatives/` |
 | Hyperliquid perps: mids · contexts (funding/OI/mark) · order book · candles · a wallet's positions/fills | `hyperliquid_*` | `api/catalog/perps/` |
 | Prediction markets / betting odds (Polymarket) | `polymarket_*` | `api/catalog/prediction-markets/` |
-| Social: X (Twitter) · Facebook · Instagram search & sentiment | `x_search` `facebook_search` `instagram_search` … | `api/catalog/social/` |
 | Address labels (who owns an address) · AML risk score · address profile/trace/counterparties | `address_*` | `api/catalog/address-intel/` |
 | DEX pairs & token market data, any chain (DexScreener) | `dexscreener_*` | `api/catalog/dex/` |
 | On-chain DEX/memecoin intel: security audit · holders/traders PnL · trending · smart-money/KOL · signals · new launches · swap quotes (read-only) | `dex_*` | `api/catalog/dex-trading/` |
 | US company financials & SEC filings | `sec_*` | `api/catalog/filings/` |
-| Long-tail tokens / raw chain reads (80+ chains) | `/api/rpc` endpoint | `api/catalog/rpc/` |
 
 **Cross-interface mini-flows** (details in the catalog):
 - **SEC**: `sec_cik_lookup` (ticker→10-digit CIK) first → `sec_company_concept` (`cik` + us-gaap `concept`, e.g. `Revenues`, `NetIncomeLoss`, `EarningsPerShareDiluted`) per line item → assemble by period (`fy`/`fp`/`form`). Filings/profile: `sec_submissions`.
 - **Polymarket**: `polymarket_events`/`polymarket_markets` → read `clobTokenIds` → per token id `polymarket_price`/`midpoint`/`orderbook` (a 0–1 price = implied probability); history via `polymarket_price_history`.
-- **Token by contract address**: try `chain:"multichain"` aggregated methods first (`ankr_getTokenPrice` / `ankr_getTokenHolders` / `ankr_getTokenTransfers`, params `{"blockchain":"eth","contractAddress":"0x…"}`); if uncovered, raw `eth_call` with standard ERC-20 selectors and decode yourself.
 - **Routing rule — queries vs execution**: all read-only DEX/memecoin lookups go through `dex_*` relay interfaces; to **execute** (swap, TP/SL orders, launch) use `exec/gmgn/`. Same split everywhere: data via relay, execution via `exec/`.
-
-## On-chain RPC (long-tail / small tokens)
-
-Native JSON-RPC for 80+ chains — every chain's methods are documented in `api/catalog/rpc/` (EVM in `rpc/evm/<chain>.yaml`, non-EVM like solana/sui/near/btc/xrp/ton in `rpc/non-evm/<chain>.yaml`, availability list in `rpc/_index.yaml`):
-
-```bash
-curl -s -X POST https://api.openclawby.com/api/rpc \
-  -H "X-API-Key: $CLAWBY_API_KEY" -H "Content-Type: application/json" \
-  -d '{"chain":"eth","method":"eth_call","params":[ ... ]}'
-```
-
-EVM chains use standard `eth_*`; non-EVM chains have their own namespaces (sui → `suix_*`, solana → `getTokenSupply` …); `chain:"multichain"` = aggregated ankr token methods (EVM only). Don't assume a chain is unsupported — try it; a truly unavailable one returns a clear error.
 
 ## China markets & global macro (akdata/ — runs locally)
 
