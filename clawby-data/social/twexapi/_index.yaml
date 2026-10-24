@@ -1,0 +1,37 @@
+# ============================================================================
+# TwexAPI (BYOK) — X / Twitter data: search · users · tweets · followers · communities · lists · trending
+# Direct to https://api.twexapi.io with the USER'S OWN TwexAPI token (from the Clawby vault).
+# NOT via Clawby /api/relay, NOT billed as Clawby credits — the user's own TwexAPI balance pays.
+# ============================================================================
+provider: twexapi
+base_url: https://api.twexapi.io
+openapi: "https://twexapi.io/openapi.json  (OpenAPI 3.1, v1.0.0, 55 endpoints)"
+
+auth:
+  scheme: "HTTP Bearer"
+  header: "Authorization: Bearer <TWEXAPI_KEY>"   # Bearer-PREFIXED (unlike Desearch's raw key)
+  get_key: |
+    RESP=$(curl -s https://api.openclawby.com/api/vault/twexapi -H "X-API-Key: $CLAWBY_API_KEY")
+    TWEXAPI_KEY=$(printf '%s' "$RESP" | python3 -c 'import sys,json;print(json.load(sys.stdin)["keys"][0]["fields"]["apiKey"])')
+    # trusted-IP whitelist + vault switch rules + error shapes: see ../index.yaml
+
+conventions:
+  - "Every endpoint is under https://api.twexapi.io with header `Authorization: Bearer <TWEXAPI_KEY>`."
+  - "GET endpoints take path/query params; POST endpoints take a JSON body with `Content-Type: application/json`. Responses are application/json."
+  - "Credits/balance: calls draw on the user's own TwexAPI balance — check it with `GET /balance`. Per-endpoint cost from the spec is noted per file where given."
+  - "Pagination: the `.../page` POST variants take a cursor; large follower/following pulls use an async TASK (start the pull → poll `.../task/{task_id}/status` → consume `.../task/{task_id}/next`). The `/v3/...` follower/following endpoints are the newer variants."
+  - "The token is a header value (not in the URL) — still never log or commit it."
+
+files:
+  - file: search.md
+    covers: "Search (advanced_search [+page], cashtags, hashtags) · Users (by usernames / by_ids / status / search-user) · User About · Account-Based-in"
+  - file: tweets.md
+    covers: "Tweets (thread, similar) · Replies (page/legacy) · All tweets+replies by user · Interactions (retweeters, quotes [+page]) · Sentiment · Timeline"
+  - file: followers.md
+    covers: "Followers & Following (13): latest, by-count, by-page, async task (status/next), v3 followers/following/verified-followers"
+  - file: communities-lists.md
+    covers: "Communities (7: members, tweets, search, get, search-tweets) + Lists (6: tweets, subscribers, members, search)"
+  - file: trending.md
+    covers: "Trending (global countries/topics/contents/tweets, per-country) + Balance (GET /balance)"
+
+total_endpoints: 55

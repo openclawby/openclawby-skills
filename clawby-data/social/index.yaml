@@ -33,4 +33,11 @@ providers:
     registry: desearch/_index.yaml
     base_url: https://api.desearch.ai
     about: "X/Twitter · TikTok · Facebook · Instagram · Web/SERP · AI search · People search · network stats — 51 endpoints."
+  - name: twexapi
+    vault_slug: twexapi
+    dir: twexapi/
+    registry: twexapi/_index.yaml
+    base_url: https://api.twexapi.io
+    auth_note: "HTTP Bearer — `Authorization: Bearer <key>` (NOT a raw key like Desearch)."
+    about: "X/Twitter data: advanced search · users · tweets/replies/threads · followers & following · communities · lists · trending · sentiment — 55 endpoints."
   # More social providers will be added here, each in its own folder under social/.

@@ -49,7 +49,7 @@ clawby-data/
 ├── akdata/             ← local akshare executor: China markets + global macro; guide akdata/akshare.md
 ├── exec/               ← trade-execution connectors; registry exec/index.yaml
 ├── rpc/                ← BYOK RPC (EVM + non-EVM; Ankr/Alchemy/BlockPI) using the user's OWN key from the Key Vault; registry rpc/index.yaml
-├── social/             ← BYOK social & search (Desearch: X·TikTok·FB·IG·Web·AI·People) using the user's OWN key; registry social/index.yaml
+├── social/             ← BYOK social & search (Desearch, TwexAPI) using the user's OWN key; registry social/index.yaml
 ├── report/             ← PDF report guide + stylesheet
 ├── data/               ← misc reference data
 └── local/              ← local state / caches; the ONLY folder preserved across updates
@@ -61,7 +61,7 @@ clawby-data/
 
 Flow: fetch the key once (`GET https://api.openclawby.com/api/vault/<provider>` with `CLAWBY_API_KEY`; if the user set a trusted-IP whitelist, this machine's public IP must be on it, and their vault retrieval switch must be ON) → keep it **in memory only, never write it to disk** → build the provider's endpoint URL and POST JSON-RPC. Start at `rpc/index.yaml` (auth flow + JSON-RPC primer + file map + security). Per-provider endpoint template, full chain/network lists and enhanced methods: `rpc/<provider>.md` (ankr/alchemy/blockpi). The complete standard **EVM JSON-RPC method catalog** (params + request/response for eth_*/net_*/web3_*/trace_*/debug_*): `rpc/evm-methods.md`. Non-EVM chains — Solana, TRON, TON, Sui, XRP, Aptos, NEAR — each have their own method guide in `rpc/non-evm/`. The fetched key sits inside the endpoint URL, so treat the whole URL as a secret.
 
-**Social & search data** uses the same vault pattern — `social/` holds BYOK connectors for social/search providers (currently **Desearch**: X/Twitter, TikTok, Facebook, Instagram, Web/SERP, AI search, People search). Fetch the user's key from `/api/vault/desearch`, then call `https://api.desearch.ai` directly (auth header `Authorization: <key>`, billed in USD to the user's own Desearch plan — never Clawby credits). Start at `social/index.yaml`; the Desearch endpoint reference is split across `social/desearch/{overview,x,platforms,people}.md`.
+**Social & search data** uses the same vault pattern — `social/` holds BYOK connectors for social/search providers: **Desearch** (`social/desearch/` — X/Twitter, TikTok, Facebook, Instagram, Web/SERP, AI search, People search; raw `Authorization` key) and **TwexAPI** (`social/twexapi/` — deep X/Twitter: advanced search, users, tweets/replies, followers & following, communities, lists, trending, sentiment; `Authorization: Bearer` token). Fetch the user's key from `/api/vault/<provider>`, call the provider directly (billed to the user's own provider plan — never Clawby credits), and start at `social/index.yaml` (each provider's `_index.yaml` carries its base URL, auth and file map).
 
 ## Step 0 · First use in a session
 
