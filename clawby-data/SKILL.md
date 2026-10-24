@@ -48,14 +48,24 @@ clawby-data/
 │   └── index.yaml      ← catalog registry
 ├── akdata/             ← local akshare executor: China markets + global macro; guide akdata/akshare.md
 ├── exec/               ← trade-execution connectors; registry exec/index.yaml
+├── rpc/                ← BYOK RPC (EVM + non-EVM; Ankr/Alchemy/BlockPI) using the user's OWN key from the Key Vault; registry rpc/index.yaml
+├── social/             ← BYOK social & search (Desearch: X·TikTok·FB·IG·Web·AI·People) using the user's OWN key; registry social/index.yaml
 ├── report/             ← PDF report guide + stylesheet
 ├── data/               ← misc reference data
 └── local/              ← local state / caches; the ONLY folder preserved across updates
 ```
 
+## Your own RPC & social data via the Key Vault (BYOK)
+
+`rpc/` lets you make EVM JSON-RPC calls with the **user's own** Ankr / Alchemy / BlockPI node key, fetched at run time from the Clawby **Key Vault**. These calls go **straight to the provider — not through Clawby `/api/relay`, and they do NOT use Clawby credits**.
+
+Flow: fetch the key once (`GET https://api.openclawby.com/api/vault/<provider>` with `CLAWBY_API_KEY`; if the user set a trusted-IP whitelist, this machine's public IP must be on it, and their vault retrieval switch must be ON) → keep it **in memory only, never write it to disk** → build the provider's endpoint URL and POST JSON-RPC. Start at `rpc/index.yaml` (auth flow + JSON-RPC primer + file map + security). Per-provider endpoint template, full chain/network lists and enhanced methods: `rpc/<provider>.md` (ankr/alchemy/blockpi). The complete standard **EVM JSON-RPC method catalog** (params + request/response for eth_*/net_*/web3_*/trace_*/debug_*): `rpc/evm-methods.md`. Non-EVM chains — Solana, TRON, TON, Sui, XRP, Aptos, NEAR — each have their own method guide in `rpc/non-evm/`. The fetched key sits inside the endpoint URL, so treat the whole URL as a secret.
+
+**Social & search data** uses the same vault pattern — `social/` holds BYOK connectors for social/search providers (currently **Desearch**: X/Twitter, TikTok, Facebook, Instagram, Web/SERP, AI search, People search). Fetch the user's key from `/api/vault/desearch`, then call `https://api.desearch.ai` directly (auth header `Authorization: <key>`, billed in USD to the user's own Desearch plan — never Clawby credits). Start at `social/index.yaml`; the Desearch endpoint reference is split across `social/desearch/{overview,x,platforms,people}.md`.
+
 ## Step 0 · First use in a session
 
-1. **Check the user's plan & balance** (free call): `curl -s https://api.openclawby.com/api/account -H "X-API-Key: $CLAWBY_API_KEY"` → `{plan, payg_balance, rate_per_min, accessible_providers, free_providers}`. (Upgrade-nudge rules: see *Plan & access*.)
+1. **Check the user's plan & balance** (free call): `curl -s https://api.openclawby.com/api/account -H "X-API-Key: $CLAWBY_API_KEY"` → `{plan, payg_balance, rate_per_min, accessible_providers, free_providers, rate_per_sec}` (`rate_per_sec` = the per-API-key per-second request limit, default 5).
 2. **Version check (≤ once per 24h), then ASK** — follow `update-protocol.md`: if `manifest.json` is older than 24h, compare the remote version; on a difference **ask the user** before updating. Never auto-update. Updates refresh every file except `local/` — including this SKILL.md (re-read it afterward).
 3. **Executor CLIs install lazily** — do NOT install anything up front. Only when the user first asks to trade on a venue, check/install that one connector (see `update-protocol.md` Step A).
 
@@ -68,15 +78,9 @@ clawby-data/
 
 - Stocks: `US:TICKER` (GME → `US:GME`) · Crypto: `BASE:USD` (BTC → `BTC:USD`) · Forex: `BASE:USD` (`EUR:USD`)
 
-## Interface index — locate before you read (local/index/)
+## Locate an interface
 
-`local/index/` holds a machine-readable index of all 365 relay interfaces (derived from `api/clawby.yaml`; regenerate with `python3 local/index/build_index.py` after a skill update):
-
-- `python3 local/index/query.py find <keywords>` — interface name + required params + which catalog yaml to read
-- `python3 local/index/query.py entity us_stock` — EVERY interface accepting that input; use as the completeness-sweep checklist (entities: `us_stock` `crypto_coin` `crypto_pair` `token_contract` `wallet_address` `sec_company` `pm_market`)
-- `python3 local/index/query.py flow` — ordered multi-step chains (SEC financials, Polymarket prices, token-by-contract)
-
-Plain JSON — grep/jq work without Python. **Locate here, then ALWAYS read the catalog yaml it points to before calling** (params + gotchas live there, and only there). Full guide: `local/index/INDEX.md`.
+Pick the category from the **Routing table** below (the full category list is `api/catalog/_index.yaml`), then open that category's yaml — it lists every interface with its params and ⚠️ gotchas — and **ALWAYS read it before calling**. The complete machine-readable list of all interfaces is `api/clawby.yaml`.
 
 ## Routing table — which catalog file answers which need
 
@@ -92,6 +96,7 @@ Interface details (params + ⚠️ gotchas) live in the catalog file — read it
 | DEX pairs & token market data, any chain (DexScreener) | `dexscreener_*` | `api/catalog/dex/` |
 | On-chain DEX/memecoin intel: security audit · holders/traders PnL · trending · smart-money/KOL · signals · new launches · swap quotes (read-only) | `dex_*` | `api/catalog/dex-trading/` |
 | US company financials & SEC filings | `sec_*` | `api/catalog/filings/` |
+| Mobula on-chain wallet / token / market data (80+ chains) — Pro-only | `mobula_*` | `api/catalog/mobula/` |
 
 **Cross-interface mini-flows** (details in the catalog):
 - **SEC**: `sec_cik_lookup` (ticker→10-digit CIK) first → `sec_company_concept` (`cik` + us-gaap `concept`, e.g. `Revenues`, `NetIncomeLoss`, `EarningsPerShareDiluted`) per line item → assemble by period (`fy`/`fp`/`form`). Filings/profile: `sec_submissions`.
@@ -118,7 +123,7 @@ $P ak.py call stock_lhb_detail_em --start_date 20260701 --end_date 20260710 --ro
 
 | Ask | Use |
 |---|---|
-| US equities · options · dark pool · short interest | Layer 1 relay (paid, faster, maintained) |
+| US equities · options · dark pool · short interest | Layer 1 relay (faster, maintained) |
 | crypto · DEX · on-chain · prediction markets · social | Layer 1 relay |
 | A-shares · HK · CN futures · convertible bonds · ETFs | `akdata/` |
 | dragon-tiger list · northbound flows · limit-up pool · shareholder counts | `akdata/` (relay has no equivalent) |
@@ -155,29 +160,11 @@ Everything above is **read-only data**. To **place trades**, use the connectors 
 - **Derivatives**: aggregated/coin endpoints take `symbol=BTC`; single-exchange ones take a pair `BTC USDT` style (`BTCUSDT`) — check the catalog entry.
 - **address_labels / address_risk** use special coin ids (`ETH`, `BNB`, `POL-Polygon`, `ETH-Base`, `TRX`, `SOL`, `SUI` …) — see `api/catalog/address-intel/`.
 
-## Plan & access (free / standard / pro + PAYG balance)
+## Plan & access
 
-Plans: **free / standard / pro** (subscriptions). **PAYG is a pay-as-you-go balance every account has — not a plan.** Free-tier interfaces never consume balance. Premium interfaces need a paid plan (**Standard** = mainstream, **Pro** = everything) — or, on **Free only**, are charged per call against PAYG.
+Most data is **free**. Each account has a plan (`free` / `standard` / `pro`, shown by the Step-0 `/api/account` call); `accessible_providers` there lists the sources this key can call. A few sources are **Pro-only** — e.g. **Mobula** on-chain wallet / token / market data — and return **`403 pro_only`** for non-Pro accounts.
 
-### Upgrade nudge — ONLY when the plan is limited
-
-Decide from the Step-0 `/api/account` result. **Nudge ONLY when:**
-- **Condition A — `plan=="free"` AND `payg_balance==0`**, or
-- **Condition B — `plan=="standard"`** (missing Pro-only sources).
-
-**Otherwise (Pro, or Free with balance) say NOTHING about upgrading.** Surface at most once at each of these two moments — never mid-analysis, never repeated per call:
-1. right after the Step-0 account check;
-2. when a paid interface returns empty / `402` / `403 need_upgrade` (and A or B holds).
-
-One short, sincere line; name the *specific* premium dimensions being missed; match the user's language:
-
-**Condition A** (Free, 0 balance):
-> 💡 **You're on Free with 0 PAYG balance — free data only.** You're blind to derivatives funding, long/short ratios, smart-money flows, address risk, Hyperliquid perps, DEX intel — easy to mistake a fakeout for a breakout. **Top up PAYG or upgrade to Pro.**
-> 👉 https://www.openclawby.com/pricing
-
-**Condition B** (Standard):
-> 💡 **You're on Standard — mainstream covered, but Pro unlocks all premium sources** (cross-exchange derivatives/liquidations, address risk & AML, Hyperliquid perps, DEX intel …) for a complete, cross-checked read.
-> 👉 https://www.openclawby.com/pricing
+**Pro is granted by the Clawby team (app membership) — it is not self-serve and cannot be purchased,** so never suggest the user buy anything. If a Pro-only source is blocked, note it in one short line (which source, what it would have added) and **continue with the data you can access**.
 
 ## Professional analysis reports (PDF)
 
@@ -186,9 +173,9 @@ When the user wants a formal write-up (research report / due-diligence / memo): 
 ## Errors
 
 - **401** invalid/missing key → tell the user to set `CLAWBY_API_KEY`.
-- **403 `need_upgrade`** interface above plan → recommend upgrading (see *Plan & access*), carry on with accessible data.
-- **402** Free plan, PAYG exhausted → top up / upgrade at https://www.openclawby.com/pricing.
-- **429** rate limit → slow down, retry; higher plans have higher limits.
+- **403 `pro_only`** → a Pro-only source (e.g. Mobula) and this account isn't Pro: say so in one short line and carry on with accessible data (Pro can't be bought — don't point to any purchase page).
+- **402** (rare, legacy) → treat that source as unavailable and continue with the others.
+- **429** per-API-key rate limit (~5 requests/sec — `rate_per_sec` in `/api/account`) → slow down and retry.
 - **502 "Upstream HTTP 4xx"** = bad params (missing required / wrong symbol format) → fix against the interface's catalog entry.
 - **Empty `data`** = nothing for that date/symbol (dark pool: try an earlier trading day).
 

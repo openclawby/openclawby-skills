@@ -1,0 +1,36 @@
+# ============================================================================
+# Social data connectors (BYOK)
+# ----------------------------------------------------------------------------
+# Call social / search providers with the USER'S OWN key, fetched at run time
+# from the Clawby Key Vault. Requests go STRAIGHT to the provider — NOT through
+# Clawby's /api/relay, and they are NOT billed as Clawby credits (the user's own
+# provider plan pays). Each provider lives in its own folder:
+# social/<provider>/_index.yaml is that provider's registry + file map.
+# ============================================================================
+version: 1
+
+# --- fetch the provider key from the vault (once per session; keep in memory, never write to disk) ---
+auth:
+  fetch: |
+    curl -s https://api.openclawby.com/api/vault/<provider> -H "X-API-Key: $CLAWBY_API_KEY"
+  response_shape: |
+    { "provider":"<provider>",
+      "keys":[ {"slot":1,"label":"<nickname>","fields":{"apiKey":"<secret>"}} ],
+      "fetched_from":"<your ip>", "fetched_at":"<iso8601>" }
+  notes:
+    - "Pick keys[0].fields.apiKey. Hold it in a shell var only; discard at session end; never log or commit it."
+    - "If the user set a trusted-IP whitelist on their Clawby account, THIS machine's public IP must be on it; and their vault retrieval switch must be ON — otherwise the fetch is refused."
+  errors:
+    - "403 {error:ip_not_allowed, your_ip} — this machine's IP is not in the user's whitelist."
+    - "403 {error:vault_disabled} — the user turned their vault retrieval switch OFF."
+    - "404 {error:not_found} — the user has stored no key for this provider."
+    - "401 — missing/invalid CLAWBY_API_KEY. 429 — vault fetch rate limit."
+
+providers:
+  - name: desearch
+    vault_slug: desearch
+    dir: desearch/
+    registry: desearch/_index.yaml
+    base_url: https://api.desearch.ai
+    about: "X/Twitter · TikTok · Facebook · Instagram · Web/SERP · AI search · People search · network stats — 51 endpoints."
+  # More social providers will be added here, each in its own folder under social/.

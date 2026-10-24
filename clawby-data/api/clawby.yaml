@@ -570,10 +570,9 @@ apis:
     name: "Screen thousands of stocks on numerous fields"
     asset_classes: "equity"
     data_types: "screener"
-    description: "Screen thousands of stocks on numerous fields — Data is delayed during trial. You can activate your subscription and get live data by clicking \"Skip Trial\" on the Premium tab of your account."
+    description: "Screen thousands of stocks on numerous fields"
     docs: |
       Screen thousands of stocks on numerous fields
-      Data is delayed during trial. You can activate your subscription and get live data by clicking "Skip Trial" on the Premium tab of your account.
       GET /screener/stocks/
       Parameters (* = required):
         - view_cols (string): List of Column values from /screener/stocks/columns/. ex: display,reg_price,reg_date,reg_change_pct,market_cap,reg_volume,name,industry

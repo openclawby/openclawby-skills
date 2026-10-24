@@ -12,6 +12,13 @@
 # moves funds, the agent MUST confirm with the user first.
 # Secrets (exchange API keys, wallet private keys) live ONLY in environment
 # variables or the local/ directory — never in this folder.
+#
+# KEY VAULT (optional alternative to env vars): a venue's API keys can ALSO be fetched at run
+# time from the user's Clawby Key Vault — GET https://api.openclawby.com/api/vault/<venue> with
+# header `X-API-Key: $CLAWBY_API_KEY` (<venue> = an executor `name` below, e.g. binance, okx).
+# Same BYOK pattern as rpc/ — auth flow, response shape, IP-whitelist + error codes: see
+# rpc/index.yaml. Map `keys[*].fields` onto the env vars in each entry's `auth` line; keep
+# the values in memory / the command's environment only, never on disk or in this folder.
 version: 8
 executors:
   - name: binance

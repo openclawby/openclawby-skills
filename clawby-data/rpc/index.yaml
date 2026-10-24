@@ -1,0 +1,80 @@
+# ============================================================================
+# BYOK RPC connectors registry
+# ----------------------------------------------------------------------------
+# Make blockchain RPC calls with the USER'S OWN node key (Ankr / Alchemy / BlockPI),
+# fetched at run time from the Clawby Key Vault. These calls go STRAIGHT to the
+# provider — NOT through Clawby's /api/relay, and they do NOT consume Clawby credits.
+#
+# Files in this folder:
+#   evm-methods.md      shared standard EVM JSON-RPC catalog (eth_*/net_*/web3_*/trace_*/debug_*)
+#                       — applies to EVERY EVM chain on ALL three providers
+#   ankr.md             Ankr: full chain list (EVM + non-EVM), endpoint, Advanced/Multichain API (ankr_*)
+#   alchemy.md          Alchemy: full network list, endpoint, Enhanced APIs (alchemy_*/NFT/Transfers/Prices/Trace/subs)
+#   blockpi.md          BlockPI: full chain list, endpoint, RU metering
+#   non-evm/<chain>.md  chains whose RPC is NOT Ethereum-style: solana, tron, ton, sui, xrp, aptos, near
+# ============================================================================
+version: 2
+
+# --- AUTH: fetch the key from the vault (once per session; keep in memory, never write to disk) ---
+# Needs CLAWBY_API_KEY (the same key this skill already uses). If the user set a trusted-IP
+# whitelist on their Clawby account, THIS machine's public IP must be on it; and their vault
+# "retrieval switch" must be ON — otherwise the fetch is refused.
+auth:
+  fetch: |
+    curl -s https://api.openclawby.com/api/vault/<provider> -H "X-API-Key: $CLAWBY_API_KEY"
+  response_shape: |
+    { "provider": "<provider>",
+      "keys": [ { "slot": 1, "label": "<nickname>", "fields": { "apiKey": "<secret>" } } ],
+      "fetched_from": "<your ip>", "fetched_at": "<iso8601>" }
+  notes:
+    - "A provider may hold up to 3 keys (slots). Pick one (e.g. keys[0]); keys[*].fields.apiKey is the node key."
+    - "Hold the key in a shell var / env only. It ends up IN the endpoint URL path, so treat the whole URL as a secret — never echo, log, or commit it."
+    - "Discard the key when the session ends. Do NOT cache it to a file."
+  errors:
+    - "403 {error:ip_not_allowed, your_ip} — this machine's IP is not in the user's whitelist."
+    - "403 {error:vault_disabled} — the user turned their vault retrieval switch OFF (blocks all providers)."
+    - "404 {error:not_found} — the user has stored no key for this provider."
+    - "401 — missing/invalid CLAWBY_API_KEY. 429 — vault fetch rate limit."
+
+# --- JSON-RPC primer (standard EVM chains; non-EVM chains differ — see non-evm/<chain>.md) ---
+jsonrpc:
+  method: POST
+  headers: { "Content-Type": "application/json" }
+  body: '{"jsonrpc":"2.0","method":"<method>","params":[...],"id":1}'
+  batch: 'send a JSON array of request objects; the reply is an array — MATCH each result to its request by `id` (order is NOT guaranteed; some providers cap batch size)'
+  response: '{"jsonrpc":"2.0","id":1,"result":<...>}  or  {"jsonrpc":"2.0","id":1,"error":{"code":<int>,"message":"<str>"}}'
+  full_method_reference: "evm-methods.md — the complete eth_*/net_*/web3_*/trace_*/debug_* catalog with params, request bodies and response examples (every EVM chain, all three providers)"
+  common_methods:
+    - "eth_blockNumber · eth_getBalance · eth_call · eth_getLogs · eth_getTransactionReceipt · eth_gasPrice · eth_sendRawTransaction · eth_chainId — full list + examples in evm-methods.md"
+  gotchas:
+    - "Numeric params/results are hex strings (0x…). Block tags: 'latest' / 'pending' / 'earliest' / 'safe' / 'finalized' / 0x<height>."
+    - "eth_getLogs ranges are capped per provider/plan (a few thousand blocks, as low as 10 on some free tiers) — page the range."
+    - "Archive-state reads (old blocks via eth_call/eth_getBalance at a historical block) may need an archive-enabled plan."
+    - "Each provider names chains DIFFERENTLY — use the slug table in that provider's guide, not the chain's common name."
+    - "Non-EVM chains (solana/tron/ton/sui/xrp/aptos/near) do NOT speak eth_* — open non-evm/<chain>.md."
+
+providers:
+  - name: ankr
+    guide: ankr.md
+    endpoint: "https://rpc.ankr.com/{chain}/{apiKey}"
+    note: "ONE key works across all chains; {chain} = Ankr slug (eth, bsc, polygon, arbitrum, …), NOT the common name. Non-EVM too (solana, sui, aptos, near, tron_jsonrpc, xrp_mainnet, ton_api_v2). Advanced/Multichain API (ankr_*) lives on https://rpc.ankr.com/multichain/{apiKey}. Some chains are Premium-plan-only."
+  - name: alchemy
+    guide: alchemy.md
+    endpoint: "https://{network}.g.alchemy.com/v2/{apiKey}"
+    note: "ONE key works across every network ENABLED for that Alchemy app (only the subdomain changes); a network not enabled → HTTP 403 -32600. The key may sit in the URL path OR an `Authorization: Bearer <apiKey>` header (keeps it out of the URL). Enhanced APIs (alchemy_*/NFT/Transfers/Prices/Trace/subscriptions) are Alchemy-specific."
+  - name: blockpi
+    guide: blockpi.md
+    endpoint: "https://{chain}.blockpi.network/v1/rpc/{apiKey}"
+    note: "Key is PER chain-endpoint (you pick the network when creating it) — only the RU balance is shared across the account. {chain} subdomain (ethereum, bsc, polygon, …). Different methods cost different RU."
+
+# --- non-EVM: own RPC protocols; provider SUPPORT VARIES — confirm in each provider file ---
+non_evm:
+  files: [solana, tron, ton, sui, xrp, aptos, near]
+  support:
+    - "solana — Ankr / Alchemy / BlockPI. Solana JSON-RPC (commitment + encoding params are the big gotcha)."
+    - "tron — Ankr (JSON-RPC + HTTP FullNode REST) / Alchemy (REST only). Addresses base58 (T…) vs hex (41…), 6 decimals."
+    - "ton — Ankr (ton_api_v2) / BlockPI. TON Center HTTP API + a JSON-RPC wrapper."
+    - "sui — JSON-RPC DEPRECATED/removed by providers in late-2026; use gRPC/GraphQL. Full reference + migration map in sui.md."
+    - "xrp — Ankr ONLY (xrp_mainnet, Premium, ~2wk history). XRPL body is {\"method\":…,\"params\":[{…}]} — NOT the jsonrpc-2.0 envelope."
+    - "aptos — Ankr / Alchemy / BlockPI. REST API (not JSON-RPC); the endpoint shape differs per provider — see aptos.md."
+    - "near — Ankr (Premium) / BlockPI. JSON-RPC via the `query` method + a request_type; args are base64 JSON."

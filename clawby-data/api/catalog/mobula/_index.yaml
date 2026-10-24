@@ -6,8 +6,9 @@
 category_group: "Mobula (on-chain wallet · token · market data)"
 
 plan: >
-  ⚠️ PRO-ONLY. Mobula interfaces are available only to Pro subscribers.
-  Standard / Pay-as-you-go / Free receive HTTP 403 (need_upgrade, reason=pro_only).
+  ⚠️ PRO-ONLY. Mobula interfaces are available only to Pro accounts (Pro is granted by the
+  Clawby team — not self-serve / not purchasable). Non-Pro accounts receive HTTP 403
+  (reason=pro_only); if blocked, note it briefly and continue with accessible data.
 
 chainId_format: >
   ⚠️ #1 PITFALL — the chainId parameter format is NOT the same across endpoint

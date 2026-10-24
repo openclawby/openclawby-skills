@@ -1,0 +1,34 @@
+# ============================================================================
+# Desearch (BYOK) — X/Twitter · TikTok · Facebook · Instagram · Web · AI · People search
+# Direct to https://api.desearch.ai with the USER'S OWN Desearch key (from the Clawby vault).
+# NOT via Clawby /api/relay, NOT billed as Clawby credits — the user's own Desearch plan pays.
+# ============================================================================
+provider: desearch
+base_url: https://api.desearch.ai
+openapi: "https://www.desearch.ai/openapi.json  (OpenAPI 3.1, v1.0.0, 51 endpoints)"
+
+auth:
+  scheme: "apiKey in header"
+  header: "Authorization: <DESEARCH_KEY>"   # the RAW key — NOT prefixed with 'Bearer'
+  get_key: |
+    RESP=$(curl -s https://api.openclawby.com/api/vault/desearch -H "X-API-Key: $CLAWBY_API_KEY")
+    DESEARCH_KEY=$(printf '%s' "$RESP" | python3 -c 'import sys,json;print(json.load(sys.stdin)["keys"][0]["fields"]["apiKey"])')
+    # trusted-IP whitelist + vault retrieval switch rules + error shapes: see ../index.yaml
+
+conventions:
+  - "Every endpoint is under https://api.desearch.ai with header `Authorization: <DESEARCH_KEY>`."
+  - "GET endpoints take query params; POST endpoints take a JSON body with `Content-Type: application/json`. Responses are application/json."
+  - "Calls are billed in USD against the user's OWN Desearch plan (not Clawby credits). Each response reports its cost in headers `X-Desearch-Cost-Usd` / `X-Desearch-Usage-Count` / `X-Desearch-Service` (POST /search also returns `cost_usd`/`usage_count` in the body); dollar rates live at desearch.ai/pricing, not in the spec. Some failures (503, 404 unknown post, 422 bad id) are not charged."
+  - "The key is a header value (not in the URL), but still never log or commit it."
+
+files:
+  - file: overview.md
+    covers: "Unified POST /search · AI Search (3) · Web Search / SERP + Extract (3) · Network Stats (3)"
+  - file: x.md
+    covers: "X / Twitter Search (9): search, fetch-by-URLs, post-by-id, by-user, retweeters, user posts, replies, replies-for-post, trends"
+  - file: platforms.md
+    covers: "TikTok (7) + Facebook (6) + Instagram (6) — parallel shape: search / post / profile / profile posts / comments / hashtag / trending"
+  - file: people.md
+    covers: "People Search (13): X / YouTube / LinkedIn / TikTok creator search + the async task lifecycle (profiles, tasks, results, export, pause/resume/cancel)"
+
+total_endpoints: 51
