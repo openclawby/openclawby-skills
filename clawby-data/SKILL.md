@@ -51,6 +51,7 @@ clawby-data/
 ├── rpc/                ← BYOK RPC (EVM + non-EVM; Ankr/Alchemy/BlockPI) using the user's OWN key from the Key Vault; registry rpc/index.yaml
 ├── social/             ← BYOK social & search (Desearch, TwexAPI) using the user's OWN key; registry social/index.yaml
 ├── llm/                ← BYOK LLM APIs (DeepSeek/OpenAI/Claude/Qwen/Kimi/GLM/OpenRouter) using the user's OWN key; registry llm/index.yaml
+├── custom/             ← BYOK for user-defined vault providers; first use records the API into local/custom-apis/ for quick reuse; registry custom/index.yaml
 ├── report/             ← PDF report guide + stylesheet
 ├── data/               ← misc reference data
 └── local/              ← local state / caches; the ONLY folder preserved across updates
@@ -65,6 +66,8 @@ Flow: fetch the key once (`GET https://api.openclawby.com/api/vault/<provider>` 
 **Social & search data** uses the same vault pattern — `social/` holds BYOK connectors for social/search providers: **Desearch** (`social/desearch/` — X/Twitter, TikTok, Facebook, Instagram, Web/SERP, AI search, People search; raw `Authorization` key) and **TwexAPI** (`social/twexapi/` — deep X/Twitter: advanced search, users, tweets/replies, followers & following, communities, lists, trending, sentiment; `Authorization: Bearer` token). Fetch the user's key from `/api/vault/<provider>`, call the provider directly (billed to the user's own provider plan — never Clawby credits), and start at `social/index.yaml` (each provider's `_index.yaml` carries its base URL, auth and file map).
 
 **LLM APIs** use the same vault pattern — `llm/` holds BYOK connectors for **DeepSeek, OpenAI, Claude (Anthropic), Qwen, Kimi, GLM and OpenRouter**. Fetch the user's key from `/api/vault/<provider>`, then call the model API directly (billed to the user's own LLM plan — never Clawby credits). Six are OpenAI-compatible (shared `POST {base}/chat/completions` spec — streaming, tools, params — in `llm/index.yaml`); **Claude** uses the Anthropic Messages API (`llm/claude.md`). Per-provider base URL + current model ids + quirks: `llm/<provider>.md`.
+
+**Custom / user-defined providers** — for any key the user stored under the vault's "custom" entry (their own slug + field names), follow `custom/index.yaml`: on first use, look up that provider's API doc and record how to call it into `local/custom-apis/<slug>.md` (local/ persists across updates), then reuse that note next time instead of re-researching.
 
 ## Step 0 · First use in a session
 

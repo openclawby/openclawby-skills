@@ -1,5 +1,5 @@
 {
-  "version": "1.0.53",
+  "version": "1.0.54",
   "base_url": "https://www.openclawby.com/clawby-skill/",
   "managed": [
     "SKILL.md",
@@ -36,6 +36,7 @@
     "llm/kimi.md",
     "llm/glm.md",
     "llm/openrouter.md",
+    "custom/index.yaml",
     "api/index.yaml",
     "api/clawby.yaml",
     "api/catalog/_index.yaml",

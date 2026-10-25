@@ -1,0 +1,66 @@
+# ============================================================================
+# Custom BYOK keys — user-defined providers not in the preset list
+# ----------------------------------------------------------------------------
+# The Clawby Key Vault lets a user store a key for ANY provider via the "custom"
+# entry: they choose their own slug and their own field names. This folder is the
+# protocol for USING such a key — and for REMEMBERING how that provider's API
+# works, so you don't re-learn it on every call. Requests go STRAIGHT to the
+# provider — NOT through Clawby's /api/relay, and are NOT billed as Clawby credits.
+# ============================================================================
+version: 1
+
+# --- fetch a custom key (same vault endpoint; fields are USER-NAMED → inspect them) ---
+auth:
+  fetch: |
+    RESP=$(curl -s https://api.openclawby.com/api/vault/<slug> -H "X-API-Key: $CLAWBY_API_KEY")
+  list_fields: |
+    # Fields are whatever the user named them (not a fixed schema) — list the NAMES (not values) first:
+    printf '%s' "$RESP" | python3 -c 'import sys,json;print(list(json.load(sys.stdin)["keys"][0]["fields"]))'
+    # then read a specific one:
+    printf '%s' "$RESP" | python3 -c 'import sys,json;print(json.load(sys.stdin)["keys"][0]["fields"]["<field>"])'
+  notes:
+    - "<slug> is the user's chosen slug (6–16 lowercase a–z0–9). A provider may hold up to 3 keys (slots); keys[0] is the first."
+    - "A field may be an API key, a secret, a base URL, or even the API's doc link — don't assume names; inspect them."
+    - "Trusted-IP whitelist + vault retrieval switch + error shapes: see rpc/index.yaml. Hold values in memory only; never log/commit; discard at session end."
+
+# --- THE RULE: learn each custom API once, reuse the note forever ---
+protocol:
+  on_first_use: >
+    The FIRST time you use a custom key for a given <slug>, check local/custom-apis/<slug>.md.
+    If it is MISSING: (1) work out how that provider's API is called — PREFER a doc-link / base-URL
+    field stored in the vault entry (look for a field whose value is a URL); if there is none, ASK
+    the user for the API's documentation URL (or web-search the provider name); (2) WRITE
+    local/custom-apis/<slug>.md using record_template below (fill in base URL, auth, call pattern,
+    the doc link, a working example). THEN make the call.
+  on_later_use: >
+    Read local/custom-apis/<slug>.md FIRST — it already has the base URL, auth and a working example,
+    so you can call the API immediately without re-researching or re-asking.
+  keep_it_current: >
+    If a call reveals the note is wrong/stale (endpoint moved, param renamed), update
+    local/custom-apis/<slug>.md and bump its "verified" date.
+  where: >
+    Notes live in local/custom-apis/ — local/ is the ONLY folder preserved across skill updates
+    (keep_local in manifest.json), so these user-specific API notes survive updates. This file
+    (custom/index.yaml) is the shipped protocol; the per-slug notes are created by you at run time.
+
+# --- template to write into local/custom-apis/<slug>.md on first use ---
+record_template: |
+  # <Provider name> — custom API (vault slug: <slug>)
+  - doc: <official API documentation URL>          # the link you looked up — future-you reads this first
+  - base_url: <https://api.example.com/v1>
+  - auth: <header "Authorization: Bearer <key>" | header "x-api-key: <key>" | query "?api_key=<key>">
+  - vault fields: <the field names stored, e.g. apiKey / secret / baseUrl / docUrl>
+  - call pattern: <HTTP method + path + request body / params shape>
+  - example:
+    ```bash
+    RESP=$(curl -s https://api.openclawby.com/api/vault/<slug> -H "X-API-Key: $CLAWBY_API_KEY")
+    KEY=$(printf '%s' "$RESP" | python3 -c 'import sys,json;print(json.load(sys.stdin)["keys"][0]["fields"]["<field>"])')
+    curl -s "<base_url>/<path>" -H "<auth header built from KEY>" -d '<body>'
+    ```
+  - gotchas: <rate limits, required params, response shape, pagination, anything you learned>
+  - verified: <YYYY-MM-DD you confirmed the call worked>
+
+example_flow:
+  - "User stored a key under slug `weatherapi` with fields {apiKey, docUrl: https://.../docs}."
+  - "First use: local/custom-apis/weatherapi.md absent → read docUrl field → write the note → call."
+  - "Next day: read local/custom-apis/weatherapi.md → call immediately."
