@@ -1,0 +1,93 @@
+# ============================================================================
+# LLM connectors registry (BYOK)
+# ----------------------------------------------------------------------------
+# Call large-language-model APIs with the USER'S OWN key, fetched at run time
+# from the Clawby Key Vault. Requests go STRAIGHT to the provider — NOT through
+# Clawby's /api/relay, and they are NOT billed as Clawby credits (the user's own
+# LLM account/plan pays). Per-provider base URL, current models, quirks and
+# examples: open llm/<provider>.md.
+# ============================================================================
+version: 1
+
+# --- fetch the provider key from the vault (once per session; keep in memory, never write to disk) ---
+auth:
+  fetch: |
+    curl -s https://api.openclawby.com/api/vault/<provider> -H "X-API-Key: $CLAWBY_API_KEY"
+  response_shape: |
+    { "provider":"<provider>",
+      "keys":[ {"slot":1,"label":"<nickname>","fields":{"apiKey":"<secret>"}} ],
+      "fetched_from":"<your ip>", "fetched_at":"<iso8601>" }
+  notes:
+    - "Pick keys[0].fields.apiKey. Hold it in a shell var / env only; discard at session end; never log or commit it."
+    - "If the user set a trusted-IP whitelist, THIS machine's public IP must be on it; the vault retrieval switch must be ON."
+  errors:
+    - "403 ip_not_allowed / 403 vault_disabled / 404 not_found / 401 bad CLAWBY_API_KEY / 429 vault rate limit (shapes: see rpc/index.yaml)."
+
+# --- CALLING CONVENTION 1: OpenAI-compatible (deepseek · openai · qwen · kimi · glm · openrouter) ---
+# Every one of these exposes POST {base_url}/chat/completions with the OpenAI schema.
+# Only the base_url, the model ids and small quirks differ — those are in each llm/<provider>.md.
+openai_compatible:
+  endpoint: "POST {base_url}/chat/completions"
+  headers:
+    Authorization: "Bearer <API_KEY>"
+    Content-Type: "application/json"
+  request: |
+    {
+      "model": "<model-id>",                 # from the provider's llm/<provider>.md
+      "messages": [
+        {"role": "system",    "content": "You are a helpful assistant."},
+        {"role": "user",      "content": "Hello"},
+        {"role": "assistant", "content": "Hi!"}          # prior turns, optional
+      ],
+      "temperature": 0.7,                     # 0–2; omit to use the model default
+      "max_tokens": 1024,                     # cap on the completion
+      "top_p": 1,
+      "stream": false,                        # true → SSE stream (see below)
+      "stop": ["\n\n"],                       # optional stop sequences
+      "response_format": {"type": "json_object"},   # optional JSON mode (provider-dependent)
+      "tools": [ ... ], "tool_choice": "auto"       # optional function calling (see below)
+    }
+  response: |
+    { "id":"...", "object":"chat.completion", "model":"<model-id>",
+      "choices":[ { "index":0,
+                    "message":{"role":"assistant","content":"<text>"},
+                    "finish_reason":"stop" } ],
+      "usage":{"prompt_tokens":N,"completion_tokens":N,"total_tokens":N} }
+  read_the_answer: "choices[0].message.content"
+  streaming: >
+    Set "stream": true. The body is a text/event-stream of `data: {chunk}` lines; each chunk's
+    delta is choices[0].delta.content (append them). The stream ends with a literal `data: [DONE]`.
+    curl: add --no-buffer; parse lines starting with `data: `.
+  tool_calling: >
+    Pass "tools":[{"type":"function","function":{"name","description","parameters":<JSON-Schema>}}].
+    When the model calls one, the response message has tool_calls:[{id,function:{name,arguments(JSON string)}}]
+    and finish_reason="tool_calls". Run the tool, then append a message {"role":"tool","tool_call_id":<id>,
+    "content":<result>} and call again. (A few providers vary — see the provider file.)
+  curl_example: |
+    curl -s "$BASE_URL/chat/completions" -H "Authorization: Bearer $API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"model":"<model-id>","messages":[{"role":"user","content":"Hello"}]}'
+  gotchas:
+    - "base_url already includes the version segment where the provider needs it (e.g. .../v1, .../paas/v4, .../compatible-mode/v1) — do NOT add another /v1."
+    - "Reasoning models may return an extra field (e.g. DeepSeek reasoning_content) and ignore/forbid temperature — see the provider file (several current models REJECT temperature/top_p)."
+    - "Token/credit cost is billed to the USER's own provider account; watch rate limits per their plan (429)."
+
+# --- CALLING CONVENTION 2: Anthropic Messages API (claudecode) — NOT OpenAI-compatible ---
+anthropic:
+  note: >
+    The `claudecode` key is an Anthropic API key. Anthropic uses its own Messages API
+    (POST https://api.anthropic.com/v1/messages, headers x-api-key + anthropic-version,
+    system is a top-level field, content is an array of blocks). Full spec + current Claude
+    model ids: llm/claude.md. (The same key also works as ANTHROPIC_API_KEY for the Claude Code CLI.)
+
+providers:
+  - { name: deepseek,   vault_slug: deepseek,   env: DEEPSEEK_API_KEY,   convention: openai-compatible, base_url: "https://api.deepseek.com",                              guide: deepseek.md }
+  - { name: openai,     vault_slug: openai,     env: OPENAI_API_KEY,     convention: openai-compatible, base_url: "https://api.openai.com/v1",                           guide: openai.md }
+  - { name: qwen,       vault_slug: qwen,       env: DASHSCOPE_API_KEY,  convention: openai-compatible, base_url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1 (intl) · dashscope.aliyuncs.com (cn)", guide: qwen.md }
+  - { name: kimi,       vault_slug: kimi,       env: MOONSHOT_API_KEY,   convention: openai-compatible, base_url: "https://api.moonshot.ai/v1 (intl) · api.moonshot.cn/v1 (cn)", guide: kimi.md }
+  - { name: glm,        vault_slug: glm,        env: ZHIPU_API_KEY,      convention: openai-compatible, base_url: "https://open.bigmodel.cn/api/paas/v4 (cn) · https://api.z.ai/api/paas/v4 (intl)", guide: glm.md }
+  - { name: openrouter, vault_slug: openrouter, env: OPENROUTER_API_KEY, convention: openai-compatible, base_url: "https://openrouter.ai/api/v1",                         guide: openrouter.md }
+  - { name: claudecode, vault_slug: claudecode, env: ANTHROPIC_API_KEY,  convention: anthropic,         base_url: "https://api.anthropic.com",                           guide: claude.md }
+  # Base URLs / model ids here are a snapshot — the per-provider file is authoritative and current.
+
+total_providers: 7

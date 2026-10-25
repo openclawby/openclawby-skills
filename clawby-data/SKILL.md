@@ -50,18 +50,21 @@ clawby-data/
 ├── exec/               ← trade-execution connectors; registry exec/index.yaml
 ├── rpc/                ← BYOK RPC (EVM + non-EVM; Ankr/Alchemy/BlockPI) using the user's OWN key from the Key Vault; registry rpc/index.yaml
 ├── social/             ← BYOK social & search (Desearch, TwexAPI) using the user's OWN key; registry social/index.yaml
+├── llm/                ← BYOK LLM APIs (DeepSeek/OpenAI/Claude/Qwen/Kimi/GLM/OpenRouter) using the user's OWN key; registry llm/index.yaml
 ├── report/             ← PDF report guide + stylesheet
 ├── data/               ← misc reference data
 └── local/              ← local state / caches; the ONLY folder preserved across updates
 ```
 
-## Your own RPC & social data via the Key Vault (BYOK)
+## Your own RPC / social / LLM keys via the Key Vault (BYOK)
 
 `rpc/` lets you make EVM JSON-RPC calls with the **user's own** Ankr / Alchemy / BlockPI node key, fetched at run time from the Clawby **Key Vault**. These calls go **straight to the provider — not through Clawby `/api/relay`, and they do NOT use Clawby credits**.
 
 Flow: fetch the key once (`GET https://api.openclawby.com/api/vault/<provider>` with `CLAWBY_API_KEY`; if the user set a trusted-IP whitelist, this machine's public IP must be on it, and their vault retrieval switch must be ON) → keep it **in memory only, never write it to disk** → build the provider's endpoint URL and POST JSON-RPC. Start at `rpc/index.yaml` (auth flow + JSON-RPC primer + file map + security). Per-provider endpoint template, full chain/network lists and enhanced methods: `rpc/<provider>.md` (ankr/alchemy/blockpi). The complete standard **EVM JSON-RPC method catalog** (params + request/response for eth_*/net_*/web3_*/trace_*/debug_*): `rpc/evm-methods.md`. Non-EVM chains — Solana, TRON, TON, Sui, XRP, Aptos, NEAR — each have their own method guide in `rpc/non-evm/`. The fetched key sits inside the endpoint URL, so treat the whole URL as a secret.
 
 **Social & search data** uses the same vault pattern — `social/` holds BYOK connectors for social/search providers: **Desearch** (`social/desearch/` — X/Twitter, TikTok, Facebook, Instagram, Web/SERP, AI search, People search; raw `Authorization` key) and **TwexAPI** (`social/twexapi/` — deep X/Twitter: advanced search, users, tweets/replies, followers & following, communities, lists, trending, sentiment; `Authorization: Bearer` token). Fetch the user's key from `/api/vault/<provider>`, call the provider directly (billed to the user's own provider plan — never Clawby credits), and start at `social/index.yaml` (each provider's `_index.yaml` carries its base URL, auth and file map).
+
+**LLM APIs** use the same vault pattern — `llm/` holds BYOK connectors for **DeepSeek, OpenAI, Claude (Anthropic), Qwen, Kimi, GLM and OpenRouter**. Fetch the user's key from `/api/vault/<provider>`, then call the model API directly (billed to the user's own LLM plan — never Clawby credits). Six are OpenAI-compatible (shared `POST {base}/chat/completions` spec — streaming, tools, params — in `llm/index.yaml`); **Claude** uses the Anthropic Messages API (`llm/claude.md`). Per-provider base URL + current model ids + quirks: `llm/<provider>.md`.
 
 ## Step 0 · First use in a session
 

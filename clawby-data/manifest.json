@@ -1,5 +1,5 @@
 {
-  "version": "1.0.52",
+  "version": "1.0.53",
   "base_url": "https://www.openclawby.com/clawby-skill/",
   "managed": [
     "SKILL.md",
@@ -28,6 +28,14 @@
     "social/twexapi/followers.md",
     "social/twexapi/communities-lists.md",
     "social/twexapi/trending.md",
+    "llm/index.yaml",
+    "llm/deepseek.md",
+    "llm/openai.md",
+    "llm/claude.md",
+    "llm/qwen.md",
+    "llm/kimi.md",
+    "llm/glm.md",
+    "llm/openrouter.md",
     "api/index.yaml",
     "api/clawby.yaml",
     "api/catalog/_index.yaml",
