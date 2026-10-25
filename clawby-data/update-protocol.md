@@ -14,7 +14,7 @@ On the **first use of the skill in a session**, run **Step B** (version check). 
 
 1. Read `exec/index.yaml` and find that venue's entry.
 2. Run its `check` command (e.g. `binance-cli --version`).
-3. If the tool is missing, **tell the user what will be installed** (a global npm package, named in the entry's `install` command) and run it. Install only that one venue's tool — never all of them.
+3. If the tool is missing, **tell the user what will be installed** (a global npm package, a pip package, or an installer script — whatever the entry's `install` command runs) and run it. Install only that one venue's tool — never all of them.
 4. `kind: sdk` connectors likewise install per-project, on demand.
 
 Rationale: avoids pulling several global npm packages onto the machine of a user who only wants data, and shrinks the supply-chain surface (managed files are fetched without signature verification — see `exec/index.yaml`).

@@ -144,10 +144,10 @@ Everything above is **read-only data**. To **place trades**, use the connectors 
 | Venue | Guide | Tool |
 |---|---|---|
 | Binance (spot/futures/margin/options/earn) | `exec/binance/binance.md` | `binance-cli` |
-| Bitget (spot/futures/copy-trading, `--paper-trading`) | `exec/bitget/bitget.md` | `bgc` |
+| Bitget (spot/margin/futures UTA, `--paper-trading`) | `exec/bitget/bitget.md` | `bgc` |
 | OKX (spot/swap/futures/bots, `--demo`) | `exec/okx/okx.md` | `okx` |
-| Polymarket (CLOB orders/CTF, own wallet key) | `exec/polymarket/polymarket.md` | clob-client SDK |
-| GMGN (on-chain swap/TP-SL/launch, SOL/BSC/Base/ETH) | `exec/gmgn/gmgn.md` | `gmgn-cli` |
+| Polymarket (CLOB V2 orders, own wallet key) | `exec/polymarket/polymarket.md` | `@polymarket/client` SDK |
+| GMGN (on-chain swap/TP-SL/launch, 9 chains) | `exec/gmgn/gmgn.md` | `gmgn-cli` |
 
 **Rule for any `risk: high` action** (order / transfer / withdrawal): restate the order — venue · pair · side · size · price type — show the exact command, get the user to type **`CONFIRM`**, prefer testnet when unsure. Read-only queries need no confirmation.
 
