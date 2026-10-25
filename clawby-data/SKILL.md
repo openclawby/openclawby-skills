@@ -52,6 +52,7 @@ clawby-data/
 ├── social/             ← BYOK social & search (Desearch, TwexAPI) using the user's OWN key; registry social/index.yaml
 ├── llm/                ← BYOK LLM APIs (DeepSeek/OpenAI/Claude/Qwen/Kimi/GLM/OpenRouter) using the user's OWN key; registry llm/index.yaml
 ├── custom/             ← BYOK for user-defined vault providers; first use records the API into local/custom-apis/ for quick reuse; registry custom/index.yaml
+├── account/            ← account self-service (email login → key · usage · Key Vault management) via /api/self/*; registry account/index.yaml
 ├── report/             ← PDF report guide + stylesheet
 ├── data/               ← misc reference data
 └── local/              ← local state / caches; the ONLY folder preserved across updates
@@ -68,6 +69,10 @@ Flow: fetch the key once (`GET https://api.openclawby.com/api/vault/<provider>` 
 **LLM APIs** use the same vault pattern — `llm/` holds BYOK connectors for **DeepSeek, OpenAI, Claude (Anthropic), Qwen, Kimi, GLM and OpenRouter**. Fetch the user's key from `/api/vault/<provider>`, then call the model API directly (billed to the user's own LLM plan — never Clawby credits). Six are OpenAI-compatible (shared `POST {base}/chat/completions` spec — streaming, tools, params — in `llm/index.yaml`); **Claude** uses the Anthropic Messages API (`llm/claude.md`). Per-provider base URL + current model ids + quirks: `llm/<provider>.md`.
 
 **Custom / user-defined providers** — for any key the user stored under the vault's "custom" entry (their own slug + field names), follow `custom/index.yaml`: on first use, look up that provider's API doc and record how to call it into `local/custom-apis/<slug>.md` (local/ persists across updates), then reuse that note next time instead of re-researching.
+
+## Account self-service (manage the user's Clawby account)
+
+`account/` lets you manage the user's **own** Clawby account from the agent — everything scoped to the caller's own key, never cross-account. If there is no `CLAWBY_API_KEY` (or `GET /api/account` returns 401), bootstrap it: email the user a code (`POST /api/account/email-code`), exchange it for their key (`POST /api/account/email-login`), and keep the key **in memory only**. Then read the account (`GET /api/account` → plan, membership, EVM wallet, email; usage via `GET /api/self/usage`) and manage the **Key Vault** — add/edit/delete interface keys, the trusted-IP whitelist, the retrieval master switch — via `/api/self/*`. Full flow + endpoints: `account/index.yaml`; vault management: `account/vault.md`. **Confirm with the user before any destructive change** (deleting a key or IP, turning retrieval off).
 
 ## Step 0 · First use in a session
 

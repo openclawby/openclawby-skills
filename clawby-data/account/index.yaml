@@ -1,0 +1,46 @@
+# ============================================================================
+# Account self-service — manage the user's OWN Clawby account from the agent.
+# Uses the user's Clawby API key (X-API-Key). When there is NO key yet, bootstrap
+# via email (code → login/register) to retrieve it. Everything under /api/self/*
+# acts ONLY on the caller's own account (identity is derived from the key; any
+# address passed in the body/query is ignored → no cross-account access).
+# ============================================================================
+version: 1
+base_url: https://api.openclawby.com
+
+# --- COLD START: no Clawby key yet → get it via email (login OR auto-register) ---
+bootstrap:
+  when: "No CLAWBY_API_KEY in the session, or GET /api/account returns 401."
+  steps:
+    - "Ask the user for their email → POST /api/account/email-code {email}. A 6-digit code is emailed (expires ~10 min). Rate-limited: 60s cooldown + 5/hour per email, 10/hour per IP."
+    - "Ask the user for the code → POST /api/account/email-login {email, code} → {api_key, address, email, wallet_address, plan, app_member, created}."
+    - "If the email is NEW, the response is {needsUsername:true}: ask the user for a username (2-32 letters/digits), then resend POST /api/account/email-login {email, code, username} with the SAME code."
+    - "Store the returned api_key in the session env var CLAWBY_API_KEY — IN MEMORY ONLY, never write it to a file, cache or log. Use it for everything below."
+  security: >
+    Email access = account access. The code lets the agent retrieve the user's Clawby key, and that
+    key unlocks the Key Vault (exchange / wallet / LLM secrets). Only run this for the real owner of
+    the account, and never for someone else's email.
+
+auth:
+  header: "X-API-Key: $CLAWBY_API_KEY"   # the user's Clawby key (pk_...). Also accepts Authorization: Bearer pk_...
+  scope: "Every /api/account and /api/self/* call acts on THIS key's own account only."
+
+# --- read: account + usage ---
+endpoints:
+  account_info: |
+    GET /api/account  → {plan, plan_name, plan_expires_at, payg_balance, used_total,
+                         rate_per_min, rate_per_sec, accessible_providers, free_providers,
+                         app_member, app_member_until, address, wallet_address, email, username, is_admin}
+    # address = account id (wallet addr, or em_… for email accounts); wallet_address = bound EVM wallet (may be null);
+    # membership = app_member (bool) + app_member_until; plan = free / standard / pro / admin.
+  usage: "GET /api/self/usage  → {usage: {…this UTC month's calls/fails by provider…}, ym}"
+  vault: "Key Vault self-management → see vault.md"
+
+files:
+  - file: vault.md
+    covers: "Key Vault self-management: list/add/update/delete interface keys · trusted-IP whitelist CRUD · retrieval master switch"
+
+security:
+  - "Keep CLAWBY_API_KEY in session memory / env only — never on disk or in logs."
+  - "CONFIRM with the user before any DESTRUCTIVE change: deleting a stored key, deleting a trusted IP, or turning the retrieval master switch OFF."
+  - "All of these endpoints only ever touch the caller's own account; they cannot read or change anyone else's."
