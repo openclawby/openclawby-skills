@@ -1,5 +1,5 @@
 {
-  "version": "1.0.59",
+  "version": "1.0.60",
   "base_url": "https://www.openclawby.com/clawby-skill/",
   "managed": [
     "SKILL.md",
@@ -39,6 +39,14 @@
     "custom/index.yaml",
     "account/index.yaml",
     "account/vault.md",
+    "defi/index.yaml",
+    "defi/lifi/_index.yaml",
+    "defi/lifi/overview.md",
+    "defi/lifi/swap-bridge.md",
+    "defi/lifi/discovery.md",
+    "defi/lifi/status.md",
+    "defi/lifi/earn.md",
+    "defi/lifi/execute.md",
     "api/index.yaml",
     "api/clawby.yaml",
     "api/catalog/_index.yaml",

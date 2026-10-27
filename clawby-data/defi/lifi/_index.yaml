@@ -1,0 +1,70 @@
+# ============================================================================
+# LI.FI — cross-chain bridge & DEX aggregator (+ DeFi Earn API)   [BYOK optional]
+# ----------------------------------------------------------------------------
+# Direct calls to LI.FI. NOT routed through Clawby, NOT billed as Clawby credits.
+# Two API hosts (see base_urls). A key is OPTIONAL: everything works keyless at a
+# lower rate limit; a vaulted key raises limits. Read files below for details.
+# ============================================================================
+version: 1
+
+base_urls:
+  core: "https://li.quest/v1"     # quotes, routes, status, chains/tokens/tools, gas
+  earn: "https://earn.li.fi/v1"   # DeFi yield vaults, protocols, wallet positions
+  # staging (core): https://staging.li.quest  — testing only; don't use for real quotes.
+
+# --- auth: OPTIONAL key (see ../index.yaml for the vault fetch) ---
+auth:
+  header: "x-lifi-api-key"        # send ONLY if a key exists; sent as an HTTP header, never a query param
+  vault_slug: "lifi"              # GET /api/vault/lifi → keys[0].fields.apiKey ; 404 = no key → go keyless
+  keyless: "All endpoints below answer with no key at the public rate limit. Missing key ≠ error."
+  verify_key: "GET https://li.quest/v1/keys/test with the header → {user:{name,rateLimit}} if valid."
+  obtain: "User creates a key in the LI.FI Partner Portal (https://li.fi/plans/ · portal.li.fi) and stores it in their Clawby Key Vault under slug 'lifi'. Keep it server-side; never ship it to a browser."
+
+rate_limits:
+  no_key:   "/quote & /advanced/routes 75 per 2h; /advanced/stepTransaction 50 per 2h; everything else 100/min. Earn 50/min."
+  with_key: "100 RPM per key across endpoints (for quote/routes/stepTransaction, 100 RPM over a sliding 2h ≈ 12000)."
+  on_429:   "code 1005 RateLimitError. Response carries ratelimit-limit / ratelimit-remaining / ratelimit-reset(seconds). Wait until reset, then retry; throttle before remaining hits 0. Cache /chains /tokens /tools (static)."
+
+# --- conventions that bite if you ignore them (confirmed against live responses) ---
+conventions:
+  chain_param: >-
+    Pass chains as NUMERIC chain IDs everywhere (1 eth · 42161 arb · 8453 base · 56 bsc ·
+    137 polygon · 10 optimism · 4663 robinhood · solana via its LI.FI id). /quote and /status
+    REJECT upper-case aliases like 'ARB'/'BASE' (error code 1011); /connections silently returns
+    0 for them. Lower-case keys (eth/arb) work on some endpoints but numeric IDs work on ALL — use them.
+  token_param: "token by contract ADDRESS or symbol. Symbol works (e.g. fromToken=USDC), but across chains a symbol is ambiguous — resolve to an address with /tokens or /token first for anything real."
+  native_sentinel: "Native coin (ETH/BNB/POL…) = 0x0000000000000000000000000000000000000000 in LI.FI requests & responses. (Some nested tool data echoes 0xEeee…EEeE for the same native asset — treat both as native. NOTE: baw's own native sentinel is 0xEeee…EEeE — different; see execute.md.)"
+  amounts: "fromAmount/toAmount/toAmountMin and every fee/gas amount are integer STRINGS in the token's smallest unit (1 USDC = '1000000', 6 decimals). Use BigInt; divide by 10^decimals only for display."
+  tx_hex: "transactionRequest.value / gasPrice / gasLimit are HEX (wei). estimate.gasCosts[].amount is a DECIMAL string. Use the transactionRequest values as-returned when sending; don't rebuild them from gasCosts."
+  router: "On EVM, estimate.approvalAddress and transactionRequest.to are the LI.FI Diamond 0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE (same address across EVM chains). ERC-20 fromToken → approve this spender for fromAmount first; native fromToken → no approval (funds ride in tx.value)."
+
+# --- endpoint index (full params + examples in the files) ---
+endpoints:
+  swap_bridge:              # → swap-bridge.md  (get a signable transactionRequest)
+    - "GET  /quote                     — one best route WITH transactionRequest (the primary path)"
+    - "POST /advanced/routes           — several candidate routes (no tx data yet)"
+    - "POST /advanced/stepTransaction  — populate one chosen route-step with transactionRequest"
+    - "POST /quote/contractCalls       — BETA zap: bridge/swap then run your contract calls on the destination chain"
+  discovery:                # → discovery.md  (read-only lookups; cache the static ones)
+    - "GET  /chains        — supported chains (id, key, nativeToken, metamask rpc)"
+    - "GET  /tokens        — supported tokens grouped by chain id; ?chains= ?tags=stablecoin"
+    - "GET  /token         — resolve ONE token (address + priceUSD) by chain+symbol/address"
+    - "GET  /tools         — bridge & exchange keys (feed allow/deny/prefer and status 'bridge')"
+    - "GET  /connections   — which tokens route between two chains"
+    - "GET  /gas/prices    — gas prices for all chains; /gas/suggestion?fromChain= for one"
+  status:                   # → status.md
+    - "GET  /status        — track a cross-chain transfer: NOT_FOUND|PENDING|DONE|FAILED (+substatus)"
+  earn:                     # → earn.md  (DeFi yield; earn.li.fi host)
+    - "GET  /v1/chains                      — chains that have Earn vaults"
+    - "GET  /v1/protocols                   — protocols that have vaults"
+    - "GET  /v1/vaults                       — search vaults (chainId/asset/protocol/minTvlUsd/flags; sortBy apy|tvl; cursor)"
+    - "GET  /v1/vaults/{chainId}/{address}   — one vault"
+    - "GET  /v1/portfolio/{address}/positions — a wallet's DeFi positions"
+
+files:
+  overview.md:    "what LI.FI is, auth/rate-limits, the end-to-end flow, read-vs-execute — READ FIRST"
+  swap-bridge.md: "getting a signable transaction: /quote, /advanced/routes + stepTransaction, contractCalls zap"
+  discovery.md:   "read-only lookups: /chains /tokens /token /tools /connections /gas"
+  status.md:      "/status polling a cross-chain transfer to completion"
+  earn.md:        "DeFi Earn API: vaults / protocols / chains / one vault / wallet positions"
+  execute.md:     "sign & broadcast a returned transactionRequest with the user's wallet (exec/baw) — ERC-20 approval, risk:high confirm, then /status"

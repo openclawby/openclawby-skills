@@ -1,0 +1,52 @@
+# ============================================================================
+# DeFi connectors registry (BYOK — key OPTIONAL)
+# ----------------------------------------------------------------------------
+# On-chain DeFi protocol connectors: cross-chain bridging + DEX-aggregation
+# quotes, yield/vault discovery, and the transaction data to act on them.
+# Requests go STRAIGHT to the provider — NOT through Clawby's /api/relay, and
+# they are NOT billed as Clawby credits. Each provider lives in its own folder:
+# defi/<provider>/_index.yaml is that provider's registry + file map.
+#
+# READ vs EXECUTE: the quote / route / status / discovery / yield calls here are
+# READ-ONLY (they return data and unsigned transaction payloads — nothing moves
+# funds). To actually SEND a returned transaction you sign it with the USER'S OWN
+# wallet (exec/baw) — that step is risk: high and needs explicit confirmation.
+# LI.FI never signs; Clawby never routes. See defi/lifi/execute.md.
+# ============================================================================
+version: 1
+
+# --- auth: OPTIONAL key from the Clawby Key Vault (once per session; memory only) ---
+# Unlike social/ and llm/, these providers also work with NO key (public rate limits),
+# so a missing vault entry is NOT an error — fall back to calling without a key.
+auth:
+  fetch: |
+    curl -s https://api.openclawby.com/api/vault/<provider> -H "X-API-Key: $CLAWBY_API_KEY"
+  response_shape: |
+    { "provider":"<provider>",
+      "keys":[ {"slot":1,"label":"<nickname>","fields":{"apiKey":"<secret>"}} ],
+      "fetched_from":"<your ip>", "fetched_at":"<iso8601>" }
+  notes:
+    - "Pick keys[0].fields.apiKey; send it in the provider's documented header. Hold it in a shell var only; never write it to disk, log it, or put it in this folder."
+    - "If the user set a trusted-IP whitelist, THIS machine's public IP must be on it, and their vault retrieval switch must be ON."
+    - "NO KEY? Not an error here — call the public (keyless) tier. Rate limits are lower; prefer a vaulted key for heavy use. See each provider's _index.yaml."
+  errors:
+    - "404 {error:not_found} — no key stored for this provider → fall back to the keyless tier, don't abort."
+    - "403 ip_not_allowed / 403 vault_disabled / 401 bad CLAWBY_API_KEY / 429 vault rate limit (shapes: see rpc/index.yaml)."
+
+providers:
+  - name: lifi
+    vault_slug: lifi
+    dir: lifi/
+    registry: lifi/_index.yaml
+    key_required: false            # works keyless; a key raises rate limits (and some Earn use)
+    auth_header: "x-lifi-api-key"  # sent only when a vaulted key exists
+    base_urls:
+      core: https://li.quest/v1    # cross-chain bridge + DEX aggregation
+      earn: https://earn.li.fi/v1  # DeFi yield vaults + wallet positions
+    about: >-
+      LI.FI — cross-chain bridge & DEX aggregator across 65+ EVM chains + Solana.
+      Best route / quote for any swap or bridge (returns signable transaction data),
+      transfer-status tracking, chain/token/tool discovery, and a DeFi yield (Earn)
+      API for vaults and a wallet's positions. Execute returned transactions with
+      the user's own wallet via exec/baw.
+  # More DeFi providers will be added here, each in its own folder under defi/.
