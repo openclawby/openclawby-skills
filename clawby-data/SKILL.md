@@ -48,7 +48,8 @@ clawby-data/
 │   └── index.yaml      ← catalog registry
 ├── akdata/             ← local akshare executor: China markets + global macro; guide akdata/akshare.md
 ├── exec/               ← trade-execution connectors; registry exec/index.yaml
-├── rpc/                ← BYOK RPC (EVM + non-EVM; Ankr/Alchemy/BlockPI) using the user's OWN key from the Key Vault; registry rpc/index.yaml
+├── script/             ← fast one-shot helper scripts for connectors (baw/); see script/baw/README.md
+├── rpc/                ← BYOK RPC (EVM + non-EVM; Ankr/Alchemy/BlockPI) using the user's OWN key — or a NO-KEY public endpoint for 8 chains; registry rpc/index.yaml
 ├── social/             ← BYOK social & search (Desearch, TwexAPI) using the user's OWN key; registry social/index.yaml
 ├── llm/                ← BYOK LLM APIs (DeepSeek/OpenAI/Claude/Qwen/Kimi/GLM/OpenRouter) using the user's OWN key; registry llm/index.yaml
 ├── custom/             ← BYOK for user-defined vault providers; first use records the API into local/custom-apis/ for quick reuse; registry custom/index.yaml
@@ -62,7 +63,7 @@ clawby-data/
 
 `rpc/` lets you make EVM JSON-RPC calls with the **user's own** Ankr / Alchemy / BlockPI node key, fetched at run time from the Clawby **Key Vault**. These calls go **straight to the provider — not through Clawby `/api/relay`, and they do NOT use Clawby credits**.
 
-Flow: fetch the key once (`GET https://api.openclawby.com/api/vault/<provider>` with `CLAWBY_API_KEY`; if the user set a trusted-IP whitelist, this machine's public IP must be on it, and their vault retrieval switch must be ON) → keep it **in memory only, never write it to disk** → build the provider's endpoint URL and POST JSON-RPC. Start at `rpc/index.yaml` (auth flow + JSON-RPC primer + file map + security). Per-provider endpoint template, full chain/network lists and enhanced methods: `rpc/<provider>.md` (ankr/alchemy/blockpi). The complete standard **EVM JSON-RPC method catalog** (params + request/response for eth_*/net_*/web3_*/trace_*/debug_*): `rpc/evm-methods.md`. Non-EVM chains — Solana, TRON, TON, Sui, XRP, Aptos, NEAR — each have their own method guide in `rpc/non-evm/`. The fetched key sits inside the endpoint URL, so treat the whole URL as a secret.
+Flow: fetch the key once (`GET https://api.openclawby.com/api/vault/<provider>` with `CLAWBY_API_KEY`; if the user set a trusted-IP whitelist, this machine's public IP must be on it, and their vault retrieval switch must be ON) → keep it **in memory only, never write it to disk** → build the provider's endpoint URL and POST JSON-RPC. Start at `rpc/index.yaml` (auth flow + JSON-RPC primer + file map + security). Per-provider endpoint template, full chain/network lists and enhanced methods: `rpc/<provider>.md` (ankr/alchemy/blockpi). The complete standard **EVM JSON-RPC method catalog** (params + request/response for eth_*/net_*/web3_*/trace_*/debug_*): `rpc/evm-methods.md`. Non-EVM chains — Solana, TRON, TON, Sui, XRP, Aptos, NEAR — each have their own method guide in `rpc/non-evm/`. The fetched key sits inside the endpoint URL, so treat the whole URL as a secret. **No key for a chain?** `rpc/index.yaml` → `public_fallback` has a built-in no-key public endpoint for 8 chains — BSC, ETH, Base, Arbitrum, X Layer, Robinhood, Solana, Tron — used automatically when the vault has no key (no credits; rate-limited, so prefer a vaulted key for heavy/archive reads).
 
 **Social & search data** uses the same vault pattern — `social/` holds BYOK connectors for social/search providers: **Desearch** (`social/desearch/` — X/Twitter, TikTok, Facebook, Instagram, Web/SERP, AI search, People search; raw `Authorization` key) and **TwexAPI** (`social/twexapi/` — deep X/Twitter: advanced search, users, tweets/replies, followers & following, communities, lists, trending, sentiment; `Authorization: Bearer` token). Fetch the user's key from `/api/vault/<provider>`, call the provider directly (billed to the user's own provider plan — never Clawby credits), and start at `social/index.yaml` (each provider's `_index.yaml` carries its base URL, auth and file map).
 
@@ -159,6 +160,7 @@ Everything above is **read-only data**. To **place trades**, use the connectors 
 | OKX (spot/swap/futures/bots, `--demo`) | `exec/okx/okx.md` | `okx` |
 | Polymarket (CLOB V2 orders, own wallet key) | `exec/polymarket/polymarket.md` | `@polymarket/client` SDK |
 | GMGN (on-chain swap/TP-SL/launch, 9 chains) | `exec/gmgn/gmgn.md` | `gmgn-cli` |
+| Binance Agentic Wallet (on-chain Web3: swap/send/limit/DeFi/prediction/x402) | `exec/baw/baw.md` | `baw` |
 
 **Rule for any `risk: high` action** (order / transfer / withdrawal): restate the order — venue · pair · side · size · price type — show the exact command, get the user to type **`CONFIRM`**, prefer testnet when unsure. Read-only queries need no confirmation.
 

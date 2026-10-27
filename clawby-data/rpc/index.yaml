@@ -5,6 +5,10 @@
 # fetched at run time from the Clawby Key Vault. These calls go STRAIGHT to the
 # provider — NOT through Clawby's /api/relay, and they do NOT consume Clawby credits.
 #
+# NO KEY? Eight chains also have a built-in PUBLIC endpoint (see `public_fallback` at the
+# bottom) — use it automatically when the vault has no key for that chain. No key, no
+# credits; rate-limited with no SLA, so prefer a vaulted key for heavy / archive reads.
+#
 # Files in this folder:
 #   evm-methods.md      shared standard EVM JSON-RPC catalog (eth_*/net_*/web3_*/trace_*/debug_*)
 #                       — applies to EVERY EVM chain on ALL three providers
@@ -13,7 +17,7 @@
 #   blockpi.md          BlockPI: full chain list, endpoint, RU metering
 #   non-evm/<chain>.md  chains whose RPC is NOT Ethereum-style: solana, tron, ton, sui, xrp, aptos, near
 # ============================================================================
-version: 2
+version: 3
 
 # --- AUTH: fetch the key from the vault (once per session; keep in memory, never write to disk) ---
 # Needs CLAWBY_API_KEY (the same key this skill already uses). If the user set a trusted-IP
@@ -78,3 +82,46 @@ non_evm:
     - "xrp — Ankr ONLY (xrp_mainnet, Premium, ~2wk history). XRPL body is {\"method\":…,\"params\":[{…}]} — NOT the jsonrpc-2.0 envelope."
     - "aptos — Ankr / Alchemy / BlockPI. REST API (not JSON-RPC); the endpoint shape differs per provider — see aptos.md."
     - "near — Ankr (Premium) / BlockPI. JSON-RPC via the `query` method + a request_type; args are base64 JSON."
+
+# --- PUBLIC fallback endpoints (NO key, NO credits) -------------------------
+# Used when the user has no vault key for a chain (vault 404 / vault_disabled / never set
+# one up). Selection order: a vaulted provider key FIRST (if present), else the public
+# endpoint here. Public nodes are rate-limited with no SLA — prefer a vaulted key for
+# heavy / batched / archive reads; for one-off reads they're fine. On EVM, verify
+# eth_chainId equals the expected id below before trusting results (guards a wrong or
+# phishing endpoint). All 8 verified live 2026-10-27.
+public_fallback:
+  evm:   # standard eth_* JSON-RPC — method catalog in evm-methods.md
+    - chain: ethereum
+      chain_id: 1            # 0x1
+      url: https://ethereum-rpc.publicnode.com
+    - chain: bsc
+      chain_id: 56           # 0x38
+      url: https://bsc-dataseed.bnbchain.org
+      backup: https://bsc-rpc.publicnode.com
+    - chain: base
+      chain_id: 8453         # 0x2105
+      url: https://mainnet.base.org
+      backup: https://base-rpc.publicnode.com
+    - chain: arbitrum
+      chain_id: 42161        # 0xa4b1
+      url: https://arb1.arbitrum.io/rpc
+      backup: https://arbitrum-one-rpc.publicnode.com
+    - chain: xlayer
+      chain_id: 196          # 0xc4  (OKX X Layer)
+      url: https://rpc.xlayer.tech
+      backup: https://xlayerrpc.okx.com
+    - chain: robinhood
+      chain_id: 4663         # 0x1237  (Robinhood Chain L2; gas in ETH, settles to Ethereum)
+      url: https://rpc.mainnet.chain.robinhood.com
+      note: "Official robinhood.com subdomain. Lookalike/phishing RPCs exist for this chain — use ONLY this URL. Explorer: robinhoodchain.blockscout.com."
+  non_evm:   # own protocols — open the guide before building calls
+    - chain: solana
+      url: https://api.mainnet-beta.solana.com
+      backup: https://solana-rpc.publicnode.com
+      guide: non-evm/solana.md
+    - chain: tron
+      url: https://api.trongrid.io              # REST FullNode HTTP API
+      jsonrpc: https://api.trongrid.io/jsonrpc   # eth_*-style JSON-RPC (eth_chainId = 0x2b6653dc)
+      guide: non-evm/tron.md
+      note: "Public TronGrid; add header TRON-PRO-API-KEY for heavy use."

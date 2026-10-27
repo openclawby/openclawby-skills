@@ -19,7 +19,7 @@
 # Same BYOK pattern as rpc/ — auth flow, response shape, IP-whitelist + error codes: see
 # rpc/index.yaml. Map `keys[*].fields` onto the env vars in each entry's `auth` line; keep
 # the values in memory / the command's environment only, never on disk or in this folder.
-version: 9
+version: 10
 executors:
   - name: binance
     path: binance/                 # subfolder under exec/
@@ -93,3 +93,20 @@ executors:
       official gmgn-cli. Signs locally with the user's own key; not routed through Clawby.
       Read-only DEX/memecoin queries stay in the Clawby data relay (dex_* interfaces);
       only use gmgn-cli's own query subcommands when the user explicitly asks for it.
+  - name: baw
+    path: baw/                     # subfolder under exec/
+    entry: baw.md                  # guide the agent reads; drives the `baw` tool
+    tool: "baw (npm: @binance/agentic-wallet; full skill set: npx skills add binance/binance-skills-hub/skills/binance-web3)"
+    kind: cli
+    check: "baw --version"
+    install: "npm install -g @binance/agentic-wallet   # provides baw (Node >= 20); deeper per-op docs: npx skills add binance/binance-skills-hub/skills/binance-web3"
+    auth: "QR sign-in — baw auth signin -> auth verify (scan in Binance App); session in OS keychain. No API keys, no Key Vault."
+    risk: high                     # high = moves real funds on-chain -> CONFIRM with user per action
+    description: >-
+      Binance Agentic Wallet (Web3) on-chain execution — token transfers, DEX swaps
+      (market orders), limit orders, prediction markets, DeFi (stake / LP / lend /
+      yield), token approvals, external contract-call / message signing, and x402
+      payments, across BNB Smart Chain / Ethereum / Base / Arbitrum / Polygon /
+      Robinhood + Solana. Self-custodial: the user signs in by QR in the Binance App
+      and transactions are signed locally with the user's own wallet, never routed
+      through Clawby.
