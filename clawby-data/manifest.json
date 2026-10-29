@@ -1,5 +1,5 @@
 {
-  "version": "1.0.62",
+  "version": "1.0.63",
   "base_url": "https://www.openclawby.com/clawby-skill/",
   "managed": [
     "SKILL.md",
@@ -111,6 +111,7 @@
     "exec/polymarket/polymarket.md",
     "exec/gmgn/gmgn.md",
     "exec/baw/baw.md",
+    "exec/baw/commands.md",
     "script/baw/README.md",
     "script/baw/warmup.sh",
     "script/baw/fast-contract-call.sh",

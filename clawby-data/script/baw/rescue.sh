@@ -8,7 +8,7 @@
 # with a 0-value self-send instead. Only the FIRST pending tx (confirmedNonce+1) can be
 # acted on — baw enforces this; this script targets transactions[0]. speed-up/cancel need
 # NO Binance App approval. Without --yes: lists the actionable tx and STOPS. With --yes
-# (the user's one-shot 'yolo'): performs the action and prints the replacement txHash.
+# (passed only while yolo mode is on): performs the action and prints the replacement txHash.
 set -eo pipefail
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; . "$SRC_DIR/_lib.sh"
 
@@ -52,7 +52,7 @@ echo "First pending (only this one is actionable): txHash=$txHash chain=$chain t
 
 if [ "$YES" -ne 1 ]; then
   act="speed-up (--level $LEVEL)"; [ "$CANCEL" -eq 1 ] && act="cancel"
-  echo "Would $act this tx. NOT done — add --yes (or say 'yolo')."
+  echo "Would $act this tx. NOT done — add --yes (enable yolo mode first)."
   exit 0
 fi
 

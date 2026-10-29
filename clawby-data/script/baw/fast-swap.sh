@@ -9,7 +9,7 @@
 #        [--slippage auto] [--mev true] [--gasLevel HIGH] [--yes]
 #
 # Default gas level is HIGH (fastest inclusion); override with --gasLevel. Without --yes:
-# prints a QUOTE (expected output) and STOPS. With --yes (the user's one-shot 'yolo'):
+# prints a QUOTE (expected output) and STOPS. With --yes (passed only while yolo mode is on):
 # swaps, then polls to FINISHED / FAILED and reports txHash + received amount (+ any refund
 # = partial fill). You MUST still run the swap SECURITY PRE-CHECK on the target token first
 # (see exec/baw/baw.md / security.md) — a script cannot audit the token for you.
@@ -36,7 +36,7 @@ _need baw "(npm i -g @binance/agentic-wallet)"; _need python3
 { [ -n "$QTY" ] && [ -n "$FROM" ] && [ -n "$TO" ] && [ -n "$CHAIN" ]; } || { echo "ERROR: need --fromTokenQty --fromToken --toToken --binanceChainId"; exit 2; }
 
 if [ "$YES" -ne 1 ]; then
-  echo "Quote (no swap — add --yes / say 'yolo' to execute):"
+  echo "Quote (no swap — add --yes to execute; the agent passes it only while yolo mode is on):"
   Q=(--fromTokenQty "$QTY" --fromToken "$FROM" --toToken "$TO" --binanceChainId "$CHAIN")
   [ -n "$SLIP" ] && Q+=(--slippage "$SLIP")
   baw market-order quote "${Q[@]}" --json

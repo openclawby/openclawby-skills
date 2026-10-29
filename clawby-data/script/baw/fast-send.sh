@@ -6,7 +6,7 @@
 #   bash fast-send.sh --max --recipient 0x..5678 --binanceChainId 56 --tokenAddress 0x.. --yes
 #
 # Default gas level is HIGH. Without --yes: prints the intended transfer and STOPS.
-# With --yes (the user's one-shot 'yolo'): sends; with --confirm, polls the chain's public
+# With --yes (passed only while yolo mode is on): sends; with --confirm, polls the chain's public
 # RPC for the receipt (EVM only) and reports CONFIRMED / REVERTED / PENDING.
 #
 # NOTE: --recipient must be a raw address already in the Binance App address book. A DOMAIN
@@ -36,7 +36,7 @@ case "$RECIP" in *.eth|*.bnb|*.ai|*.*[a-zA-Z]) echo "ERROR: --recipient looks li
 
 if [ "$YES" -ne 1 ]; then
   echo "Would send to $RECIP on chain $CHAIN token $TOKEN (gas HIGH). NOT sent."
-  echo "Add --yes (or say 'yolo') to broadcast."
+  echo "Add --yes to broadcast (the agent passes it only while yolo mode is on)."
   exit 0
 fi
 

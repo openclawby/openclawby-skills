@@ -8,7 +8,7 @@
 #
 # --message is a FULL eth_signTypedData_v4 request string:
 #   {"method":"eth_signTypedData_v4","params":["<yourWallet>","<typedDataJson>"]}
-# --yes = the user's one-shot 'yolo' pre-authorization (see README). Without it: preview +
+# --yes = the user's yolo-mode pre-authorization (see README). Without it: preview +
 # gate + STOP. SAFETY (fires even with --yes): aborts on preview failure, any RISK item /
 # high-risk address, or requireConfirmation=true. For Permit/Permit2, the preview's
 # parsedMessage shows the authority being granted — review it before signing.
@@ -37,7 +37,7 @@ if [ "$verdict" != "PASS" ]; then echo "ABORTED: ${reason:-unknown}"; exit 1; fi
 
 if [ "$YES" -ne 1 ]; then
   echo "Preview OK. requestId=$requestId (expiresAt=$expiresAt)"
-  echo "NOT signed — re-run with --yes to sign (agent: only when the user said 'yolo')."
+  echo "NOT signed — re-run with --yes to sign (agent: only while yolo mode is on)."
   exit 0
 fi
 

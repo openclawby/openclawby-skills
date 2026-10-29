@@ -6,7 +6,7 @@ Drive a **Binance Web3 (Agentic) wallet** through the official **`baw`** CLI (`@
 >
 > **Not part of the Clawby data relay.** This connector moves real funds with the user's own wallet. Read-only market data stays in the relay (`crypto` / `dex_*` interfaces in `api/clawby.yaml`).
 >
-> **Time-sensitive?** `script/baw/` has fast one-shot helpers that collapse `preview → execute` into a single step (`fast-contract-call.sh`, `preview-stage.sh` + `fire-execute.sh`, `warmup.sh`). They keep the risk gate and run the fast path only under the user's one-shot `yolo` pre-authorization — see `script/baw/README.md`.
+> **Time-sensitive?** `script/baw/` has fast one-shot helpers that collapse `preview → execute` into a single step (`fast-contract-call.sh`, `preview-stage.sh` + `fire-execute.sh`, `warmup.sh`). They keep the risk gate and run the fast path only while the user has enabled **yolo mode** (the agent asks before enabling; it is off by default and stays on until the user turns it off) — see `script/baw/README.md`.
 
 ## Prerequisite / install
 
@@ -60,6 +60,10 @@ baw wallet status --json                   # source of truth: CONNECTED / UNCONN
 
 ## Command surface — `baw <group> <command> --json`
 
+> **Full per-command reference** — every subcommand with its exact flags, return fields, error codes
+> and workflows — ships with this skill at **`exec/baw/commands.md`**. Read it to build a command
+> without guessing parameter names (or install Binance's official skill for the deepest per-op docs).
+
 | Intent | Command |
 |---|---|
 | Sign in / verify / sign out | `auth signin` → `auth verify --qrCodeId <id>` · `auth signout` |
@@ -75,6 +79,12 @@ baw wallet status --json                   # source of truth: CONNECTED / UNCONN
 | DeFi (stake / LP / lend / yield) | `defi protocol-list\|protocol-info\|investment-list\|investment-info\|position` · `defi deposit\|redeem\|lp-add\|lp-remove\|claim\|preview` |
 | x402 payment (HTTP 402) | `x402-payment preview` · `x402-payment sign` |
 | Agent ID (.ai) claim status | `wallet agent-id` |
+| Version / CLI check | `skill-check` · `cli-check` |
+| Custom signals & strategies (meme-rush / fomo-call) | `signal list\|explore\|credits\|wallet-group` · `signal strategy list\|list-followed\|create\|update\|delete\|follow\|unfollow` · `signal backtest list\|detail\|retry\|schedule` |
+| Wallet tracking (own groups / KOL / smart-money) | `tracker token\|tx\|follow\|ws` · `tracker group list\|create\|update` · `tracker address search\|list\|add\|batch\|update\|link\|delete\|follow\|unfollow` |
+| Trader leaderboard / Alpha radar | `leaderboard query\|analyze\|alpha-radar` · `leaderboard preset list\|save` · `leaderboard alpha-radar-config list\|save` |
+
+> `signal` / `tracker` / `leaderboard` take the chain as **`-c` / `--chain-id`** (not `--binanceChainId`) — see `commands.md`.
 
 Supported chains: BNB Smart Chain · Ethereum · Base · Arbitrum · Polygon · Robinhood Chain (EVM) + Solana — run `baw wallet chains --json` for the live list.
 

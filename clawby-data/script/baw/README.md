@@ -13,18 +13,22 @@ goes.
 > rely on an executable bit). `_lib.sh` is shared code (sourced by the others), not run
 > directly.
 
-## The `yolo` rule (how the fast path is armed)
+## `yolo` mode (how the fast path is armed)
 
-The one-shot fast path (auto-execute with no mid-flow pause) is **off by default**.
+The fast path (auto-execute with no mid-flow pause) is a **mode that is OFF by default**.
 
-- **Default** — the agent runs the safe path: preview/quote, show you the result + risks,
-  wait for your confirmation, then execute.
-- **Armed only when your message ENDS with `yolo`** — then, for that **one** action, the
-  agent may run the script with `--yes`, skipping the per-step confirmation. `yolo` is a
-  **one-shot pre-authorization**: it covers exactly the one action you asked for and is
-  **not sticky** — the next action needs `yolo` again.
+- **Default (yolo OFF)** — the agent runs the safe path: preview/quote, show you the result
+  + risks, wait for your confirmation, then execute. It does **not** pass `--yes`.
+- **Enabling it** — the first time an action would move funds (send / swap / contract-call /
+  sign / rescue) while yolo is off, the agent **asks whether to enable yolo mode**; on your
+  "yes" it turns the mode ON. You can also toggle it yourself any time — say **"enable yolo
+  mode" / "开启 yolo 模式"** or **"disable yolo mode" / "关闭 yolo 模式"**.
+- **While yolo is ON** — the agent may run the write scripts with `--yes` (skipping the
+  per-action confirmation) for **every** subsequent baw write, without asking again. The mode
+  is **sticky** until you disable it (or the session ends).
 
-`yolo` does **not** disable safety. The risk gate below still applies and still aborts.
+yolo mode does **not** disable safety. The non-bypassable risk gate below still applies and
+still aborts, even with `--yes`.
 
 ## Safety gate (non-bypassable — fires even with `--yes` / `yolo`)
 
@@ -63,8 +67,8 @@ The scripts only remove *turns*, not `baw`'s own trust checks.
 
 ### Common options
 
-- `--yes` — the one-shot pre-authorization (armed by a trailing `yolo`); without it the
-  write scripts preview/quote and **stop**.
+- `--yes` — the pre-authorization the agent passes **only while yolo mode is ON** (see the
+  yolo rule above); without it the write scripts preview/quote and **stop**.
 - `--confirm` (`fast-contract-call.sh`, `fire-execute.sh`, `fast-send.sh`) — after a
   `txHash`, poll the chain's **public RPC** (`rpc/index.yaml` endpoints) for the receipt and
   report `CONFIRMED` / `REVERTED` / `PENDING` (EVM only).
@@ -78,7 +82,7 @@ The scripts only remove *turns*, not `baw`'s own trust checks.
 ```bash
 bash script/baw/warmup.sh                       # once, up front
 
-# contract call now (armed by a trailing 'yolo'); confirm on chain too
+# contract call now (yolo mode on); confirm on chain too
 bash script/baw/fast-contract-call.sh --binanceChainId 56 --from 0x.. --to 0x.. --value 0 --inputData 0x.. --yes --confirm
 
 # pre-stage, then fire at the trigger instant

@@ -8,7 +8,7 @@
 #   bash fire-execute.sh --requestId a1b2c3...   # or pass it explicitly
 #   bash fire-execute.sh --confirm               # also poll the public RPC for the receipt
 #
-# This BROADCASTS — the agent runs it only as the user's one-shot 'yolo' action. If baw
+# This BROADCASTS — the agent runs it only while yolo mode is on (ask the user to enable it). If baw
 # reports an expired preview, re-run preview-stage.sh (the staged requestId has lapsed).
 set -eo pipefail
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; . "$SRC_DIR/_lib.sh"

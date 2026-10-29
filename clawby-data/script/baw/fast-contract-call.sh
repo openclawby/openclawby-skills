@@ -9,7 +9,7 @@
 #        [--inputData 0x..] [--gasLimit <n>] [--yes] [--confirm]
 #
 # --yes   = the user's ONE-SHOT pre-authorization. Per skill rule (README), the agent passes
-#           --yes ONLY when the user's message ended with "yolo" (one action; re-armed each).
+#           --yes ONLY while yolo mode is ON (the agent asks the user to enable it first).
 #           Without --yes: preview + gate + STOP (prints requestId, does not broadcast).
 # --confirm = after a BROADCASTED txHash, poll the chain's public RPC for the receipt and
 #           report CONFIRMED / REVERTED / PENDING (EVM chains only).
@@ -45,7 +45,7 @@ if [ "$verdict" != "PASS" ]; then echo "ABORTED: ${reason:-unknown}"; exit 1; fi
 
 if [ "$YES" -ne 1 ]; then
   echo "Preview OK. requestId=$requestId (expiresAt=$expiresAt)"
-  echo "NOT executed — re-run with --yes to broadcast (agent: only when the user said 'yolo')."
+  echo "NOT executed — re-run with --yes to broadcast (agent: only while yolo mode is on)."
   exit 0
 fi
 
