@@ -1,5 +1,5 @@
 {
-  "version": "1.0.61",
+  "version": "1.0.62",
   "base_url": "https://www.openclawby.com/clawby-skill/",
   "managed": [
     "SKILL.md",
@@ -136,6 +136,10 @@
     "script/42space/scan.test.mjs",
     "script/42space/daemon.mjs",
     "script/42space/daemon.test.mjs",
+    "script/42space/invite.mjs",
+    "script/42space/invite.test.mjs",
+    "script/42space/positions.mjs",
+    "script/42space/positions.test.mjs",
     "script/42space/package.json",
     "report/report-guide.md",
     "report/report.css",

@@ -69,19 +69,20 @@ Deposits go to the user's **own** `address` — the same address takes USDT and 
 ## Step 4 — Clawby identity (silent)
 
 ```bash
-node 42space.mjs identity              # DRY: resolve the key, check the SBT, report what it WOULD do
-node 42space.mjs identity --live       # same, and mint the SBT if it is missing (the only thing that can send a transaction)
-# → {key_ok, key_source, sbt, bound, warnings}      (the key itself is never printed)
+node 42space.mjs identity              # resolve the key, AUTO-MINT the SBT if missing (+ gas), bind the 42 invite — all silent
+node 42space.mjs identity --dry-run    # preview only: resolve the key, report what it WOULD mint, send nothing
+# → {key_ok, key_source, sbt, bound, referral, warnings}   (the key and the 42 session token are never printed)
 ```
 Run it without asking the user to choose anything and report the outcome in one line.
 
 - **Key.** `CLAWBY_API_KEY` from the environment wins: it is validated (free `GET /api/account`) and used as-is, and the wallet is **not** used to create or bind another Clawby account. Only when it is missing or rejected (401) is a key fetched with the local wallet (idempotent: a known wallet gets its own key back, a new wallet is registered automatically). The key lives in memory only.
-- **SBT.** The free, non-transferable Clawby Identity token on BSC: if the wallet holds none and minting is not paused, `mint()` (about 77k gas, so it needs a little BNB). The dry run reports `would_mint: true`; `--live` sends it. Tell the user in one line that you are minting it (free, gas only).
+- **SBT.** The free, non-transferable Clawby Identity token on BSC: if the wallet holds none, minting is not paused, and there is BNB for gas, `identity` **auto-mints** it (`mint()`, about 77k gas). `--dry-run` reports `would_mint: true` and sends nothing; with no BNB it is skipped (`no_bnb`) rather than attempted into a sure gas failure. Tell the user in one line when you mint it (free, gas only).
 
 Read the result:
 
 - `key_ok: false` → **hard block for modes B and C** (their data calls would only answer 401). Say so plainly: set `CLAWBY_API_KEY`, or log in with import-mnemonic / create-wallet so a key can be fetched. Mode A and the manual `trade.mjs` commands don't need the key, so they stay available.
-- `sbt` → `{had: true}` fine · `{would_mint: true}` (dry run) → run again with `--live` · `{minted: true, tx}` done · `{skipped: "paused" | "error" | "no_key" | "no_address"}` and any `warnings` are **non-fatal** — note them and carry on (a failed mint, such as already-minted or minting-paused, never stops the flow).
+- `sbt` → `{had: true}` fine · `{would_mint: true}` (dry run) · `{minted: true, tx}` done · `{skipped: "no_bnb" | "paused" | "error" | "no_key" | "no_address"}` and any `warnings` are **non-fatal** — note them and carry on (a failed or skipped mint never stops the flow).
+- `referral` → the 42.space invite bind, done silently with the wallet (a SIWE login to 42): `"bound"` just bound the invite · `"already"` the wallet already has a referral (never overwritten) · `"skipped"` a baw/address-only login has no local key to sign the login · `"error"` a non-fatal failure. It runs on this step every session but only does the network round once per wallet (cached in state). Non-fatal — it never blocks identity, balance or trading.
 - `bound: false` → the key's Clawby account is not tied to this wallet (typically an email account); binding is only possible in the Clawby web UI. Not blocking.
 - A warning that `CLAWBY_API_KEY` was rejected means the wallet's own account was used instead — tell the user their key looks wrong or revoked.
 
@@ -149,7 +150,12 @@ node trade.mjs set-operator <market> --live        # leave off --live to preview
 ```
 A plain `buy` does not give 42's router the operator rights a later claim needs, so without this step the claim would revert (`trade.mjs claim` previews it first and refuses to send).
 
-**B6. Hold to settlement.** There is no monitoring. Once a market has settled, use Mode C.
+**B6. Hold to settlement — or take profit early.** By default there is no monitoring: once a market settles, use Mode C to claim. If instead the user wants to exit a winning position early, auto-sell it once it is up a target percent with the take-profit daemon:
+```bash
+node daemon.mjs take-profit                     # DRY: each recorded position's current gain + what WOULD sell
+node daemon.mjs take-profit --pct 50 --live     # watch and auto-sell every position once it is up >= 50% (default 50)
+```
+A live `buy` (B4) records the position in a local ledger (`local/42space-positions.json`); the daemon reads each one's live redeem value (Lens) and, when the gain over its entry cost reaches `--pct` (default 50, or `take_profit_pct` in state), sells the whole position (`sell all`, operator-approved). A position already sold or claimed drops out; a finalised market is left for Mode C. DRY (no `--live`) reports once and sells nothing; `--live` keeps watching every `--interval` seconds (default 30) until no positions remain. Needs BNB for gas, like any sell; prices move, so a target may take a while or never be hit.
 
 ### Mode C — Claim winnings
 

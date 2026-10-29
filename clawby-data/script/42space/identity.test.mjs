@@ -70,7 +70,7 @@ const names = (sbt) => sbt.calls.map((c) => c[0]);
 const mnemonicState = { method: 'mnemonic', address: ADDR, mnemonic: PHRASE };
 
 // A loopback-only JSON-RPC node (127.0.0.1, ephemeral port): enough of BSC for the real reader's chain guard + reads.
-async function fakeBscNode({ chainId = '0x38', balance = 0n, paused = false } = {}) {
+async function fakeBscNode({ chainId = '0x38', balance = 0n, paused = false, bnbWei = 2n * 10n ** 18n } = {}) {
   const requests = [];
   const server = http.createServer((req, resp) => {
     let raw = '';
@@ -80,6 +80,7 @@ async function fakeBscNode({ chainId = '0x38', balance = 0n, paused = false } = 
         requests.push(m);
         let result = null;
         if (m.method === 'eth_chainId') result = chainId;
+        if (m.method === 'eth_getBalance') result = '0x' + BigInt(bnbWei).toString(16);
         if (m.method === 'eth_call') {
           const { data } = m.params[0];
           if (data.startsWith('0x70a08231')) result = '0x' + balance.toString(16).padStart(64, '0');
@@ -366,6 +367,17 @@ test('makeSbt reads balanceOf / mintingPaused from the SBT contract, after check
   });
 });
 
+test('makeSbt.getBnb reads the wallet native BNB balance (18-dec string) on the port rpc', NODE_TEST, async () => {
+  await withNode({ chainId: '0x38', bnbWei: 3n * 10n ** 18n }, async (node) => {
+    const { makeSbt } = await import('./identity.mjs');
+    const sbt = makeSbt({ rpc: node.url, address: ADDR });
+    try {
+      assert.equal(await sbt.getBnb(), '3.0');
+      assert.ok(node.requests.some((r) => r.method === 'eth_getBalance'), 'read via eth_getBalance');
+    } finally { sbt.close(); }
+  });
+});
+
 test('makeSbt refuses a RPC that is not BSC: no read, and no send even with a signer attached', NODE_TEST, async () => {
   await withNode({ chainId: '0x1' }, async (node) => {                       // an Ethereum-mainnet RPC pointed at by mistake
     const { makeSbt } = await import('./identity.mjs');
@@ -464,6 +476,48 @@ test('static scan: identity.mjs has no broadcast call of its own (the only send 
     if (/console\.(log|error|warn|info|debug)/.test(line)) assert.doesNotMatch(line, /mnemonic|privateKey|\bphrase\b|api_key|apiKey/i, `leaky line: ${line}`);
   }
   assert.doesNotMatch(src, /privateKey/);
+});
+
+test('ensureSbt: balanceOf 0, not paused, live, hasGas:false -> skipped no_bnb and sendMint is never called', async () => {
+  const { ensureSbt } = await import('./identity.mjs');
+  const sbt = sbtStub({ bal: 0n });
+  assert.deepEqual(await ensureSbt({ address: ADDR, sbt, live: true, hasGas: false }), { had: false, minted: false, skipped: 'no_bnb' });
+  assert.deepEqual(names(sbt), ['balanceOf', 'mintingPaused']);
+});
+
+test('ensureSbt: balanceOf 0, not paused, live, hasGas:true -> mints once (explicit gas)', async () => {
+  const { ensureSbt } = await import('./identity.mjs');
+  const sbt = sbtStub({ bal: 0n, tx: '0xabc123' });
+  assert.deepEqual(await ensureSbt({ address: ADDR, sbt, live: true, hasGas: true }), { had: false, minted: true, tx: '0xabc123' });
+  assert.deepEqual(names(sbt), ['balanceOf', 'mintingPaused', 'sendMint']);
+});
+
+test('ensureSbt: a dry run reports would_mint regardless of gas (no_bnb only gates a live send)', async () => {
+  const { ensureSbt } = await import('./identity.mjs');
+  const sbt = sbtStub({ bal: 0n });
+  assert.deepEqual(await ensureSbt({ address: ADDR, sbt, live: false, hasGas: false }), { had: false, minted: false, would_mint: true });
+  assert.equal(names(sbt).includes('sendMint'), false);
+});
+
+test('ensureSbt: hasGas may be an async thunk, resolved only in the live-mint branch', async () => {
+  const { ensureSbt } = await import('./identity.mjs');
+  let gasReads = 0;
+  const gas = async () => { gasReads += 1; return false; };
+  const held = sbtStub({ bal: 1n });
+  await ensureSbt({ address: ADDR, sbt: held, live: true, hasGas: gas });
+  assert.equal(gasReads, 0, 'an already-minted wallet never reads gas');
+  const mintable = sbtStub({ bal: 0n });
+  assert.deepEqual(await ensureSbt({ address: ADDR, sbt: mintable, live: true, hasGas: gas }), { had: false, minted: false, skipped: 'no_bnb' });
+  assert.equal(gasReads, 1, 'the live-mint branch resolved the thunk once');
+});
+
+test('ensureIdentity: forwards hasGas to ensureSbt — hasGas:false with a mintable SBT reports sbt skipped no_bnb', async () => {
+  const { ensureIdentity } = await import('./identity.mjs');
+  const f = clawbyStub({ validKeys: { [ENV_KEY]: WALLET_FIRST } });
+  const sbt = sbtStub({ bal: 0n });
+  const out = await ensureIdentity({ state: mnemonicState, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt, live: true, hasGas: false });
+  assert.deepEqual(out.sbt, { had: false, minted: false, skipped: 'no_bnb' });
+  assert.equal(names(sbt).includes('sendMint'), false);
 });
 
 // ---- ensureIdentity ----

@@ -385,16 +385,19 @@ function idClawby({ validKeys = {}, mcp = null } = {}) {
 }
 
 // SBT port stub ({balanceOf, mintingPaused, sendMint}); records every call.
-function idSbt({ bal = 0n, paused = false, tx = '0xminttx' } = {}) {
+function idSbt({ bal = 0n, paused = false, tx = '0xminttx', bnb = '2.0' } = {}) {
   const calls = [];
   return {
     calls,
     balanceOf: async (a) => { calls.push(['balanceOf', a]); return bal; },
     mintingPaused: async () => { calls.push(['mintingPaused']); return paused; },
+    getBnb: async () => { calls.push(['getBnb']); return bnb; },
     sendMint: async () => { calls.push(['sendMint']); return tx; },
   };
 }
 const sentMint = (sbt) => sbt.calls.filter((c) => c[0] === 'sendMint').length;
+// A referral seam stub: no network, reports a bind but does not ask to persist (mark:false) unless a test overrides it.
+const REF = async () => ({ referral: 'bound', warnings: [], mark: false });
 
 // Every console channel (not just log), so a secret leaking on stderr/warn is caught too.
 async function captureAll(argv, opts) {
@@ -416,7 +419,7 @@ async function loginMnemonic(extra = {}) {
 }
 
 // Loopback-only BSC JSON-RPC stub (127.0.0.1, ephemeral port): enough for the real SBT port's chain check + reads.
-async function idNode({ chainId = '0x38', balance = 0n, paused = false } = {}) {
+async function idNode({ chainId = '0x38', balance = 0n, paused = false, bnbWei = 2n * 10n ** 18n } = {}) {
   const requests = [];
   const server = http.createServer((req, resp) => {
     let raw = '';
@@ -426,6 +429,7 @@ async function idNode({ chainId = '0x38', balance = 0n, paused = false } = {}) {
         requests.push(m);
         let result = null;
         if (m.method === 'eth_chainId') result = chainId;
+        if (m.method === 'eth_getBalance') result = '0x' + BigInt(bnbWei).toString(16);
         if (m.method === 'eth_call') {
           const { data } = m.params[0];
           if (data.startsWith('0x70a08231')) result = '0x' + balance.toString(16).padStart(64, '0');
@@ -455,11 +459,11 @@ const ID_NODE_TEST = { timeout: 20_000 };
 test('identity: prints the summary as ONE JSON line, and the api key / mnemonic appear on no console channel', async () => {
   await loginMnemonic();
   const f = idClawby({ validKeys: { [ID_ENV_KEY]: ID_ACCOUNT } });
-  const lines = await captureAll(['identity'], { fetchImpl: f, sbt: idSbt({ bal: 1n }), env: { CLAWBY_API_KEY: ID_ENV_KEY } });
+  const lines = await captureAll(['identity'], { fetchImpl: f, sbt: idSbt({ bal: 1n }), env: { CLAWBY_API_KEY: ID_ENV_KEY }, referral: REF });
   assert.equal(lines.length, 1, 'exactly one line is printed');
   assert.equal(lines[0].channel, 'log');
   assert.deepEqual(JSON.parse(lines[0].text), {
-    key_ok: true, key_source: 'env', sbt: { had: true, minted: false }, bound: true, warnings: [],
+    key_ok: true, key_source: 'env', sbt: { had: true, minted: false }, bound: true, warnings: [], referral: 'bound',
   });
   const everything = lines.map((l) => l.text).join('\n');
   assert.ok(!everything.includes(ID_ENV_KEY), 'the api key is never printed');
@@ -473,7 +477,7 @@ test('identity: CLAWBY_API_KEY comes from process.env when no env option is pass
   process.env.CLAWBY_API_KEY = ID_ENV_KEY;
   try {
     const f = idClawby({ validKeys: { [ID_ENV_KEY]: ID_ACCOUNT } });
-    const out = await captureRun(['identity'], { fetchImpl: f, sbt: idSbt({ bal: 1n }) });
+    const out = await captureRun(['identity'], { fetchImpl: f, sbt: idSbt({ bal: 1n }), referral: REF });
     assert.equal(out.key_ok, true);
     assert.equal(out.key_source, 'env');
     assert.ok(!JSON.stringify(out).includes(ID_ENV_KEY));
@@ -482,22 +486,43 @@ test('identity: CLAWBY_API_KEY comes from process.env when no env option is pass
   }
 });
 
-test('identity: dry by default (would_mint, nothing sent); only --live lets the mint through', async () => {
+test('identity: AUTO-MINTS by default when there is no SBT and there is gas; --dry-run only previews', async () => {
   await loginMnemonic();
   const f = idClawby({ validKeys: { [ID_ENV_KEY]: ID_ACCOUNT } });
   const env = { CLAWBY_API_KEY: ID_ENV_KEY };
-  const dry = idSbt({ bal: 0n });
-  const outDry = await captureRun(['identity'], { fetchImpl: f, sbt: dry, env });
-  assert.deepEqual(outDry.sbt, { had: false, minted: false, would_mint: true });
-  assert.equal(sentMint(dry), 0, 'a plain `identity` never sends');
-  const live = idSbt({ bal: 0n, tx: '0xfeed' });
-  const outLive = await captureRun(['identity', '--live'], { fetchImpl: f, sbt: live, env });
+  const live = idSbt({ bal: 0n, tx: '0xfeed', bnb: '2.0' });
+  const outLive = await captureRun(['identity'], { fetchImpl: f, sbt: live, env, referral: REF });
   assert.deepEqual(outLive.sbt, { had: false, minted: true, tx: '0xfeed' });
-  assert.equal(sentMint(live), 1);
+  assert.equal(sentMint(live), 1, 'a plain `identity` auto-mints');
+  const dry = idSbt({ bal: 0n });
+  const outDry = await captureRun(['identity', '--dry-run'], { fetchImpl: f, sbt: dry, env, referral: REF });
+  assert.deepEqual(outDry.sbt, { had: false, minted: false, would_mint: true });
+  assert.equal(sentMint(dry), 0, '--dry-run never sends');
+  assert.ok(!dry.calls.some((c) => c[0] === 'getBnb'), 'a dry run never reads gas');
   const held = idSbt({ bal: 1n });
-  const outHeld = await captureRun(['identity', '--live'], { fetchImpl: f, sbt: held, env });
+  const outHeld = await captureRun(['identity'], { fetchImpl: f, sbt: held, env, referral: REF });
   assert.deepEqual(outHeld.sbt, { had: true, minted: false });
-  assert.equal(sentMint(held), 0, 'an existing SBT is never minted again, even with --live');
+  assert.equal(sentMint(held), 0, 'an existing SBT is never minted again');
+});
+
+test('identity: no SBT but no BNB for gas -> skipped no_bnb, nothing sent (never a blind mint)', async () => {
+  await loginMnemonic();
+  const f = idClawby({ validKeys: { [ID_ENV_KEY]: ID_ACCOUNT } });
+  const sbt = idSbt({ bal: 0n, bnb: '0' });
+  const out = await captureRun(['identity'], { fetchImpl: f, sbt, env: { CLAWBY_API_KEY: ID_ENV_KEY }, referral: REF });
+  assert.deepEqual(out.sbt, { had: false, minted: false, skipped: 'no_bnb' });
+  assert.equal(sentMint(sbt), 0);
+});
+
+test('identity: a referral bind with mark:true is persisted to referral_bound_for on the wallet', async () => {
+  withTempState();
+  const { writeState, readState } = await import('./lib.mjs');
+  writeState({ method: 'mnemonic', address: ID_ADDR, mnemonic: ID_PHRASE });
+  const f = idClawby({ validKeys: { [ID_ENV_KEY]: ID_ACCOUNT } });
+  const refMark = async () => ({ referral: 'bound', warnings: [], mark: true });
+  const out = await captureRun(['identity'], { fetchImpl: f, sbt: idSbt({ bal: 1n }), env: { CLAWBY_API_KEY: ID_ENV_KEY }, referral: refMark });
+  assert.equal(out.referral, 'bound');
+  assert.equal(readState().referral_bound_for, ID_ADDR, 'the successful bind is cached on the wallet');
 });
 
 test('identity: with no env key it fetches one with the state wallet; neither key is printed', async () => {
@@ -509,7 +534,7 @@ test('identity: with no env key it fetches one with the state wallet; neither ke
       return idRes(200, { created: true, account: { address: ID_ADDR, username: 'bob' }, api_key: ID_WALLET_KEY });
     },
   });
-  const lines = await captureAll(['identity'], { fetchImpl: f, sbt: idSbt({ bal: 1n }), env: {} });
+  const lines = await captureAll(['identity'], { fetchImpl: f, sbt: idSbt({ bal: 1n }), env: {}, referral: REF });
   assert.equal(lines.length, 1);
   const out = JSON.parse(lines[0].text);
   assert.equal(out.key_ok, true);
@@ -524,12 +549,12 @@ test('identity: no key is reported as key_ok:false + warnings (the hard block fo
   const { writeState } = await import('./lib.mjs');
   writeState({ method: 'baw', address: ID_ADDR });                        // no local key and no env key
   const sbt = idSbt({ bal: 0n });
-  const out = await captureRun(['identity', '--live'], { fetchImpl: idNoNet, sbt, env: {} });
+  const out = await captureRun(['identity'], { fetchImpl: idNoNet, sbt, env: {}, referral: REF });
   assert.equal(out.key_ok, false);
   assert.equal(out.key_source, null);
   assert.ok(out.warnings.length > 0);
   assert.match(out.warnings.join('\n'), /CLAWBY_API_KEY/);
-  assert.equal(sbt.calls.length, 0, 'no identity, so the SBT is not touched (no gas spent) even with --live');
+  assert.equal(sbt.calls.length, 0, 'no key, so the SBT is not touched (no gas spent)');
   assert.notEqual(process.exitCode, 1, 'the summary is the result; key_ok:false is not a process error');
 });
 
@@ -543,11 +568,11 @@ test('identity: not logged in is an error (exit 1) and touches nothing', async (
   process.exitCode = 0; // captureRun error-path sets exitCode; reset so the suite exit stays clean
 });
 
-test('identity: takes only --live; anything else is rejected before any work (a typo must not silently dry-run)', async () => {
+test('identity: takes only --dry-run; anything else (including --live) is rejected before any work', async () => {
   await loginMnemonic();
-  for (const bad of ['live', '--lvie', '--dry-run', '--live=1']) {
+  for (const bad of ['live', '--live', '--dry', '--dry-run=1', 'extra']) {
     const sbt = idSbt();
-    const out = await captureRun(['identity', bad], { fetchImpl: idNoNet, sbt, env: { CLAWBY_API_KEY: ID_ENV_KEY } });
+    const out = await captureRun(['identity', bad], { fetchImpl: idNoNet, sbt, env: { CLAWBY_API_KEY: ID_ENV_KEY }, referral: REF });
     assert.match(out.error, /unknown option/, bad);
     assert.equal(sbt.calls.length, 0, bad);
     assert.equal(process.exitCode, 1);
@@ -555,13 +580,13 @@ test('identity: takes only --live; anything else is rejected before any work (a 
   }
 });
 
-test('identity (real SBT port): reads the SBT over BSC_RPC from the env option; a dry run never even asks the node about a tx', ID_NODE_TEST, async () => {
+test('identity (real SBT port): --dry-run reads the SBT over BSC_RPC and never asks the node about a tx', ID_NODE_TEST, async () => {
   await loginMnemonic();
   await withIdNode({ chainId: '0x38', balance: 0n, paused: false }, async (node) => {
     const f = idClawby({ validKeys: { [ID_ENV_KEY]: ID_ACCOUNT } });
-    const out = await captureRun(['identity'], { fetchImpl: f, env: { CLAWBY_API_KEY: ID_ENV_KEY, BSC_RPC: node.url } });
+    const out = await captureRun(['identity', '--dry-run'], { fetchImpl: f, env: { CLAWBY_API_KEY: ID_ENV_KEY, BSC_RPC: node.url }, referral: REF });
     assert.deepEqual(out, {
-      key_ok: true, key_source: 'env', sbt: { had: false, minted: false, would_mint: true }, bound: true, warnings: [],
+      key_ok: true, key_source: 'env', sbt: { had: false, minted: false, would_mint: true }, bound: true, warnings: [], referral: 'bound',
     });
     assert.deepEqual(node.requests.map((r) => r.method), ['eth_chainId', 'eth_call', 'eth_call']);
   });
@@ -572,23 +597,23 @@ test('identity (real SBT port): rpc precedence is BSC_RPC > state.rpc > default;
     const f = idClawby({ validKeys: { [ID_ENV_KEY]: ID_ACCOUNT } });
     // state.rpc only (BSC_RPC unset)
     await loginMnemonic({ rpc: node.url });
-    const viaState = await captureRun(['identity'], { fetchImpl: f, env: { CLAWBY_API_KEY: ID_ENV_KEY } });
+    const viaState = await captureRun(['identity'], { fetchImpl: f, env: { CLAWBY_API_KEY: ID_ENV_KEY }, referral: REF });
     assert.deepEqual(viaState.sbt, { had: true, minted: false });
     // BSC_RPC beats an unusable state.rpc
     await loginMnemonic({ rpc: 'http://127.0.0.1:1' });
-    const viaEnv = await captureRun(['identity'], { fetchImpl: f, env: { CLAWBY_API_KEY: ID_ENV_KEY, BSC_RPC: node.url } });
+    const viaEnv = await captureRun(['identity'], { fetchImpl: f, env: { CLAWBY_API_KEY: ID_ENV_KEY, BSC_RPC: node.url }, referral: REF });
     assert.deepEqual(viaEnv.sbt, { had: true, minted: false });
     assert.equal(viaEnv.warnings.length, 0);
   });
 });
 
-test('identity (real SBT port): --live on a baw login cannot mint (no local key): a warning, and nothing is sent', ID_NODE_TEST, async () => {
+test('identity (real SBT port): a baw login cannot mint (no local key) even when auto-minting — a warning, nothing sent', ID_NODE_TEST, async () => {
   withTempState();
   const { writeState } = await import('./lib.mjs');
   writeState({ method: 'baw', address: ID_ADDR });
   await withIdNode({ chainId: '0x38', balance: 0n, paused: false }, async (node) => {
     const f = idClawby({ validKeys: { [ID_ENV_KEY]: ID_ACCOUNT } });
-    const out = await captureRun(['identity', '--live'], { fetchImpl: f, env: { CLAWBY_API_KEY: ID_ENV_KEY, BSC_RPC: node.url } });
+    const out = await captureRun(['identity'], { fetchImpl: f, env: { CLAWBY_API_KEY: ID_ENV_KEY, BSC_RPC: node.url }, referral: REF });
     assert.equal(out.key_ok, true);
     assert.equal(out.sbt.minted, false);
     assert.equal(out.sbt.skipped, 'error');
@@ -600,7 +625,7 @@ test('identity (real SBT port): --live on a baw login cannot mint (no local key)
 test('identity (real SBT port): an unreachable RPC is a warning, not a failure — the key is still ok', ID_NODE_TEST, async () => {
   await loginMnemonic({ rpc: 'http://127.0.0.1:1' });                     // nothing listens here: the read fails with ECONNREFUSED
   const f = idClawby({ validKeys: { [ID_ENV_KEY]: ID_ACCOUNT } });
-  const out = await captureRun(['identity'], { fetchImpl: f, env: { CLAWBY_API_KEY: ID_ENV_KEY } });
+  const out = await captureRun(['identity'], { fetchImpl: f, env: { CLAWBY_API_KEY: ID_ENV_KEY }, referral: REF });
   assert.equal(out.key_ok, true);
   assert.equal(out.key_source, 'env');
   assert.equal(out.sbt.minted, false);
@@ -609,19 +634,20 @@ test('identity (real SBT port): an unreachable RPC is a warning, not a failure �
   assert.notEqual(process.exitCode, 1);
 });
 
-test('static scan: identity derives live only from the literal --live flag and hands that same value to the port and to ensureIdentity', async () => {
+test('static scan: identity auto-mints by default (only --dry-run turns it off), reads gas via the port, caches a bind, and never prints', async () => {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('./42space.mjs', import.meta.url), 'utf8');
   const from = src.indexOf("case 'identity':");
   const to = src.indexOf("case 'import-mnemonic':");
   assert.ok(from > 0 && to > from);
   const body = src.slice(from, to);
-  assert.match(body, /const live = rest\.includes\('--live'\);/);
-  assert.match(body, /makeSbtForState\(s, \{ env, live \}\)/, 'a dry run builds a read-only port (no signer)');
-  assert.match(body, /ensureIdentity\(\{ state: s, env, fetchImpl, sbt: port, live \}\)/);
-  assert.doesNotMatch(body, /live\s*[:=]\s*(true|1|'|")|process\.env|process\.argv|sendMint|sendTransaction/, 'no other way to switch live on, no direct send');
-  // the key may be handed on, but never printed: the only output in this case is the ensureIdentity summary
-  assert.equal([...body.matchAll(/\bout\(/g)].length, 1);
+  assert.match(body, /const autoMint = !rest\.includes\('--dry-run'\);/);
+  assert.match(body, /makeSbtForState\(s, \{ env, live: autoMint \}\)/, 'a dry run builds a read-only port (no signer)');
+  assert.match(body, /ensureIdentity\(\{ state: s, env, fetchImpl, sbt: port, live: autoMint, hasGas \}\)/);
+  assert.match(body, /port\.getBnb\(\)/, 'gas is read on the SBT port, not a second RPC source');
+  assert.match(body, /referral_bound_for: s\.address/, 'a successful bind is cached to the wallet');
+  assert.doesNotMatch(body, /live\s*[:=]\s*(true|1)\b|process\.argv|sendMint|sendTransaction/, 'no direct live-on, no direct send');
+  assert.equal([...body.matchAll(/\bout\(/g)].length, 1, 'the only output is the one summary line');
   assert.doesNotMatch(body, /console\./);
 });
 
@@ -630,7 +656,7 @@ test('identity via the real CLI entry (child process): a baw login with no CLAWB
   writeFileSync(f, JSON.stringify({ method: 'baw', address: ID_ADDR }), { mode: 0o600 });
   // CLAWBY_API_KEY is blanked (== unset) so a key in the developer's own shell can never make this test call clawby;
   // with no env key and no local key resolveKey fails before any request, and with no key the SBT is never touched.
-  for (const args of [['identity'], ['identity', '--live']]) {
+  for (const args of [['identity'], ['identity', '--dry-run']]) {
     const r = spawnSync(process.execPath, [CLI, ...args], {
       encoding: 'utf8',
       env: { ...process.env, CLAWBY_42SPACE_STATE: f, CLAWBY_API_KEY: '', BSC_RPC: '' },

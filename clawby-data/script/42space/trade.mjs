@@ -88,6 +88,7 @@ import {
   ZeroAddress, formatUnits, getAddress, isAddress, parseUnits,
 } from 'ethers';
 import { readState, DEFAULT_RPC } from './lib.mjs';
+import { recordPosition } from './positions.mjs';
 
 // ------------------------------------------------------------------------------------ constants
 export const CHAIN_ID = 56;
@@ -427,7 +428,7 @@ async function quoteBuy(c, market, tokenId, amountWei, eps) {
     fee: r.quote.collateralToTreasury, integratorFee: r.quote.collateralToIntegrator };
 }
 
-async function quoteSell(c, market, tokenId, otWei) {
+export async function quoteSell(c, market, tokenId, otWei) {
   const r = await c.lens.simulateRedeem.staticCall(market, tokenId, otWei, true, '0x', '0x', INTEGRATOR_FEE_BPS);
   return { priceBefore: r.pre.price, priceAfter: r.post.price,
     usdtToUser: r.quote.collateralToUser, fee: r.quote.collateralToTreasury, integratorFee: r.quote.collateralToIntegrator };
@@ -870,6 +871,19 @@ async function cmdQuote(c, side, opts, rest) {
   console.log('\nquote only: nothing was sent.');
 }
 
+// After a LIVE buy, record the opened position — market, tokenId, and the ACTUAL on-chain USDT spent / OT received
+// (from the before/after balances, not the quote) — in the local ledger so the take-profit daemon can watch it. Only
+// ever reached past cmdBuy's dry-run gate; a roundtrip (immediate buy+sell, no held position) never calls it.
+export function recordBuyPosition(market, tokenId, before, after) {
+  recordPosition({
+    market: getAddress(market),
+    tokenId: String(tokenId),
+    entryUsdt: (before.usdt - after.usdt).toString(),
+    entryOt: (after.ot - before.ot).toString(),
+    ts: Date.now(),
+  });
+}
+
 async function cmdBuy(c, opts, rest) {
   const t = resolveTarget(opts, rest);
   const bips = slippageBips(opts.slippage);
@@ -907,6 +921,34 @@ async function cmdBuy(c, opts, rest) {
   showBalances('before', before, t.tokenId);
   showBalances('after', after, t.tokenId);
   console.log(`delta     USDT ${u(after.usdt - before.usdt)} | OT ${u(after.ot - before.ot)}   (quote ${u(p.q.otToUser)}, minOut ${u(p.minOut)})`);
+  // The buy is already on chain; a failure to write the local ledger must NOT surface as a failed buy (that could make
+  // the user re-buy). Record best-effort — on failure say so and move on; the position just will not be auto-watched.
+  try {
+    recordBuyPosition(t.market, t.tokenId, before, after);
+  } catch (e) {
+    console.log(`note: the buy succeeded but recording it for take-profit failed (${explainError(e)}) - it will not be auto-watched`);
+  }
+}
+
+// The live half of a sell, shared by cmdSell and runSell so there is exactly ONE sell execution path: the gas budget
+// check, then every planned step through sendStep (the module's single broadcast point), each approve re-verified on
+// chain before the swap. Callers reach it only past their own dry-run gate. t = { market, tokenId }.
+async function executeSell(c, t, p, approveMode) {
+  await gasBudgetCheck(c, p.steps);
+  console.log('\n>>> LIVE: broadcasting to BSC mainnet');
+  const allowed = new Set([ROUTER, t.market]);
+  const mk = c.marketAt(t.market);
+  for (let i = 0; i < p.steps.length; i++) {
+    const s = p.steps[i];
+    console.log(`\n[${i + 1}/${p.steps.length}] ${s.label}`);
+    await sendStep(c, s, allowed);
+    if (s.kind === 'approve') {
+      const ok = approveMode === 'token'
+        ? (await mk.allowance(c.address, ROUTER, t.tokenId)) >= p.otIn
+        : await mk.isOperator(c.address, ROUTER);
+      if (!ok) throw new Error('approval not visible on-chain after the approve tx - aborting before the swap');
+    }
+  }
 }
 
 async function cmdSell(c, opts, rest) {
@@ -928,21 +970,7 @@ async function cmdSell(c, opts, rest) {
     console.log('\nDRY RUN: nothing was sent. Re-run with --live to broadcast the transaction(s) above.');
     return;
   }
-  await gasBudgetCheck(c, p.steps);
-  console.log('\n>>> LIVE: broadcasting to BSC mainnet');
-  const allowed = new Set([ROUTER, t.market]);
-  const mk = c.marketAt(t.market);
-  for (let i = 0; i < p.steps.length; i++) {
-    const s = p.steps[i];
-    console.log(`\n[${i + 1}/${p.steps.length}] ${s.label}`);
-    await sendStep(c, s, allowed);
-    if (s.kind === 'approve') {
-      const ok = opts.approveMode === 'token'
-        ? (await mk.allowance(c.address, ROUTER, t.tokenId)) >= p.otIn
-        : await mk.isOperator(c.address, ROUTER);
-      if (!ok) throw new Error('approval not visible on-chain after the approve tx - aborting before the swap');
-    }
-  }
+  await executeSell(c, t, p, opts.approveMode);
   const after = await readBalances(c, t.market, t.tokenId);
   console.log('');
   showBalances('before', before, t.tokenId);
@@ -1050,6 +1078,52 @@ export async function runRoundtrip(
   } finally {
     c.provider.destroy();
   }
+}
+
+// One sell for a caller that is not the CLI (the take-profit daemon): the same read -> plan -> execute path as the sell
+// command, minus the printing. Builds its own context (released in finally, even on failure), checks the chain, reads
+// and validates the market, plans the sell and - only when `live` is exactly true - executes it through executeSell.
+// `amount` defaults to "all" (the whole position) and `approveMode` to the blanket operator grant a held (bought)
+// position needs before the router can pull its OT. `makeCtx` is the test seam.
+//   -> { market, tokenId, otIn, usdtOut, minOut, traded, txs, steps }
+export async function runSell(
+  { market, tokenId, amount = 'all', slippage = DEFAULT_SLIPPAGE_PCT, approveMode = 'operator', live = false, rpcUrl, account } = {},
+  { makeCtx = makeContext } = {},
+) {
+  const t = { market: parseMarket(market), tokenId: parseTokenId(tokenId) };
+  const bips = slippageBips(slippage);
+  const isLive = live === true;
+  const c = makeCtx({ live: isLive, account, rpcUrl });
+  const alreadySent = c.sent.length;
+  try {
+    await assertChain(c);
+    const m = await readMarket(c, t.market);
+    assertTradable(m, t.tokenId, c.live);
+    const p = await planSell(c, { market: t.market, tokenId: t.tokenId, amountArg: amount, bips, approveMode, tick: m.tick, live: c.live });
+    if (c.live) await executeSell(c, t, p, approveMode);
+    return {
+      market: t.market, tokenId: t.tokenId, otIn: p.otIn, usdtOut: p.q.usdtToUser, minOut: p.minOut,
+      traded: c.live, txs: c.sent.slice(alreadySent), steps: p.steps.map((s) => s.label),
+    };
+  } catch (e) {
+    noteSent(c, e);
+    throw e;
+  } finally {
+    c.provider.destroy();
+  }
+}
+
+// Current value of a held position, read on chain: the wallet's ERC-6909 OT balance of (market, tokenId) and, when it
+// holds any, what redeeming ALL of it would pay in USDT right now (Lens simulateRedeem). The take-profit daemon compares
+// usdtOut against the recorded entry cost. A zero balance (already sold / claimed) -> { bal: 0n, usdtOut: 0n }, no quote.
+export async function readPositionValue(c, market, tokenId) {
+  // A finalised market can no longer be redeemed on the curve (its sell would revert) — it is CLAIMED, not sold. Report
+  // it so the take-profit daemon drops it from monitoring and leaves it for `claim`, instead of retrying a reverting sell.
+  if ((await c.lens.snapshotMarket(market)).state.isFinalised) return { finalised: true, bal: 0n, usdtOut: 0n };
+  const bal = await c.marketAt(market).balanceOf(c.address, tokenId);
+  if (bal <= 0n) return { finalised: false, bal: 0n, usdtOut: 0n };
+  const q = await quoteSell(c, market, tokenId, bal);
+  return { finalised: false, bal, usdtOut: q.usdtToUser };
 }
 
 async function cmdClaim(c, opts, rest) {

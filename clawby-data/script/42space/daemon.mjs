@@ -22,9 +22,10 @@
 // OUTPUT: one JSON event per line on STDOUT (start / plan / trade / wait / warn / done, and error from the CLI wrapper); the trade
 // narration trade.mjs prints with console.log is routed to STDERR while a round trip runs, so stdout stays machine-readable.
 import { formatUnits } from 'ethers';
-import { parseVolume, bnbStatus } from './lib.mjs';
+import { parseVolume, bnbStatus, readState } from './lib.mjs';
 import { scanMarkets } from './scan.mjs';
-import { runRoundtrip as tradeRunRoundtrip, makeContext, loadAccount, assertChain, parseAmount, slippageBips, explainError, isMain } from './trade.mjs';
+import { runRoundtrip as tradeRunRoundtrip, runSell as tradeRunSell, readPositionValue, makeContext, loadAccount, assertChain, parseAmount, parseMarket, parseTokenId, slippageBips, explainError, isMain } from './trade.mjs';
+import { listPositions, removePosition } from './positions.mjs';
 
 export const DEFAULT_THRESHOLD_PCT = 3;      // a market is tradable only when its round trip costs strictly LESS than this (percent)
 export const DEFAULT_SLIPPAGE_PCT = '3';     // fast mode's slippage (trade.mjs's own default is 2)
@@ -140,7 +141,7 @@ async function narrationToStderr(fn) {
 // through; default makeContext without a key), scan, runRoundtrip (trade.mjs's unbound one - this function binds the flags),
 // sleep, log, fetchImpl, now.
 // -> { cycles, volume, trades }. Dry (no --live): ONE scan + a planned round trip, then stop; live: the loop, until the target.
-export async function main(argv, deps = {}) {
+export async function fastMain(argv, deps = {}) {
   const o = parseDaemonArgs(argv);
   const live = o.live;
   const log = deps.log ?? defaultLog;
@@ -224,6 +225,149 @@ export async function main(argv, deps = {}) {
   } finally {
     rc.provider.destroy();
   }
+}
+
+// ------------------------------------------------------------------------------------ TAKE-PROFIT MODE
+// Watch the positions a live `buy` recorded (positions.mjs ledger) and sell each one once it is up >= a target percent
+// vs its entry cost, instead of holding to settlement. Purely mechanical (no LLM). Like fast mode, DRY unless --live,
+// and its only road to the chain is trade.mjs's runSell (the module's single broadcast point).
+//
+//   node daemon.mjs take-profit [--pct <percent=50>] [--interval <sec>] [--live]
+export const DEFAULT_TAKE_PROFIT_PCT = 50;   // sell a held position once it is up this many percent vs its entry cost
+const TP_USAGE = 'usage: node daemon.mjs take-profit [--pct <percent=50>] [--interval <sec>] [--live]';
+const TP_VALUE_FLAGS = { '--pct': 'pct', '--interval': 'interval' };
+const TP_BOOL_FLAGS = { '--live': 'live' };
+
+// -> { pct: number|null, interval: number, live: boolean }. pct null means "use the stored default or 50" (resolved by
+// takeProfitMain). Throws on anything unknown or invalid, so a typo can never silently change what runs.
+export function parseTakeProfitArgs(argv) {
+  const [cmd, ...rest] = argv;
+  if (cmd !== 'take-profit') throw new Error(`unknown command "${cmd ?? '(none)'}" - ${TP_USAGE}`);
+  const o = { pct: null, interval: String(DEFAULT_INTERVAL_S), live: false };
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (!a.startsWith('--')) throw new Error(`unexpected argument: ${a}`);
+    const eq = a.indexOf('=');
+    const name = eq === -1 ? a : a.slice(0, eq);
+    if (Object.hasOwn(TP_BOOL_FLAGS, name)) {
+      if (eq !== -1) throw new Error(`${name} takes no value`);
+      o[TP_BOOL_FLAGS[name]] = true;
+      continue;
+    }
+    if (!Object.hasOwn(TP_VALUE_FLAGS, name)) throw new Error(`unknown option: ${name}`);
+    const val = eq === -1 ? rest[++i] : a.slice(eq + 1);
+    if (val === undefined || val.startsWith('--')) throw new Error(`${name} needs a value`);
+    o[TP_VALUE_FLAGS[name]] = val;
+  }
+  let pct = null;
+  if (o.pct !== null) {
+    pct = Number(o.pct);
+    if (!positive(pct)) throw new Error('--pct must be a positive number (percent gain to sell at)');
+  }
+  const interval = Number(o.interval);
+  if (!(Number.isFinite(interval) && interval >= 1)) throw new Error('--interval must be at least 1 second');
+  return { pct, interval, live: o.live };
+}
+
+// One pass over the ledger. deps (all injectable): listPositions, removePosition, readValue(market, tokenId) ->
+// { bal, usdtOut } (on-chain OT balance + its current redeem value in USDT), sell({market, tokenId}) -> { traded, txs },
+// onResult(result). For each position: read the chain; a zero balance means it already left (sold / claimed elsewhere)
+// -> remove it ('gone'). Otherwise compare the current redeem value against the entry cost SCALED to the balance still
+// held (so a partially-sold position is judged on what remains); at or above `pct` percent it is sold (execute) or
+// reported 'would_sell' (dry). A sell that throws (e.g. a finalised market -> the redeem reverts) is 'skip' and the
+// position is LEFT in the ledger for claim. -> { checked, sold, removed, results }.
+export async function takeProfitCycle(deps, { pct, execute } = {}) {
+  const { listPositions: list, removePosition: remove, readValue, sell, onResult } = deps;
+  if (!positive(pct)) throw new Error('takeProfitCycle: pct must be a positive number (percent)');
+  const positions = list();
+  let sold = 0;
+  let removed = 0;
+  const results = [];
+  const emit = (r) => { results.push(r); onResult?.(r); };
+  const bps = BigInt(Math.round(pct * 100));                     // pct may be fractional, e.g. 12.5 -> 1250 bps
+  for (const pos of positions) {
+    const { market, tokenId } = pos;
+    let value;
+    try { value = await readValue(market, tokenId); } catch (e) { emit({ market, tokenId, action: 'skip', reason: explainError(e) }); continue; }
+    if (value.finalised) { remove(market, tokenId); removed += 1; emit({ market, tokenId, action: 'settled' }); continue; }   // market settled -> can't sell, leave for claim; drop from monitoring (no infinite retry)
+    const bal = BigInt(value.bal);
+    if (bal <= 0n) { remove(market, tokenId); removed += 1; emit({ market, tokenId, action: 'gone' }); continue; }
+    const entryOt = BigInt(pos.entryOt);
+    const costForBal = entryOt > 0n ? BigInt(pos.entryUsdt) * bal / entryOt : 0n;   // entry cost scaled to the balance still held
+    if (costForBal <= 0n) { emit({ market, tokenId, action: 'skip', reason: 'unusable entry cost' }); continue; }
+    const usdtOut = BigInt(value.usdtOut);
+    const gainPct = Number((usdtOut - costForBal) * 10000n / costForBal) / 100;
+    if (!(usdtOut * 10000n >= costForBal * (10000n + bps))) { emit({ market, tokenId, action: 'hold', gainPct }); continue; }
+    if (!execute) { emit({ market, tokenId, action: 'would_sell', gainPct }); continue; }
+    let r;
+    try { r = await sell({ market, tokenId }); } catch (e) { emit({ market, tokenId, action: 'skip', reason: explainError(e) }); continue; }
+    remove(market, tokenId);
+    sold += 1;
+    emit({ market, tokenId, action: 'sold', gainPct, txs: r?.txs ?? [] });
+  }
+  return { checked: positions.length, sold, removed, results };
+}
+
+// Repeats live cycles until the ledger is empty, sleeping `sleepMs` between passes (a position still held but below the
+// target is simply watched again next pass). -> { cycles, sold }.
+export async function runTakeProfitLoop(deps, { pct, sleepMs = DEFAULT_INTERVAL_S * 1000, sleep: wait = sleep } = {}) {
+  if (!positive(pct)) throw new Error('runTakeProfitLoop: pct must be a positive number (percent)');
+  let cycles = 0;
+  let sold = 0;
+  while (deps.listPositions().length > 0) {
+    const r = await takeProfitCycle(deps, { pct, execute: true });
+    cycles += 1;
+    sold += r.sold;
+    if (deps.listPositions().length === 0) break;
+    await wait(sleepMs);
+  }
+  return { cycles, sold };
+}
+
+// take-profit CLI. deps (all optional, for tests): account, ctx (read-only chain context the values are read through),
+// listPositions, removePosition, readValue, sell, sleep, log.
+export async function takeProfitMain(argv, deps = {}) {
+  const o = parseTakeProfitArgs(argv);
+  const live = o.live;
+  const log = deps.log ?? defaultLog;
+  const account = deps.account ?? loadAccount();
+  if (live && !account.canSign) {
+    throw new Error(`--live needs a local key to sign with, and this login (method=${account.method}) has none: log in with import-mnemonic or create-wallet first`);
+  }
+  const stored = Number(readState().take_profit_pct);
+  const pct = o.pct ?? (positive(stored) ? stored : DEFAULT_TAKE_PROFIT_PCT);
+  const rc = deps.ctx ?? makeContext({ live: false, account });      // read-only: values are read with eth_call; sells go through runSell's own context
+  try {
+    await assertChain(rc);
+    if (live) {
+      const bnb = formatUnits(await rc.provider.getBalance(account.address), 18);
+      const status = bnbStatus(bnb);
+      if (status === 'none') throw new Error(`wallet ${account.address} has 0 BNB, so there is no gas to sell with - fund it with BNB first (bnb_status none)`);
+      if (status === 'low') log({ event: 'warn', message: `low BNB (${bnb}): each sell costs gas, top up soon` });
+    }
+    const readValue = deps.readValue ?? ((market, tokenId) => readPositionValue(rc, parseMarket(market), parseTokenId(tokenId)));
+    const sellOne = deps.sell ?? ((args) => narrationToStderr(() => tradeRunSell({ ...args, amount: 'all', approveMode: 'operator', slippage: DEFAULT_SLIPPAGE_PCT, live, account })));
+    const onResult = (r) => log({ event: r.action, ...r });
+    const cycleDeps = { listPositions: deps.listPositions ?? listPositions, removePosition: deps.removePosition ?? removePosition, readValue, sell: sellOne, onResult };
+    log({ event: 'start', mode: live ? 'live' : 'dry-run', address: account.address, pct, interval_s: o.interval });
+    if (!live) {
+      const r = await takeProfitCycle(cycleDeps, { pct, execute: false });
+      log({ event: 'done', mode: 'dry-run', checked: r.checked, would_sell: r.results.filter((x) => x.action === 'would_sell').length, note: 'DRY RUN: nothing was sold. Re-run with --live to auto-sell at the target gain.' });
+      return { cycles: 1, sold: 0 };
+    }
+    const summary = await runTakeProfitLoop(cycleDeps, { pct, sleepMs: o.interval * 1000, sleep: deps.sleep });
+    log({ event: 'done', mode: 'live', cycles: summary.cycles, sold: summary.sold });
+    return summary;
+  } finally {
+    rc.provider.destroy();
+  }
+}
+
+// Dispatch the two daemon modes. `fast` keeps buying+selling to a volume target; `take-profit` watches held positions
+// and sells each at a target gain. Both are DRY unless --live and broadcast only through trade.mjs.
+export async function main(argv, deps = {}) {
+  if (argv[0] === 'take-profit') return takeProfitMain(argv, deps);
+  return fastMain(argv, deps);
 }
 
 if (isMain(process.argv[1], import.meta.url)) {

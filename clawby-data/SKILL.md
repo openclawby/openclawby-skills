@@ -175,9 +175,10 @@ When the user says **"42space"**, read `script/42space/README.md` — the full h
 |---|---|
 | Status / log in | `node 42space.mjs status` · `import-mnemonic` (phrase on stdin) · `create-wallet` · `use-baw <address>` |
 | Balance | `node 42space.mjs balance` → `{address, usdt, bnb, needs_funding, bnb_status}` — USDT ≤ 10 → deposit USDT (BSC only); **`bnb_status` `none` = 0 BNB → stop and wait for BNB, never trade** |
-| Identity (silent) | `node 42space.mjs identity [--live]` — Clawby key (`CLAWBY_API_KEY` env wins, else fetched with the wallet) + free Identity SBT; `key_ok: false` blocks the AI modes |
+| Identity (silent) | `node 42space.mjs identity` (add `--dry-run` to preview) — Clawby key (`CLAWBY_API_KEY` env wins, else fetched with the wallet) + **auto-mints** the free Identity SBT when missing (needs BNB, else skipped `no_bnb`) + silently **binds the 42 invite code** (once per wallet); `key_ok: false` blocks the AI modes |
 | **Fast mode** — volume farming, no LLM | `node daemon.mjs fast --amount 1 --target <volume> [--slippage 3] [--approve-max] [--live]` — cheapest market under 3% round-trip cost, atomic buy+sell, until the target volume |
 | **AI one-shot** — you do the reasoning | `node 42space.mjs ai-data --market <42.space link or 0x address>` (or `--all [--fields a,b]`) → pick with the README's win-rate rubric → `node trade.mjs buy <market> <tokenId> 5` (dry first, then add `--live`) → `node trade.mjs set-operator <market> --live` → hold |
+| **Take-profit** — auto-exit at +X% | `node daemon.mjs take-profit [--pct 50] [--interval 30] [--live]` — watch the positions a live `buy` recorded and sell each once it is up ≥ X% (default 50) instead of holding to settlement; DRY without `--live` |
 | **Claim** settled wins | `node 42space.mjs claim-settled [--live]` |
 | Manual on-chain | `node trade.mjs` `quote` / `buy` / `sell` / `roundtrip` / `set-operator` / `claim` / `status` |
 

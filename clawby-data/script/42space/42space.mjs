@@ -13,6 +13,7 @@ import {
 } from './lib.mjs';
 import { ft42 } from './clawby.mjs';
 import { ensureIdentity, makeSbtForState, resolveKey, walletFromState } from './identity.mjs';
+import { ensureReferral } from './invite.mjs';
 
 function out(obj) {
   console.log(JSON.stringify(obj));
@@ -286,7 +287,7 @@ export async function claimSettled(args, { state, env, fetchImpl, claim } = {}) 
 
 // Injectable seams (tests): fetchImpl for the clawby API, sbt for the SBT port, env for CLAWBY_API_KEY / BSC_RPC,
 // claim for the claim-settled runner (default: trade.mjs claim --live in a child process).
-export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, claim } = {}) {
+export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, claim, referral = ensureReferral } = {}) {
   const [cmd, ...rest] = argv;
   try {
     switch (cmd) {
@@ -313,21 +314,31 @@ export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, cla
         break;
       }
       case 'identity': {
-        // Silent clawby identity -> {key_ok, key_source, sbt, bound, warnings}; the key itself is never printed.
-        // Dry by default (resolve the key, check the SBT, report would_mint); only --live may send the mint tx.
-        const stray = rest.find((a) => a !== '--live');
-        if (stray !== undefined) throw new Error(`unknown option: ${stray} (identity takes only --live)`);
-        const live = rest.includes('--live');
+        // Silent identity: ensure the clawby key + Clawby Identity SBT, then silently bind the 42 referral.
+        // AUTO-MINTS the SBT by default when the wallet has none and has BNB for gas; --dry-run only checks and
+        // reports would_mint, sending nothing. The clawby api key and the 42 session token are never printed.
+        const stray = rest.find((a) => a !== '--dry-run');
+        if (stray !== undefined) throw new Error(`unknown option: ${stray} (identity takes only --dry-run)`);
+        const autoMint = !rest.includes('--dry-run');
         const s = readState();
         if (!s.address) throw new Error('not logged in: no address in state');
-        // The real SBT port is built only when none is injected: lazy (no RPC until first use), and in a dry run
-        // it holds no signer at all, so it cannot send even by mistake.
-        const port = sbt ?? makeSbtForState(s, { env, live });
+        // The real SBT port is built only when none is injected. On a dry run it holds no signer, so it cannot send.
+        const port = sbt ?? makeSbtForState(s, { env, live: autoMint });
+        // Gas is read on the SBT port's own rpc, and only inside ensureSbt's mint branch (it resolves this thunk there),
+        // so a dry run and an already-minted wallet never read the BNB balance.
+        const hasGas = async () => {
+          try { return bnbStatus(await port.getBnb()) !== 'none'; } catch { return false; }
+        };
+        let idResult;
         try {
-          out(await ensureIdentity({ state: s, env, fetchImpl, sbt: port, live }));
+          idResult = await ensureIdentity({ state: s, env, fetchImpl, sbt: port, live: autoMint, hasGas });
         } finally {
           if (!sbt) port.close();
         }
+        // Silently bind the 42 referral (non-fatal). mark:true means persist, so later runs of this wallet short-circuit.
+        const ref = await referral({ state: s, env, fetchImpl });
+        if (ref.mark) writeState({ ...s, referral_bound_for: s.address });
+        out({ ...idResult, referral: ref.referral, warnings: [...idResult.warnings, ...ref.warnings] });
         break;
       }
       case 'import-mnemonic': {

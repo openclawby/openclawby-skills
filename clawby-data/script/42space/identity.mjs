@@ -10,7 +10,7 @@
 //
 // Failure policy: every SBT problem is non-fatal (recorded in `warnings`, the flow continues). A missing/invalid
 // key is NOT swallowed: it yields key_ok:false + a warning, which the playbook treats as a hard block for the AI modes.
-import { Contract, Interface, JsonRpcProvider, Network, Wallet, getAddress } from 'ethers';
+import { Contract, Interface, JsonRpcProvider, Network, Wallet, formatUnits, getAddress } from 'ethers';
 import { DEFAULT_RPC } from './lib.mjs';
 import { getKeyFromWallet, getAccount, clawbyKeyFromEnv } from './clawby.mjs';
 import { sendStep, CHAIN_ID } from './trade.mjs';
@@ -42,7 +42,7 @@ export function buildMintStep() {
 // `sbt` is the SBT port { balanceOf(addr) -> bigint, mintingPaused() -> bool, sendMint() -> tx hash } — makeSbt() below in
 // real use, a stub in tests. Dry by default: sendMint() is reachable ONLY with live === true (strictly: a truthy string
 // or number is not enough). A balance or pause flag that cannot be read throws instead of guessing — never mint blind.
-export async function ensureSbt({ address, sbt, live = false }) {
+export async function ensureSbt({ address, sbt, live = false, hasGas = true }) {
   if (!sbt) throw new Error('ensureSbt: no sbt port given');
   const raw = await sbt.balanceOf(address);                     // a failing read propagates as-is: the real cause stays visible
   let bal;
@@ -56,6 +56,11 @@ export async function ensureSbt({ address, sbt, live = false }) {
   if (typeof paused !== 'boolean') throw new Error('sbt.mintingPaused() did not return a boolean');
   if (paused) return { had: false, minted: false, skipped: 'paused' };
   if (live === true) {
+    // No BNB for gas: skip loudly instead of broadcasting a mint into a sure gas-estimate failure. `hasGas` is a
+    // boolean OR a 0-arg async thunk, resolved ONLY here (the live-mint branch) so a dry run and an already-minted
+    // wallet never read the BNB balance — the identity command passes a thunk that reads the wallet's BNB.
+    const gas = typeof hasGas === 'function' ? await hasGas() : hasGas;
+    if (!gas) return { had: false, minted: false, skipped: 'no_bnb' };
     const tx = await sbt.sendMint();
     return { had: false, minted: true, tx };
   }
@@ -93,7 +98,7 @@ export function rpcFor(state, env = process.env) {
 // the void). Reads need only the RPC. sendMint() additionally needs `signer`, an UNCONNECTED wallet that the caller hands
 // in only for a live run (a dry run passes none, so the port physically cannot send) — it is attached to the provider
 // only inside sendMint, and the broadcast goes through trade.mjs's sendStep, the module's single broadcast point.
-export function makeSbt({ rpc = DEFAULT_RPC, signer = null } = {}) {
+export function makeSbt({ rpc = DEFAULT_RPC, signer = null, address = null } = {}) {
   let provider = null;
   let chainOk = false;
 
@@ -114,6 +119,14 @@ export function makeSbt({ rpc = DEFAULT_RPC, signer = null } = {}) {
     canSign: signer !== null,                              // read-only introspection: can this port ever send?
     balanceOf: async (address) => (await contract()).balanceOf(address),
     mintingPaused: async () => (await contract()).mintingPaused(),
+    // native BNB balance (18-dec string) of the logged-in wallet, read on the SBT port's OWN rpc so the identity
+    // command can decide "is there gas to auto-mint?" without a second RPC source (works for the real port and the
+    // real-node tests alike). Only ever called from the live-mint branch, so a dry run never reads it.
+    getBnb: async () => {
+      const who = address ?? signer?.address;
+      if (!who) throw new Error('getBnb: no address to read the BNB balance of');
+      return formatUnits(await (await ready()).getBalance(who), 18);
+    },
     async sendMint() {
       if (!signer) throw new Error('no local key to sign the mint with (a baw / address-only login, or a dry run)');
       const ctx = { live: true, signer: signer.connect(await ready()), sent: [] };
@@ -143,7 +156,7 @@ export function makeSbtForState(state, { env = process.env, live = false } = {})
   if (live === true) {
     try { signer = walletFromState(state); } catch { signer = null; }
   }
-  return makeSbt({ rpc: rpcFor(state, env), signer });
+  return makeSbt({ rpc: rpcFor(state, env), signer, address: state?.address ?? null });
 }
 
 // ------------------------------------------------------------------------------------ resolveKey
@@ -202,7 +215,7 @@ function accountOwns(account, address) {
 //     Dry by default: `live` (strictly true) is what lets ensureSbt mint.
 //   * bound: whether the account is tied to this wallet. A key fetched with the wallet is wallet-first, hence bound; an
 //     env-key account that is not has no pk_ bind endpoint, so it is recorded (warning) and skipped, never blocking.
-export async function ensureIdentity({ state, env = process.env, fetchImpl = fetch, sbt, live = false } = {}) {
+export async function ensureIdentity({ state, env = process.env, fetchImpl = fetch, sbt, live = false, hasGas = true } = {}) {
   const warnings = [];
   const secrets = [clawbyKeyFromEnv(env ?? {}), typeof state?.mnemonic === 'string' ? state.mnemonic.trim() : null];
   const warn = (msg) => warnings.push(scrub(msg, secrets).slice(0, 240));      // scrub BEFORE truncating: a cut secret would escape
@@ -240,7 +253,7 @@ export async function ensureIdentity({ state, env = process.env, fetchImpl = fet
       warn('sbt: no wallet address to check');
     } else {
       try {
-        sbtOut = await ensureSbt({ address, sbt, live });
+        sbtOut = await ensureSbt({ address, sbt, live, hasGas });
       } catch (e) {
         sbtOut = { had: null, minted: false, skipped: 'error' };
         warn(`sbt: ${describe(e)}`);

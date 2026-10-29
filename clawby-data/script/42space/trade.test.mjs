@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AbiCoder, Interface, MaxUint256, id, ZeroAddress } from 'ethers';
+import { AbiCoder, Interface, MaxUint256, id, ZeroAddress, getAddress } from 'ethers';
 import {
   ROUTER, ROUTER_ABI, ERROR_ABI, ERC20_ABI, MARKET_ABI, DEFAULT_MARKET, USDT,
   smartEps, encodeDataGuess, slippageBips, applySlippage, floorToTick,
@@ -26,6 +26,13 @@ const coder = AbiCoder.defaultAbiCoder();
 function withTempState() {
   const f = join(mkdtempSync(join(tmpdir(), '42t-')), '42space.json');
   process.env.CLAWBY_42SPACE_STATE = f;
+  return f;
+}
+
+// Point the position ledger at a fresh temp file via the env override positions.mjs reads live.
+function withTempPositions() {
+  const f = join(mkdtempSync(join(tmpdir(), '42tp-')), '42space-positions.json');
+  process.env.CLAWBY_42SPACE_POSITIONS = f;
   return f;
 }
 
@@ -851,6 +858,86 @@ test('static scan: --approve-max is wired into cmdBuy -> planBuy and cmdRoundtri
   assert.match(slice('export async function planRoundtrip', 'export function roundtripOutlook'), /\.\.\.usdtApprove\(allowance, usdtInWei, approveMax\)/);
   assert.doesNotMatch(slice('export async function planBuy', 'export async function planSell'), /MaxUint256/);
   assert.doesNotMatch(slice('export async function planRoundtrip', 'export function roundtripOutlook'), /MaxUint256/);
+});
+
+// ------------------------------------------------------------------------------ buy records an open position
+
+test('recordBuyPosition writes the on-chain USDT/OT deltas (not the quote) to the position ledger', async () => {
+  withTempPositions();
+  const { recordBuyPosition } = await import('./trade.mjs');
+  const { listPositions } = await import('./positions.mjs');
+  const before = { bnb: 0n, usdt: 10n * 10n ** 18n, ot: 0n };
+  const after = { bnb: 0n, usdt: 5n * 10n ** 18n, ot: 13n * 10n ** 17n };   // spent 5 USDT, received 1.3 OT
+  recordBuyPosition(MKT, 2n, before, after);
+  const rows = listPositions();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].market, getAddress(MKT));
+  assert.equal(rows[0].tokenId, '2');
+  assert.equal(rows[0].entryUsdt, (5n * 10n ** 18n).toString());
+  assert.equal(rows[0].entryOt, (13n * 10n ** 17n).toString());
+  assert.equal(typeof rows[0].ts, 'number');
+});
+
+test('static scan: cmdBuy records a position only on the LIVE path (after the dry-run return); roundtrip never records', () => {
+  const src = readFileSync(new URL('./trade.mjs', import.meta.url), 'utf8');
+  const slice = (a, b) => { const from = src.indexOf(a); const to = src.indexOf(b); assert.ok(from > 0 && to > from, `${a} .. ${b}`); return src.slice(from, to); };
+  const buy = slice('async function cmdBuy', 'async function cmdSell');
+  assert.match(buy, /recordBuyPosition\(t\.market, t\.tokenId, before, after\)/);
+  assert.ok(buy.indexOf('if (!c.live) {') > 0 && buy.indexOf('if (!c.live) {') < buy.indexOf('recordBuyPosition('), 'recording is after the dry-run return (live only)');
+  // the record write is wrapped: a ledger-write failure after a broadcast buy must NOT throw (it would report the successful buy as failed and risk a re-buy)
+  assert.match(buy, /try \{\s*recordBuyPosition\(/);
+  assert.match(buy, /catch[^]*recording it for take-profit/);
+  assert.doesNotMatch(slice('async function cmdRoundtrip', 'async function executeRoundtrip'), /recordBuyPosition/);
+  assert.doesNotMatch(slice('async function executeRoundtrip', 'export async function runRoundtrip'), /recordBuyPosition/);
+});
+
+// ------------------------------------------------------------------------------ readPositionValue + runSell (take-profit)
+
+test('readPositionValue: finalised -> {finalised:true, no quote}; live bal>0 -> {bal, usdtOut}; bal==0 skips the quote', async () => {
+  const { readPositionValue } = await import('./trade.mjs');
+  let redeemCalls = 0;
+  const ctx = (bal, finalised = false) => ({
+    address: ADDR,
+    marketAt: () => ({ balanceOf: async () => bal }),
+    lens: {
+      snapshotMarket: async () => ({ state: { isFinalised: finalised } }),
+      simulateRedeem: { staticCall: async () => {
+        redeemCalls += 1;
+        return { pre: { price: 0n }, post: { price: 0n }, quote: { collateralToUser: 7n * 10n ** 18n, collateralToTreasury: 0n, collateralToIntegrator: 0n, otFromUser: bal, collateralMintValue: 0n } };
+      } },
+    },
+  });
+  const held = await readPositionValue(ctx(13n * 10n ** 17n), MKT, 2n);
+  assert.equal(held.finalised, false);
+  assert.equal(held.bal, 13n * 10n ** 17n);
+  assert.equal(held.usdtOut, 7n * 10n ** 18n);
+  assert.equal(redeemCalls, 1);
+  const gone = await readPositionValue(ctx(0n), MKT, 2n);
+  assert.deepEqual(gone, { finalised: false, bal: 0n, usdtOut: 0n });
+  assert.equal(redeemCalls, 1, 'bal==0 never quotes');
+  const settled = await readPositionValue(ctx(10n * 10n ** 18n, true), MKT, 2n);   // finalised, still holding OT
+  assert.equal(settled.finalised, true);
+  assert.equal(settled.bal, 0n);
+  assert.equal(redeemCalls, 1, 'a finalised market is never quoted (left for claim)');
+});
+
+test('static scan: sell has ONE live send path — cmdSell and runSell both execute via executeSell (sendStep, allow-list [ROUTER, market]); a dry run returns first', () => {
+  const src = readFileSync(new URL('./trade.mjs', import.meta.url), 'utf8');
+  const slice = (a, b) => { const from = src.indexOf(a); const to = src.indexOf(b); assert.ok(from > 0 && to > from, `${a} .. ${b}`); return src.slice(from, to); };
+  const exec = slice('async function executeSell', 'async function cmdSell');
+  assert.match(exec, /const allowed = new Set\(\[ROUTER, t\.market\]\)/);
+  assert.match(exec, /await sendStep\(c, s, allowed\)/);
+  assert.equal([...exec.matchAll(/await sendStep\(/g)].length, 1, 'executeSell has the one sell send site');
+  assert.doesNotMatch(exec, /sendTransaction|\.send\(|eth_send/);
+  const sell = slice('async function cmdSell', 'async function cmdRoundtrip');
+  assert.match(sell, /await executeSell\(c, t, p, opts\.approveMode\)/);
+  assert.ok(sell.indexOf('if (!c.live) {') > 0 && sell.indexOf('if (!c.live) {') < sell.indexOf('await executeSell('), 'the dry-run return precedes the live send');
+  const run = slice('export async function runSell', 'async function cmdClaim');
+  assert.match(run, /await planSell\(c, \{[^}]*approveMode[^}]*\}\)/);
+  assert.match(run, /if \(c\.live\) await executeSell\(c, t, p, approveMode\)/);
+  assert.match(run, /c\.provider\.destroy\(\)/);
+  assert.match(run, /amount = 'all'/, 'runSell defaults to selling the whole position');
+  assert.match(run, /approveMode = 'operator'/, 'runSell defaults to the blanket operator grant a held position needs');
 });
 
 // ------------------------------------------------------------------------------ safety: nothing broadcasts without --live

@@ -641,13 +641,135 @@ test('CLI entry: --live with a baw login (no local key) is refused up front - JS
   assert.equal(r.stderr, '');
 });
 
+// ------------------------------------------------------------------------------ take-profit
+const POS = (market, tokenId, entryUsdt, entryOt) => ({ market, tokenId: String(tokenId), entryUsdt: String(entryUsdt), entryOt: String(entryOt), ts: 1 });
+
+// Injectable take-profit deps over an in-memory ledger. readValue/sell default to "gone"/"sold".
+function tpDeps({ positions = [], readValue, sell } = {}) {
+  let pool = positions.slice();
+  const removed = [];
+  const results = [];
+  return {
+    listPositions: () => pool.slice(),
+    removePosition: (m, id) => { removed.push([m, String(id)]); pool = pool.filter((p) => !(p.market.toLowerCase() === String(m).toLowerCase() && String(p.tokenId) === String(id))); },
+    readValue: readValue ?? (async () => ({ bal: 0n, usdtOut: 0n })),
+    sell: sell ?? (async () => ({ traded: true, txs: ['0xsell'] })),
+    onResult: (r) => results.push(r),
+    _removed: removed, _results: results, _pool: () => pool,
+  };
+}
+
+test('parseTakeProfitArgs: defaults (pct null, interval 30), both flags, --live; bad values rejected', () => {
+  assert.deepEqual(daemon.parseTakeProfitArgs(['take-profit']), { pct: null, interval: 30, live: false });
+  assert.deepEqual(daemon.parseTakeProfitArgs(['take-profit', '--pct', '50', '--interval=5', '--live']), { pct: 50, interval: 5, live: true });
+  assert.throws(() => daemon.parseTakeProfitArgs(['take-profit', '--pct', '-1']), /--pct must be a positive number/);
+  assert.throws(() => daemon.parseTakeProfitArgs(['take-profit', '--pct', '0']), /--pct must be a positive number/);
+  assert.throws(() => daemon.parseTakeProfitArgs(['take-profit', '--interval', '0']), /--interval must be at least 1/);
+  assert.throws(() => daemon.parseTakeProfitArgs(['take-profit', '--bogus']), /unknown option/);
+  assert.throws(() => daemon.parseTakeProfitArgs(['fast']), /unknown command/);
+});
+
+test('takeProfitCycle: a position up >= pct is sold and removed; one below pct is held', async () => {
+  const up = POS(addr(1), 1n, 10n * 10n ** 18n, 10n * 10n ** 18n);     // entry 10 USDT / 10 OT
+  const flat = POS(addr(2), 1n, 10n * 10n ** 18n, 10n * 10n ** 18n);
+  const values = { [addr(1)]: { bal: 10n * 10n ** 18n, usdtOut: 16n * 10n ** 18n }, [addr(2)]: { bal: 10n * 10n ** 18n, usdtOut: 11n * 10n ** 18n } };  // +60% / +10%
+  const sellCalls = [];
+  const deps = tpDeps({ positions: [up, flat], readValue: async (m) => values[m], sell: async (a) => { sellCalls.push(a); return { traded: true, txs: ['0xsold'] }; } });
+  const r = await daemon.takeProfitCycle(deps, { pct: 50, execute: true });
+  assert.equal(r.checked, 2);
+  assert.equal(r.sold, 1);
+  assert.deepEqual(sellCalls, [{ market: addr(1), tokenId: '1' }]);
+  assert.deepEqual(deps._removed, [[addr(1), '1']]);
+  assert.ok(deps._results.some((x) => x.action === 'sold' && x.market === addr(1)));
+  assert.ok(deps._results.some((x) => x.action === 'hold' && x.market === addr(2)));
+});
+
+test('takeProfitCycle: a finalised market is removed (settled, left for claim) and never sold, even when the value is above target', async () => {
+  const pos = POS(addr(1), 1n, 10n * 10n ** 18n, 10n * 10n ** 18n);
+  // finalised:true with a value well above +50% — must NOT sell (the redeem would revert); drop it for claim instead
+  const deps = tpDeps({ positions: [pos], readValue: async () => ({ finalised: true, bal: 10n * 10n ** 18n, usdtOut: 16n * 10n ** 18n }), sell: async () => { throw new Error('must not sell a finalised market'); } });
+  const r = await daemon.takeProfitCycle(deps, { pct: 50, execute: true });
+  assert.equal(r.sold, 0);
+  assert.equal(r.removed, 1);
+  assert.deepEqual(deps._removed, [[addr(1), '1']]);
+  assert.ok(deps._results.some((x) => x.action === 'settled'));
+});
+
+test('runTakeProfitLoop: a finalised position is dropped so the loop terminates (no infinite reverting-sell retry)', async () => {
+  const pos = POS(addr(1), 1n, 10n * 10n ** 18n, 10n * 10n ** 18n);
+  const deps = tpDeps({ positions: [pos], readValue: async () => ({ finalised: true, bal: 10n * 10n ** 18n, usdtOut: 16n * 10n ** 18n }), sell: async () => { throw new Error('must not sell'); } });
+  const r = await daemon.runTakeProfitLoop(deps, { pct: 50, sleepMs: 1, sleep: stubSleep() });
+  assert.equal(deps._pool().length, 0, 'the finalised position was removed, emptying the ledger and ending the loop');
+  assert.equal(r.sold, 0);
+});
+
+test('takeProfitCycle: an on-chain balance of 0 is removed as gone (never quoted or sold)', async () => {
+  const gone = POS(addr(1), 1n, 10n ** 18n, 10n ** 18n);
+  const deps = tpDeps({ positions: [gone], readValue: async () => ({ bal: 0n, usdtOut: 0n }), sell: async () => { throw new Error('must not sell a gone position'); } });
+  const r = await daemon.takeProfitCycle(deps, { pct: 50, execute: true });
+  assert.equal(r.removed, 1);
+  assert.deepEqual(deps._removed, [[addr(1), '1']]);
+  assert.ok(deps._results.some((x) => x.action === 'gone'));
+});
+
+test('takeProfitCycle: a partial holding is judged on cost scaled to the CURRENT balance, not the full entry', async () => {
+  const pos = POS(addr(1), 1n, 10n * 10n ** 18n, 10n * 10n ** 18n);   // entry 10 USDT / 10 OT -> 1.0/OT
+  // only 5 OT left, worth 9 USDT now. cost for 5 OT = 5 -> +80% (full entry 10 would read -10% and NOT sell)
+  const deps = tpDeps({ positions: [pos], readValue: async () => ({ bal: 5n * 10n ** 18n, usdtOut: 9n * 10n ** 18n }), sell: async () => ({ traded: true, txs: ['0x'] }) });
+  const r = await daemon.takeProfitCycle(deps, { pct: 50, execute: true });
+  assert.equal(r.sold, 1);
+});
+
+test('takeProfitCycle: a dry run (execute:false) reports would_sell and never sells or removes', async () => {
+  const up = POS(addr(1), 1n, 10n * 10n ** 18n, 10n * 10n ** 18n);
+  const deps = tpDeps({ positions: [up], readValue: async () => ({ bal: 10n * 10n ** 18n, usdtOut: 16n * 10n ** 18n }), sell: async () => { throw new Error('dry run must not sell'); } });
+  const r = await daemon.takeProfitCycle(deps, { pct: 50, execute: false });
+  assert.equal(r.sold, 0);
+  assert.deepEqual(deps._removed, []);
+  assert.ok(deps._results.some((x) => x.action === 'would_sell'));
+});
+
+test('takeProfitCycle: a sell that throws (finalised market) is a skip; the position stays in the ledger for claim', async () => {
+  const up = POS(addr(1), 1n, 10n * 10n ** 18n, 10n * 10n ** 18n);
+  const deps = tpDeps({ positions: [up], readValue: async () => ({ bal: 10n * 10n ** 18n, usdtOut: 16n * 10n ** 18n }), sell: async () => { throw new Error('market is not live (finalised)'); } });
+  const r = await daemon.takeProfitCycle(deps, { pct: 50, execute: true });
+  assert.equal(r.sold, 0);
+  assert.deepEqual(deps._removed, []);
+  assert.ok(deps._results.some((x) => x.action === 'skip'));
+});
+
+test('runTakeProfitLoop: cycles until the ledger is empty', async () => {
+  const up = POS(addr(1), 1n, 10n * 10n ** 18n, 10n * 10n ** 18n);
+  const deps = tpDeps({ positions: [up], readValue: async () => ({ bal: 10n * 10n ** 18n, usdtOut: 16n * 10n ** 18n }), sell: async () => ({ traded: true, txs: ['0x'] }) });
+  const r = await daemon.runTakeProfitLoop(deps, { pct: 50, sleepMs: 1, sleep: stubSleep() });
+  assert.equal(r.sold, 1);
+  assert.equal(deps._pool().length, 0);
+});
+
+test('main dispatches: take-profit -> takeProfitMain (dry), fast -> fastMain (dry)', async () => {
+  const ctx = { provider: { send: async () => '0x38', destroy() {}, getBalance: async () => 0n }, lens: {}, address: ADDR };
+  const account = { address: ADDR, canSign: true, method: 'mnemonic' };
+  const pos = POS(addr(1), 1n, 10n * 10n ** 18n, 10n * 10n ** 18n);
+  let reads = 0;
+  const tp = await daemon.main(['take-profit'], {
+    account, ctx, log: () => {},
+    listPositions: () => [pos], removePosition: () => {},
+    readValue: async () => { reads += 1; return { bal: 10n * 10n ** 18n, usdtOut: 11n * 10n ** 18n }; },   // +10% -> hold
+    sell: async () => { throw new Error('dry must not sell'); },
+  });
+  assert.deepEqual(tp, { cycles: 1, sold: 0 });
+  assert.equal(reads, 1);
+  const fast = await daemon.main(['fast', '--target', '1'], { account, ctx, scan: stubScan([]), runRoundtrip: stubRoundtrip(), log: () => {} });
+  assert.deepEqual(fast, { cycles: 1, volume: 0, trades: 0 });
+});
+
 // ------------------------------------------------------------------------------ safety (static)
 test('static scan: daemon.mjs cannot sign or send by itself - its only road to the chain is trade.runRoundtrip, and "live" comes from the literal --live flag alone', () => {
   const src = readFileSync(new URL('./daemon.mjs', import.meta.url), 'utf8');
   const code = src.split('\n').filter((l) => !/^\s*\/\//.test(l)).map((l) => l.replace(/\s\/\/.*$/, '')).join('\n');
   assert.doesNotMatch(code, /sendTransaction|signTransaction|signMessage|\.send\(|eth_send|sendStep|\bsigner\b|\bWallet\b|\.mnemonic\b|privateKey|apiKey|JsonRpcProvider/);
   const imports = [...src.matchAll(/^import .* from '([^']+)';$/gm)].map((m) => m[1]);
-  assert.deepEqual(imports, ['ethers', './lib.mjs', './scan.mjs', './trade.mjs']);
+  assert.deepEqual(imports, ['ethers', './lib.mjs', './scan.mjs', './trade.mjs', './positions.mjs']);
   assert.match(code, /runRoundtrip as tradeRunRoundtrip/);
   // the only place `live` is produced is the argument parser: the flag table maps the literal '--live' and nothing else sets it
   assert.match(code, /'--live': 'live'/);
