@@ -48,7 +48,7 @@ clawby-data/
 │   └── index.yaml      ← catalog registry
 ├── akdata/             ← local akshare executor: China markets + global macro; guide akdata/akshare.md
 ├── exec/               ← trade-execution connectors; registry exec/index.yaml
-├── script/             ← fast one-shot helper scripts for connectors (baw/); see script/baw/README.md
+├── script/             ← connector helpers: baw/ (fast one-shot scripts) + 42space/ (42.space automated trading); see each dir's README
 ├── rpc/                ← BYOK RPC (EVM + non-EVM; Ankr/Alchemy/BlockPI) using the user's OWN key — or a NO-KEY public endpoint for 8 chains; registry rpc/index.yaml
 ├── social/             ← BYOK social & search (Desearch, TwexAPI) using the user's OWN key; registry social/index.yaml
 ├── llm/                ← BYOK LLM APIs (DeepSeek/OpenAI/Claude/Qwen/Kimi/GLM/OpenRouter) using the user's OWN key; registry llm/index.yaml
@@ -166,6 +166,22 @@ Everything above is **read-only data**. To **place trades**, use the connectors 
 | Binance Agentic Wallet (on-chain Web3: swap/send/limit/DeFi/prediction/x402) | `exec/baw/baw.md` | `baw` |
 
 **Rule for any `risk: high` action** (order / transfer / withdrawal): restate the order — venue · pair · side · size · price type — show the exact command, get the user to type **`CONFIRM`**, prefer testnet when unsure. Read-only queries need no confirmation.
+
+## 42.space automated trading (script/42space/)
+
+When the user says **"42space"**, read `script/42space/README.md` — the full host-agent playbook — and follow it. It automates prediction-market trading on 42.space (BNB Smart Chain): wallet-only login (import mnemonic · create a wallet · BN AI wallet/baw) → balance check → silent Clawby identity (API key + free Identity SBT) → one of three trading modes. Runs **locally** (needs Node ≥18 + ethers — `cd script/42space && npm install`; run the commands from that folder); wallet secrets stay in `local/42space.json` (chmod 600), never routed through Clawby.
+
+| Step | Commands |
+|---|---|
+| Status / log in | `node 42space.mjs status` · `import-mnemonic` (phrase on stdin) · `create-wallet` · `use-baw <address>` |
+| Balance | `node 42space.mjs balance` → `{address, usdt, bnb, needs_funding, bnb_status}` — USDT ≤ 10 → deposit USDT (BSC only); **`bnb_status` `none` = 0 BNB → stop and wait for BNB, never trade** |
+| Identity (silent) | `node 42space.mjs identity [--live]` — Clawby key (`CLAWBY_API_KEY` env wins, else fetched with the wallet) + free Identity SBT; `key_ok: false` blocks the AI modes |
+| **Fast mode** — volume farming, no LLM | `node daemon.mjs fast --amount 1 --target <volume> [--slippage 3] [--approve-max] [--live]` — cheapest market under 3% round-trip cost, atomic buy+sell, until the target volume |
+| **AI one-shot** — you do the reasoning | `node 42space.mjs ai-data --market <42.space link or 0x address>` (or `--all [--fields a,b]`) → pick with the README's win-rate rubric → `node trade.mjs buy <market> <tokenId> 5` (dry first, then add `--live`) → `node trade.mjs set-operator <market> --live` → hold |
+| **Claim** settled wins | `node 42space.mjs claim-settled [--live]` |
+| Manual on-chain | `node trade.mjs` `quote` / `buy` / `sell` / `roundtrip` / `set-operator` / `claim` / `status` |
+
+Everything is **DRY unless `--live`**: run the dry command first, show the user the quoted numbers, and get their go-ahead before any `--live`. AI picks put real money at risk, and a market's price is **not** a probability.
 
 ## Key gotchas (highest-frequency; the full list lives in each catalog file)
 

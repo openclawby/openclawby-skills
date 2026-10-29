@@ -1,0 +1,11 @@
+{
+  "name": "clawby-42space",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "ethers": "^6.13.0"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
