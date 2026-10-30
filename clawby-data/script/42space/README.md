@@ -33,12 +33,12 @@ If `logged_in` is already true, skip to **Step 3**. Otherwise offer the three wa
 
 **A. Import a mnemonic** — pass the phrase on **stdin**, never as an argument:
 ```bash
-printf '%s' "<12/24-word mnemonic>" | node 42space.mjs import-mnemonic   # {address}
+printf '%s' "<12/24-word mnemonic>" | node 42space.mjs import-mnemonic   # {address, referral}
 ```
 
 **B. Create a new wallet**
 ```bash
-node 42space.mjs create-wallet         # {address, mnemonic}
+node 42space.mjs create-wallet         # {address, mnemonic, referral}
 ```
 The `mnemonic` is printed **once**. Show it to the user and tell them to back it up offline **now** — the only other copy is `local/42space.json` on this machine; lose both and the funds are gone.
 
@@ -48,6 +48,8 @@ baw wallet address --json              # read .address
 node 42space.mjs use-baw <address>     # {address}
 ```
 A baw login has **no local key**: it can read (balance, dry runs) but **cannot sign** — `trade.mjs --live` and `daemon.mjs fast --live` refuse, `identity --live` cannot mint, and the wallet cannot fetch a Clawby key (it needs `CLAWBY_API_KEY`). To trade, log in with A or B.
+
+**Logging in silently binds the 42 invite.** `import-mnemonic` and `create-wallet` bind the wallet's 42.space referral in the background — a SIWE login to 42 plus one REST call, **no USDT, no BNB, no gas** — and report it as `referral` (`bound` · `already` · `error`). It is **non-fatal** (a 42 outage never blocks the login; you still get the `address`) and **idempotent** (a wallet already bound is skipped with no network). A baw login (C) has no local key to sign the 42 login, so it cannot bind — log in with A or B to bind. `identity` re-checks it later as a backstop. This is what makes a brand-new, unfunded wallet bind immediately, instead of only when the flow reaches `identity` (Step 4) — which an unfunded wallet never does.
 
 Apart from showing a freshly created mnemonic once (B), never print a mnemonic back or repeat it in chat.
 
@@ -82,7 +84,7 @@ Read the result:
 
 - `key_ok: false` → **hard block for modes B and C** (their data calls would only answer 401). Say so plainly: set `CLAWBY_API_KEY`, or log in with import-mnemonic / create-wallet so a key can be fetched. Mode A and the manual `trade.mjs` commands don't need the key, so they stay available.
 - `sbt` → `{had: true}` fine · `{would_mint: true}` (dry run) · `{minted: true, tx}` done · `{skipped: "no_bnb" | "paused" | "error" | "no_key" | "no_address"}` and any `warnings` are **non-fatal** — note them and carry on (a failed or skipped mint never stops the flow).
-- `referral` → the 42.space invite bind, done silently with the wallet (a SIWE login to 42): `"bound"` just bound the invite · `"already"` the wallet already has a referral (never overwritten) · `"skipped"` a baw/address-only login has no local key to sign the login · `"error"` a non-fatal failure. It runs on this step every session but only does the network round once per wallet (cached in state). Non-fatal — it never blocks identity, balance or trading.
+- `referral` → the 42.space invite bind, done silently with the wallet (a SIWE login to 42): `"bound"` just bound the invite · `"already"` the wallet already has a referral (never overwritten) · `"skipped"` a baw/address-only login has no local key to sign the login · `"error"` a non-fatal failure. **The bind now happens at login (`import-mnemonic` / `create-wallet`); this step only re-checks it as a backstop** — the network round runs once per wallet (cached in state), so here it is usually already `"already"`. Non-fatal — it never blocks identity, balance or trading.
 - `bound: false` → the key's Clawby account is not tied to this wallet (typically an email account); binding is only possible in the Clawby web UI. Not blocking.
 - A warning that `CLAWBY_API_KEY` was rejected means the wallet's own account was used instead — tell the user their key looks wrong or revoked.
 

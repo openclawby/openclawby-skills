@@ -29,6 +29,20 @@ function readStdin() {
   });
 }
 
+// A wallet login (import-mnemonic / create-wallet) persists its state, then SILENTLY binds the 42.space
+// referral with that wallet — the moment a signable wallet exists, independent of funding / BNB / the Clawby
+// identity step (a referral bind is just an off-chain SIWE signature + one REST call, it costs no gas). This
+// is why a brand-new, unfunded wallet still binds, where the old flow only bound at `identity` (Step 4, behind
+// the balance gate a new wallet never passes). Non-fatal: ensureReferral never throws, so a 42 outage just
+// leaves the login's address returned. Idempotent: a wallet already bound short-circuits with no network, and
+// `mark` caches referral_bound_for on the wallet so later logins of the same wallet skip the round entirely.
+async function bindOnLogin(state, { env, fetchImpl, referral }) {
+  writeState(state);
+  const ref = await referral({ state, env, fetchImpl });
+  if (ref.mark) writeState({ ...state, referral_bound_for: state.address });
+  return ref;
+}
+
 // ------------------------------------------------------------------------------------ ai-data / claim-settled
 // 42.space data for the HOST AGENT, read through the clawby relay (provider `fortytwo`: free, but it needs the clawby key). This
 // module only fetches and shapes data; the reasoning over it (which outcome wins) is the host agent's job, and trading stays in
@@ -344,14 +358,14 @@ export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, cla
       case 'import-mnemonic': {
         requirePipedStdin(process.stdin);
         const { address, mnemonic } = deriveFromMnemonic(await readStdin());
-        writeState({ ...carryOver(readState(), address), method: 'mnemonic', address, mnemonic });
-        out({ address });
+        const ref = await bindOnLogin({ ...carryOver(readState(), address), method: 'mnemonic', address, mnemonic }, { env, fetchImpl, referral });
+        out({ address, referral: ref.referral, ...(ref.warnings.length ? { warnings: ref.warnings } : {}) });
         break;
       }
       case 'create-wallet': {
         const { address, mnemonic } = createWallet();
-        writeState({ ...carryOver(readState(), address), method: 'created', address, mnemonic });
-        out({ address, mnemonic });
+        const ref = await bindOnLogin({ ...carryOver(readState(), address), method: 'created', address, mnemonic }, { env, fetchImpl, referral });
+        out({ address, mnemonic, referral: ref.referral, ...(ref.warnings.length ? { warnings: ref.warnings } : {}) });
         break;
       }
       case 'use-baw': {

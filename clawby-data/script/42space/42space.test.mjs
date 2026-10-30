@@ -15,10 +15,12 @@ globalThis.fetch = async (url) => { throw new Error('offline tests: real fetch a
 const CLI = fileURLToPath(new URL('./42space.mjs', import.meta.url));
 
 // Run the CLI as a child process (for stdin / exit-code behavior), state at a temp file.
-function runCli(args, { input = '', stateFile } = {}) {
+function runCli(args, { input = '', stateFile, ft42Base = 'http://127.0.0.1:1' } = {}) {
   const r = spawnSync(process.execPath, [CLI, ...args], {
     input, encoding: 'utf8',
-    env: { ...process.env, CLAWBY_42SPACE_STATE: stateFile },
+    // FT42_REST_BASE defaults to a dead loopback so a login's silent 42 referral bind fails fast OFFLINE
+    // (ECONNREFUSED -> non-fatal 'error'); the referral tests pass a real local stub URL to exercise a bind.
+    env: { ...process.env, CLAWBY_42SPACE_STATE: stateFile, FT42_REST_BASE: ft42Base },
   });
   return { code: r.status, stdout: (r.stdout || '').trim(), stderr: r.stderr };
 }
@@ -27,6 +29,25 @@ function runCli(args, { input = '', stateFile } = {}) {
 function withTempState() {
   const f = join(mkdtempSync(join(tmpdir(), '42s-')), '42space.json');
   process.env.CLAWBY_42SPACE_STATE = f;
+  return f;
+}
+
+// A 42 REST stub as an injectable fetchImpl (NOT an HTTP server): runCli uses spawnSync, which blocks this
+// process's event loop, so an in-process http server could never answer a child's request — these run the
+// real ensureReferral IN-PROCESS via captureRun + this stub. Records every request for assertions.
+function ft42FetchStub({ referralStatus = 200 } = {}) {
+  const calls = [];
+  const res = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body, text: async () => (typeof body === 'string' ? body : JSON.stringify(body)) });
+  const f = async (url, init = {}) => {
+    const path = String(url).replace(/^https?:\/\/[^/]+/, '');
+    const body = init.body ? JSON.parse(init.body) : undefined;
+    calls.push({ path, body, headers: init.headers || {} });
+    if (path === '/api/v1/auth/nonce') return res(200, { nonce: 'STUB_NONCE' });
+    if (path === '/api/v1/auth/login') return res(200, { access_token: 'STUB.JWT.TOKEN' });
+    if (path === '/api/v1/user/referral') return res(referralStatus, referralStatus === 200 ? 'referral success!' : { detail: 'REFERRAL_ALREADY_EXISTS' });
+    throw new Error('unexpected path ' + path);
+  };
+  f.calls = calls;
   return f;
 }
 
@@ -103,9 +124,11 @@ test('import-mnemonic reads the phrase from stdin and persists method=mnemonic',
   const r = runCli(['import-mnemonic'], { input: phrase + '\n', stateFile: f });
   assert.equal(r.code, 0);
   assert.equal(JSON.parse(r.stdout).address, '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266');
+  assert.equal(JSON.parse(r.stdout).referral, 'error');     // dead base -> the bind is non-fatal, login still succeeds
   const { readState } = await import('./lib.mjs');
   process.env.CLAWBY_42SPACE_STATE = f;
   assert.equal(readState().method, 'mnemonic');
+  assert.equal(readState().referral_bound_for, undefined);  // a failed bind is not cached
 });
 
 test('import-mnemonic on a bad phrase exits non-zero and writes nothing', async () => {
@@ -123,10 +146,50 @@ test('create-wallet prints and persists a fresh mnemonic (method=created)', asyn
   const out = JSON.parse(r.stdout);
   assert.match(out.address, /^0x[0-9a-fA-F]{40}$/);
   assert.ok(out.mnemonic && out.mnemonic.split(' ').length >= 12);
+  assert.equal(out.referral, 'error');                      // dead base -> the bind is non-fatal, login still succeeds
   process.env.CLAWBY_42SPACE_STATE = f;
   const { readState } = await import('./lib.mjs');
   assert.equal(readState().method, 'created');
   assert.equal(readState().address, out.address);
+  assert.equal(readState().referral_bound_for, undefined);  // a failed bind is not cached
+});
+
+test('create-wallet silently binds the 42 referral at login and caches a marked bind', async () => {
+  const f = withTempState();
+  let seenState = null;
+  const refMark = async ({ state }) => { seenState = state; return { referral: 'bound', warnings: [], mark: true }; };
+  const out = await captureRun(['create-wallet'], { referral: refMark });
+  assert.equal(out.referral, 'bound');
+  assert.match(out.address, /^0x[0-9a-fA-F]{40}$/);
+  assert.equal(seenState.address, out.address, 'referral is invoked with the freshly created wallet');
+  assert.equal(seenState.method, 'created');
+  assert.ok(typeof seenState.mnemonic === 'string' && seenState.mnemonic.split(' ').length >= 12);
+  process.env.CLAWBY_42SPACE_STATE = f;
+  const { readState } = await import('./lib.mjs');
+  assert.equal(readState().referral_bound_for, out.address, 'the marked bind is cached to the wallet');
+});
+
+test('create-wallet: binds the referral end-to-end through the real ensureReferral (SIWE recovers to the wallet)', async () => {
+  const f = withTempState();
+  const fetchImpl = ft42FetchStub({ referralStatus: 200 });
+  const out = await captureRun(['create-wallet'], { fetchImpl });       // referral defaults to the REAL ensureReferral
+  assert.equal(out.referral, 'bound');
+  const login = fetchImpl.calls.find((c) => c.path === '/api/v1/auth/login');
+  assert.equal(getAddress(verifyMessage(login.body.message, login.body.signature)), out.address);
+  const bind = fetchImpl.calls.find((c) => c.path === '/api/v1/user/referral');
+  assert.deepEqual(bind.body, { referral_code: 'jwiLDVi5' });            // the default clawby invite, bound at login
+  assert.equal(bind.headers.authorization ?? bind.headers.Authorization, 'Bearer STUB.JWT.TOKEN');
+  process.env.CLAWBY_42SPACE_STATE = f;
+  const { readState } = await import('./lib.mjs');
+  assert.equal(readState().referral_bound_for, out.address);
+});
+
+test('a re-login of the same wallet keeps referral_bound_for (idempotent); a new wallet drops it', async () => {
+  const { carryOver } = await import('./lib.mjs');
+  const addr = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
+  const prev = { address: addr, mnemonic: 'x', referral_bound_for: addr, daily_volume: 5 };
+  assert.equal(carryOver(prev, addr).referral_bound_for, addr);          // same wallet -> preserved, re-login short-circuits
+  assert.equal(carryOver(prev, '0x0000000000000000000000000000000000000001').referral_bound_for, undefined); // new wallet binds its own
 });
 
 // ---- Task 3: on-chain balance ----

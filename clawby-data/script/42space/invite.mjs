@@ -45,6 +45,8 @@ export async function ensureReferral({ state, env = process.env, fetchImpl = fet
   }
   const envCode = typeof env?.FT42_REFERRAL_CODE === 'string' ? env.FT42_REFERRAL_CODE.trim() : '';
   const refCode = code ?? (envCode || DEFAULT_REFERRAL_CODE);
+  // The REST base is env-overridable (like BSC_RPC) so a test can point the SIWE+bind flow at a local stub.
+  const base = (typeof env?.FT42_REST_BASE === 'string' && env.FT42_REST_BASE.trim()) || FT42_REST_BASE;
   const secrets = [typeof state?.mnemonic === 'string' ? state.mnemonic.trim() : null];
   const warn = (msg) => scrub(msg, secrets).slice(0, 240);
 
@@ -58,7 +60,7 @@ export async function ensureReferral({ state, env = process.env, fetchImpl = fet
     return { referral: 'skipped', warnings: ['42 referral skipped: this login has no local key (baw/address-only) to sign the 42 SIWE login'], mark: false };
   }
 
-  const post = (path, body, headers = {}) => fetchImpl(FT42_REST_BASE + path, {
+  const post = (path, body, headers = {}) => fetchImpl(base + path, {
     method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body),
   });
 
