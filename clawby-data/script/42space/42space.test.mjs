@@ -11,16 +11,20 @@ import { verifyMessage, getAddress } from 'ethers';
 
 // Tripwire: every test injects its own fetchImpl; a forgotten one must fail loudly instead of reaching the real clawby API.
 globalThis.fetch = async (url) => { throw new Error('offline tests: real fetch attempted for ' + url); };
+// A leaked CLAWBY_API_KEY in the dev's shell would send the in-process clawby-account tests down the env-key path
+// instead of the wallet path; pin it off so those tests are deterministic (the child-process tests clear it too).
+delete process.env.CLAWBY_API_KEY;
 
 const CLI = fileURLToPath(new URL('./42space.mjs', import.meta.url));
 
 // Run the CLI as a child process (for stdin / exit-code behavior), state at a temp file.
-function runCli(args, { input = '', stateFile, ft42Base = 'http://127.0.0.1:1' } = {}) {
+function runCli(args, { input = '', stateFile, ft42Base = 'http://127.0.0.1:1', clawbyBase = 'http://127.0.0.1:1' } = {}) {
   const r = spawnSync(process.execPath, [CLI, ...args], {
     input, encoding: 'utf8',
-    // FT42_REST_BASE defaults to a dead loopback so a login's silent 42 referral bind fails fast OFFLINE
-    // (ECONNREFUSED -> non-fatal 'error'); the referral tests pass a real local stub URL to exercise a bind.
-    env: { ...process.env, CLAWBY_42SPACE_STATE: stateFile, FT42_REST_BASE: ft42Base },
+    // FT42_REST_BASE / CLAWBY_API_BASE default to a dead loopback so a login's silent 42 referral bind AND Clawby
+    // account registration fail fast OFFLINE (ECONNREFUSED -> non-fatal 'error'); CLAWBY_API_KEY is cleared so the
+    // wallet->key path (not a leaked env key) is what runs. These are the two network side-effects a login now has.
+    env: { ...process.env, CLAWBY_42SPACE_STATE: stateFile, FT42_REST_BASE: ft42Base, CLAWBY_API_BASE: clawbyBase, CLAWBY_API_KEY: '' },
   });
   return { code: r.status, stdout: (r.stdout || '').trim(), stderr: r.stderr };
 }
@@ -35,16 +39,21 @@ function withTempState() {
 // A 42 REST stub as an injectable fetchImpl (NOT an HTTP server): runCli uses spawnSync, which blocks this
 // process's event loop, so an in-process http server could never answer a child's request — these run the
 // real ensureReferral IN-PROCESS via captureRun + this stub. Records every request for assertions.
-function ft42FetchStub({ referralStatus = 200 } = {}) {
+function ft42FetchStub({ referralStatus = 200, clawbyCreated = true } = {}) {
   const calls = [];
   const res = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body, text: async () => (typeof body === 'string' ? body : JSON.stringify(body)) });
   const f = async (url, init = {}) => {
     const path = String(url).replace(/^https?:\/\/[^/]+/, '');
     const body = init.body ? JSON.parse(init.body) : undefined;
-    calls.push({ path, body, headers: init.headers || {} });
+    calls.push({ path, method: (init.method || 'GET').toUpperCase(), body, headers: init.headers || {} });
+    // 42 SIWE login + referral bind
     if (path === '/api/v1/auth/nonce') return res(200, { nonce: 'STUB_NONCE' });
     if (path === '/api/v1/auth/login') return res(200, { access_token: 'STUB.JWT.TOKEN' });
     if (path === '/api/v1/user/referral') return res(referralStatus, referralStatus === 200 ? 'referral success!' : { detail: 'REFERRAL_ALREADY_EXISTS' });
+    // clawby account registration (wallet -> key via the agent channel) + the env-key validity check
+    if (path === '/api/account') return res(200, { address: body?.address ?? '0xenv' });
+    if (path === '/api/mcp/challenge') return res(200, { message: 'clawby login STUB_NONCE', token: 'CLW.TOK' });
+    if (path === '/api/mcp/auth') return res(200, { api_key: 'ck_STUB_KEY', created: clawbyCreated, account: { address: body?.address } });
     throw new Error('unexpected path ' + path);
   };
   f.calls = calls;
@@ -124,11 +133,13 @@ test('import-mnemonic reads the phrase from stdin and persists method=mnemonic',
   const r = runCli(['import-mnemonic'], { input: phrase + '\n', stateFile: f });
   assert.equal(r.code, 0);
   assert.equal(JSON.parse(r.stdout).address, '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266');
-  assert.equal(JSON.parse(r.stdout).referral, 'error');     // dead base -> the bind is non-fatal, login still succeeds
+  assert.equal(JSON.parse(r.stdout).referral, 'error');     // dead base -> the 42 bind is non-fatal, login still succeeds
+  assert.equal(JSON.parse(r.stdout).clawby, 'error');       // dead base -> the clawby registration is non-fatal too
   const { readState } = await import('./lib.mjs');
   process.env.CLAWBY_42SPACE_STATE = f;
   assert.equal(readState().method, 'mnemonic');
-  assert.equal(readState().referral_bound_for, undefined);  // a failed bind is not cached
+  assert.equal(readState().referral_bound_for, undefined);     // a failed bind is not cached
+  assert.equal(readState().clawby_registered_for, undefined);  // a failed registration is not cached
 });
 
 test('import-mnemonic on a bad phrase exits non-zero and writes nothing', async () => {
@@ -146,42 +157,54 @@ test('create-wallet prints and persists a fresh mnemonic (method=created)', asyn
   const out = JSON.parse(r.stdout);
   assert.match(out.address, /^0x[0-9a-fA-F]{40}$/);
   assert.ok(out.mnemonic && out.mnemonic.split(' ').length >= 12);
-  assert.equal(out.referral, 'error');                      // dead base -> the bind is non-fatal, login still succeeds
+  assert.equal(out.referral, 'error');                      // dead base -> the 42 bind is non-fatal, login still succeeds
+  assert.equal(out.clawby, 'error');                        // dead base -> the clawby registration is non-fatal too
   process.env.CLAWBY_42SPACE_STATE = f;
   const { readState } = await import('./lib.mjs');
   assert.equal(readState().method, 'created');
   assert.equal(readState().address, out.address);
-  assert.equal(readState().referral_bound_for, undefined);  // a failed bind is not cached
+  assert.equal(readState().referral_bound_for, undefined);     // a failed bind is not cached
+  assert.equal(readState().clawby_registered_for, undefined);  // a failed registration is not cached
 });
 
-test('create-wallet silently binds the 42 referral at login and caches a marked bind', async () => {
+test('create-wallet silently binds the 42 referral AND registers the clawby account at login, caching both marks', async () => {
   const f = withTempState();
-  let seenState = null;
-  const refMark = async ({ state }) => { seenState = state; return { referral: 'bound', warnings: [], mark: true }; };
-  const out = await captureRun(['create-wallet'], { referral: refMark });
+  let seenRefState = null;
+  let seenRegState = null;
+  const refMark = async ({ state }) => { seenRefState = state; return { referral: 'bound', warnings: [], mark: true }; };
+  const regMark = async ({ state }) => { seenRegState = state; return { clawby: 'registered', warnings: [], mark: true }; };
+  const out = await captureRun(['create-wallet'], { referral: refMark, clawbyReg: regMark });
   assert.equal(out.referral, 'bound');
+  assert.equal(out.clawby, 'registered');
   assert.match(out.address, /^0x[0-9a-fA-F]{40}$/);
-  assert.equal(seenState.address, out.address, 'referral is invoked with the freshly created wallet');
-  assert.equal(seenState.method, 'created');
-  assert.ok(typeof seenState.mnemonic === 'string' && seenState.mnemonic.split(' ').length >= 12);
+  assert.equal(seenRefState.address, out.address, 'referral is invoked with the freshly created wallet');
+  assert.equal(seenRegState.address, out.address, 'clawby registration is invoked with the same wallet');
+  assert.equal(seenRefState.method, 'created');
+  assert.ok(typeof seenRefState.mnemonic === 'string' && seenRefState.mnemonic.split(' ').length >= 12);
   process.env.CLAWBY_42SPACE_STATE = f;
   const { readState } = await import('./lib.mjs');
-  assert.equal(readState().referral_bound_for, out.address, 'the marked bind is cached to the wallet');
+  assert.equal(readState().referral_bound_for, out.address, 'the marked 42 bind is cached to the wallet');
+  assert.equal(readState().clawby_registered_for, out.address, 'the marked clawby registration is cached to the wallet');
 });
 
-test('create-wallet: binds the referral end-to-end through the real ensureReferral (SIWE recovers to the wallet)', async () => {
+test('create-wallet: binds the referral AND registers the clawby account end-to-end through the real ensure* (SIWE + mcp/auth recover to the wallet; key never leaks)', async () => {
   const f = withTempState();
   const fetchImpl = ft42FetchStub({ referralStatus: 200 });
-  const out = await captureRun(['create-wallet'], { fetchImpl });       // referral defaults to the REAL ensureReferral
+  const out = await captureRun(['create-wallet'], { fetchImpl });       // referral + clawbyReg both default to the REAL impls
   assert.equal(out.referral, 'bound');
+  assert.equal(out.clawby, 'registered');
   const login = fetchImpl.calls.find((c) => c.path === '/api/v1/auth/login');
   assert.equal(getAddress(verifyMessage(login.body.message, login.body.signature)), out.address);
   const bind = fetchImpl.calls.find((c) => c.path === '/api/v1/user/referral');
-  assert.deepEqual(bind.body, { referral_code: 'jwiLDVi5' });            // the default clawby invite, bound at login
+  assert.deepEqual(bind.body, { referral_code: 'clawby' });              // the default clawby invite, bound at login
   assert.equal(bind.headers.authorization ?? bind.headers.Authorization, 'Bearer STUB.JWT.TOKEN');
+  const mcpAuth = fetchImpl.calls.find((c) => c.path === '/api/mcp/auth');
+  assert.equal(getAddress(verifyMessage(mcpAuth.body.message, mcpAuth.body.signature)), out.address, 'the clawby challenge is signed by the same wallet');
   process.env.CLAWBY_42SPACE_STATE = f;
   const { readState } = await import('./lib.mjs');
   assert.equal(readState().referral_bound_for, out.address);
+  assert.equal(readState().clawby_registered_for, out.address);
+  assert.ok(!JSON.stringify(out).includes('ck_STUB_KEY'), 'the clawby api key is never in the login output');
 });
 
 test('a re-login of the same wallet keeps referral_bound_for (idempotent); a new wallet drops it', async () => {
@@ -338,12 +361,16 @@ test('use-baw rejects a non-address and writes nothing', async () => {
   assert.equal(existsSync(f), false);
 });
 
-test('use-baw records a valid address with method=baw', async () => {
+test('use-baw records the address but reports it is READ-ONLY: no 42 bind / no clawby registration (baw cannot personal_sign)', async () => {
   const f = withTempState();
   const addr = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
   const r = runCli(['use-baw', addr], { stateFile: f });
   assert.equal(r.code, 0);
-  assert.equal(JSON.parse(r.stdout).address, addr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.address, addr);
+  assert.equal(out.referral, 'skipped', 'baw cannot bind the 42 referral (no EIP-191 personal_sign)');
+  assert.equal(out.clawby, 'skipped', 'baw cannot register the clawby account either');
+  assert.match(out.note, /read-only|EIP-191|create-wallet|import-mnemonic/);
   process.env.CLAWBY_42SPACE_STATE = f;
   const { readState } = await import('./lib.mjs');
   assert.equal(readState().method, 'baw');

@@ -13,11 +13,12 @@
 // skipped. The caller persists `referral_bound_for=<address>` when `mark` is true so later runs of the
 // same wallet short-circuit without touching the network.
 import { walletFromState } from './identity.mjs';
+import { writeState } from './lib.mjs';
 
 export const FT42_REST_BASE = 'https://rest.ft.42.space';
 export const SIWE_DOMAIN = 'app.42.space';          // 42 rejects www.42.space / 42.space ("domain not allowed")
 export const SIWE_URI = 'https://app.42.space';
-export const DEFAULT_REFERRAL_CODE = 'jwiLDVi5';
+export const DEFAULT_REFERRAL_CODE = 'clawby';
 
 // The exact EIP-4361 message 42 accepts (verified against the live login). The statement line is free text;
 // domain / URI / chain / nonce are what the server checks.
@@ -85,4 +86,15 @@ export async function ensureReferral({ state, env = process.env, fetchImpl = fet
   } catch (e) {
     return { referral: 'error', warnings: [warn(`42 referral bind failed: ${firstLine(e)}`)], mark: false };
   }
+}
+
+// A non-fatal PRE-TRADE backstop: before the daemon starts trading live, ensure the 42 referral is bound for the
+// logged-in wallet — registering the 42 account + binding if it never happened at login (a 42 outage then, or state
+// carried over from a pre-"bind-at-login" skill). Delegates to ensureReferral, so it short-circuits with no network
+// once bound, and persists referral_bound_for via `write`. NEVER throws (ensureReferral never does). `write`/`referral`
+// are test seams. -> ensureReferral's result { referral, warnings, mark }.
+export async function ensureReferralBeforeTrade({ state, env = process.env, fetchImpl = fetch, referral = ensureReferral, write = writeState } = {}) {
+  const ref = await referral({ state, env, fetchImpl });
+  if (ref.mark) write({ ...state, referral_bound_for: state?.address });
+  return ref;
 }

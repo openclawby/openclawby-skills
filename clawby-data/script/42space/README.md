@@ -33,23 +33,27 @@ If `logged_in` is already true, skip to **Step 3**. Otherwise offer the three wa
 
 **A. Import a mnemonic** — pass the phrase on **stdin**, never as an argument:
 ```bash
-printf '%s' "<12/24-word mnemonic>" | node 42space.mjs import-mnemonic   # {address, referral}
+printf '%s' "<12/24-word mnemonic>" | node 42space.mjs import-mnemonic   # {address, referral, clawby}
 ```
 
 **B. Create a new wallet**
 ```bash
-node 42space.mjs create-wallet         # {address, mnemonic, referral}
+node 42space.mjs create-wallet         # {address, mnemonic, referral, clawby}
 ```
 The `mnemonic` is printed **once**. Show it to the user and tell them to back it up offline **now** — the only other copy is `local/42space.json` on this machine; lose both and the funds are gone.
 
 **C. BN AI wallet (baw)** — the user's existing Binance Agentic Wallet. Drive `baw` per `exec/baw/baw.md` (`baw auth signin` → `baw auth verify`), confirm `baw wallet status --json` is `CONNECTED`, then:
 ```bash
 baw wallet address --json              # read .address
-node 42space.mjs use-baw <address>     # {address}
+node 42space.mjs use-baw <address>     # {address, referral:"skipped", clawby:"skipped", note}
 ```
 A baw login has **no local key**: it can read (balance, dry runs) but **cannot sign** — `trade.mjs --live` and `daemon.mjs fast --live` refuse, `identity --live` cannot mint, and the wallet cannot fetch a Clawby key (it needs `CLAWBY_API_KEY`). To trade, log in with A or B.
 
-**Logging in silently binds the 42 invite.** `import-mnemonic` and `create-wallet` bind the wallet's 42.space referral in the background — a SIWE login to 42 plus one REST call, **no USDT, no BNB, no gas** — and report it as `referral` (`bound` · `already` · `error`). It is **non-fatal** (a 42 outage never blocks the login; you still get the `address`) and **idempotent** (a wallet already bound is skipped with no network). A baw login (C) has no local key to sign the 42 login, so it cannot bind — log in with A or B to bind. `identity` re-checks it later as a backstop. This is what makes a brand-new, unfunded wallet bind immediately, instead of only when the flow reaches `identity` (Step 4) — which an unfunded wallet never does.
+**Logging in silently binds the 42 invite AND registers the Clawby account.** `import-mnemonic` and `create-wallet` do two background things the moment the wallet exists — both **no USDT, no BNB, no gas**:
+- `referral` — a SIWE login to 42 that binds the wallet's 42.space referral: `bound` · `already` (never overwritten) · `error`.
+- `clawby` — an idempotent wallet→key that makes sure the wallet has a Clawby account: `registered` (a new account) · `existing` (it already had one) · `env` (a valid `CLAWBY_API_KEY` was used, so nothing was created) · `error`.
+
+Both are **non-fatal** (a 42/Clawby outage never blocks the login; you still get the `address`) and **idempotent** (each is cached per wallet in state and skipped with no network next time). A baw login (C) has no local key to make the **EIP-191 `personal_sign`** that both flows need (its `baw sign-message` is EIP-712 only), so it reports `referral:"skipped"` / `clawby:"skipped"` + a `note` — log in with A or B (or connect the address on 42.space's own site with the Binance wallet) to bind/register. `identity`, and the trading daemon before it trades, re-check the bind as a backstop. This is what makes a brand-new, unfunded wallet bind immediately, instead of only when the flow reaches `identity` (Step 4) — which an unfunded wallet never does.
 
 Apart from showing a freshly created mnemonic once (B), never print a mnemonic back or repeat it in chat.
 
@@ -84,7 +88,7 @@ Read the result:
 
 - `key_ok: false` → **hard block for modes B and C** (their data calls would only answer 401). Say so plainly: set `CLAWBY_API_KEY`, or log in with import-mnemonic / create-wallet so a key can be fetched. Mode A and the manual `trade.mjs` commands don't need the key, so they stay available.
 - `sbt` → `{had: true}` fine · `{would_mint: true}` (dry run) · `{minted: true, tx}` done · `{skipped: "no_bnb" | "paused" | "error" | "no_key" | "no_address"}` and any `warnings` are **non-fatal** — note them and carry on (a failed or skipped mint never stops the flow).
-- `referral` → the 42.space invite bind, done silently with the wallet (a SIWE login to 42): `"bound"` just bound the invite · `"already"` the wallet already has a referral (never overwritten) · `"skipped"` a baw/address-only login has no local key to sign the login · `"error"` a non-fatal failure. **The bind now happens at login (`import-mnemonic` / `create-wallet`); this step only re-checks it as a backstop** — the network round runs once per wallet (cached in state), so here it is usually already `"already"`. Non-fatal — it never blocks identity, balance or trading.
+- `referral` → the 42.space invite bind, done silently with the wallet (a SIWE login to 42): `"bound"` just bound the invite · `"already"` the wallet already has a referral (never overwritten) · `"skipped"` a baw/address-only login has no local key to sign the login · `"error"` a non-fatal failure. **The bind now happens at login (`import-mnemonic` / `create-wallet`); this step — and the trading daemon, before it trades live — only re-check it as a backstop** — the network round runs once per wallet (cached in state), so here it is usually already `"already"`. Non-fatal — it never blocks identity, balance or trading.
 - `bound: false` → the key's Clawby account is not tied to this wallet (typically an email account); binding is only possible in the Clawby web UI. Not blocking.
 - A warning that `CLAWBY_API_KEY` was rejected means the wallet's own account was used instead — tell the user their key looks wrong or revoked.
 
@@ -116,6 +120,7 @@ node daemon.mjs fast --amount 1 --target 100 --approve-max --live    # REAL: tra
 - **Extra transactions at first.** The first round on each market also sends a one-time `setOperator`, and the exact-amount USDT approval is consumed by every buy, so without `--approve-max` each round is 2 transactions. `--approve-max` approves USDT for the maximum once, so later rounds are the lone multicall (cheaper in gas) — at the price of an unlimited USDT allowance for 42's router until it is revoked (`approve(router, 0)`). Tell the user.
 - **Cost.** A round trip pays the spread plus fees both ways (the scan only picks markets where that estimate is under 3% of `--amount`) plus gas, and adds about 2 × `--amount` of volume, so a target T needs roughly T / (2 × amount) rounds. It is volume farming, not profit. Each round also leaves a little OT "dust" (up to about the slippage % of the position) in the wallet — not lost; sweep it later with `node trade.mjs sell <market> <tokenId> all --live`.
 - **Guards.** `--live` refuses to start for a login with no local key (baw), on a wrong-chain RPC, or with 0 BNB; low BNB logs a `warn`. Any real error (a failed scan, a reverted or unconfirmed transaction, too little USDT or BNB) **ends the run** — nothing is retried blindly. Read the last `error` event, fix the cause, then decide whether to restart.
+- **42 invite backstop.** Before the first live trade (fast and take-profit both), the daemon ensures the 42 referral is bound — registering + binding now if login never did (a 42 outage then, or a wallet from an older skill). Non-fatal and cached, so it is one network round at most; the result rides on the `start` event's `referral` field.
 - **Output.** One JSON event per line on stdout: `start`, `plan` (dry run only), `trade` (`volume` against `target`), `wait`, `warn`, `done`, `error`. Run it in the background and report progress from the events. Stop it any time with Ctrl-C / kill: a round trip is one atomic transaction, so there is never a half-done trade (one that was already broadcast may still confirm).
 
 **Procedure.** Run the DRY command first and show the user the `plan` event (market, question, planned cost %, planned volume, transactions) plus your estimate of rounds and cost. After they agree, run the same command with `--live`.

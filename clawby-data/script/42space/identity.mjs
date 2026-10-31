@@ -180,10 +180,44 @@ export async function resolveKey({ wallet = null, env = process.env, fetchImpl =
       ? 'CLAWBY_API_KEY was rejected (401) and this login has no local key to fetch another with'
       : 'no clawby API key: set CLAWBY_API_KEY (this login has no local key to fetch one with)');
   }
-  const { api_key, account } = await getKeyFromWallet(wallet, fetchImpl);
+  const { api_key, account, created } = await getKeyFromWallet(wallet, fetchImpl);
   return envRejected
-    ? { api_key, source: 'wallet', account, env_rejected: true }
-    : { api_key, source: 'wallet', account };
+    ? { api_key, source: 'wallet', account, created, env_rejected: true }
+    : { api_key, source: 'wallet', account, created };
+}
+
+// ------------------------------------------------------------------------------------ ensureClawbyAccount
+// The SILENT Clawby-account ensure for a wallet login (import-mnemonic / create-wallet): the moment a signable wallet
+// exists, make sure its Clawby account exists (idempotent getKeyFromWallet -> /api/mcp/auth). Mirrors ensureReferral's
+// shape so bindOnLogin can run both at login. NEVER throws, and NEVER returns/prints the api key — only the account's
+// existence matters here. CLAWBY_API_KEY in the env wins (the account already exists; no second wallet-first account is
+// made). A wallet already registered (clawby_registered_for) short-circuits with no network.
+//   -> { clawby: 'registered'|'existing'|'env'|'already'|'skipped'|'error', warnings, mark }
+//      registered = a new wallet account was created; existing = the wallet already had one; env = an env key's account
+//      was used (nothing created); already = cached for this wallet; skipped = no usable wallet+key; error = failed.
+export async function ensureClawbyAccount({ state, env = process.env, fetchImpl = fetch } = {}) {
+  if (state?.clawby_registered_for && state.clawby_registered_for === state.address) {
+    return { clawby: 'already', warnings: [], mark: false };
+  }
+  const secrets = [clawbyKeyFromEnv(env ?? {}), typeof state?.mnemonic === 'string' ? state.mnemonic.trim() : null];
+  const warn = (msg) => scrub(msg, secrets).slice(0, 240);
+  let wallet = null;
+  try {
+    wallet = walletFromState(state);
+  } catch (e) {
+    return { clawby: 'skipped', warnings: [warn(`clawby registration skipped: local wallet unusable: ${describe(e)}`)], mark: false };
+  }
+  if (!wallet && !clawbyKeyFromEnv(env ?? {})) {
+    return { clawby: 'skipped', warnings: ['clawby registration skipped: this login has no local key (baw/address-only) and no CLAWBY_API_KEY'], mark: false };
+  }
+  try {
+    const key = await resolveKey({ wallet, env, fetchImpl });     // key.api_key is a secret; it is deliberately never read out here
+    if (key.source === 'env') return { clawby: 'env', warnings: [], mark: true };
+    const status = key.created === true ? 'registered' : key.created === false ? 'existing' : 'wallet';
+    return { clawby: status, warnings: [], mark: true };
+  } catch (e) {
+    return { clawby: 'error', warnings: [warn(`clawby registration failed: ${describe(e)}`)], mark: false };
+  }
 }
 
 // ------------------------------------------------------------------------------------ ensureIdentity

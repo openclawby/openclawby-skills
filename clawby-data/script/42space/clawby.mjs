@@ -6,6 +6,13 @@ export const CLAWBY_BASE = 'https://api.openclawby.com';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
+// The API base is env-overridable (CLAWBY_API_BASE) ONLY so offline tests can point the wallet->key / account /
+// relay calls at a dead loopback (the way invite.mjs uses FT42_REST_BASE); in real use it is always
+// api.openclawby.com. Trimmed, blank = unset. Read per call so a test's env is honoured without re-importing.
+function apiBase() {
+  return (typeof process.env.CLAWBY_API_BASE === 'string' && process.env.CLAWBY_API_BASE.trim()) || CLAWBY_BASE;
+}
+
 // Wallet -> key via the agent channel (idempotent: a known wallet gets its original key back, created:false; a new
 // wallet is registered and bound to itself, created:true). `wallet` is any object with .address and an async
 // .signMessage(msg) (EIP-191 personal_sign) — an ethers Wallet in real use, a fake in tests.
@@ -13,7 +20,7 @@ export async function getKeyFromWallet(wallet, fetchImpl = fetch) {
   if (!wallet || !wallet.address || typeof wallet.signMessage !== 'function') {
     throw new Error('clawby auth: wallet needs an address and signMessage()');
   }
-  const post = (path, body) => fetchImpl(CLAWBY_BASE + path, {
+  const post = (path, body) => fetchImpl(apiBase() + path, {
     method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body),
   });
 
@@ -35,7 +42,7 @@ export async function getKeyFromWallet(wallet, fetchImpl = fetch) {
 // blip by minting a second account). No key at all is "no valid account" without a request.
 export async function getAccount(apiKey, fetchImpl = fetch) {
   if (!apiKey) return null;
-  const res = await fetchImpl(CLAWBY_BASE + '/api/account', { method: 'GET', headers: { 'X-API-Key': apiKey } });
+  const res = await fetchImpl(apiBase() + '/api/account', { method: 'GET', headers: { 'X-API-Key': apiKey } });
   if (res.status === 401) return null;
   if (!res.ok) throw new Error('account HTTP ' + res.status);
   return res.json();
@@ -46,7 +53,7 @@ export async function getAccount(apiKey, fetchImpl = fetch) {
 // only answer 401 — and the key is never part of an error message.
 export async function ft42(name, params, apiKey, fetchImpl = fetch) {
   if (!apiKey) throw new Error('ft42: no clawby API key');
-  const res = await fetchImpl(CLAWBY_BASE + '/api/relay', {
+  const res = await fetchImpl(apiBase() + '/api/relay', {
     method: 'POST',
     headers: { ...JSON_HEADERS, 'X-API-Key': apiKey },
     body: JSON.stringify({ name, params: params ?? {} }),

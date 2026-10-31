@@ -710,3 +710,48 @@ test('ensureIdentity: warnings are plain strings', async () => {
   const out = await ensureIdentity({ state: { method: 'baw', address: ADDR }, env: {}, fetchImpl: clawbyStub({}), sbt: sbtStub() });
   assert.ok(out.warnings.length > 0 && out.warnings.every((w) => typeof w === 'string'));
 });
+
+// ---- ensureClawbyAccount (the silent clawby-account ensure a wallet login now runs) ----
+
+test('ensureClawbyAccount: a new wallet registers (created) -> "registered", mark true, and the api key never leaks into the result', async () => {
+  const { ensureClawbyAccount } = await import('./identity.mjs');
+  const f = clawbyStub({ mcp: mcpOk({ created: true }) });
+  const out = await ensureClawbyAccount({ state: { method: 'created', address: ADDR, mnemonic: PHRASE }, env: {}, fetchImpl: f });
+  assert.deepEqual(out, { clawby: 'registered', warnings: [], mark: true });
+  assert.deepEqual(f.calls, ['POST /api/mcp/challenge', 'POST /api/mcp/auth']);
+  assert.ok(!JSON.stringify(out).includes(WALLET_KEY), 'the api key is never returned');
+});
+
+test('ensureClawbyAccount: a wallet that already had an account -> "existing" (created:false), mark true', async () => {
+  const { ensureClawbyAccount } = await import('./identity.mjs');
+  const f = clawbyStub({ mcp: mcpOk({ created: false }) });
+  const out = await ensureClawbyAccount({ state: { method: 'mnemonic', address: ADDR, mnemonic: PHRASE }, env: {}, fetchImpl: f });
+  assert.equal(out.clawby, 'existing');
+  assert.equal(out.mark, true);
+});
+
+test('ensureClawbyAccount: already cached for this exact wallet short-circuits with NO network', async () => {
+  const { ensureClawbyAccount } = await import('./identity.mjs');
+  const f = clawbyStub({ mcp: mcpOk() });
+  const out = await ensureClawbyAccount({ state: { address: ADDR, mnemonic: PHRASE, clawby_registered_for: ADDR }, env: {}, fetchImpl: f });
+  assert.deepEqual(out, { clawby: 'already', warnings: [], mark: false });
+  assert.deepEqual(f.calls, [], 'no request when already registered for this wallet');
+});
+
+test('ensureClawbyAccount: a valid CLAWBY_API_KEY is used as-is -> "env", and NO wallet-first account is created', async () => {
+  const { ensureClawbyAccount } = await import('./identity.mjs');
+  const f = clawbyStub({ validKeys: { [ENV_KEY]: WALLET_FIRST } });    // any mcp request would throw
+  const out = await ensureClawbyAccount({ state: { address: ADDR, mnemonic: PHRASE }, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f });
+  assert.equal(out.clawby, 'env');
+  assert.equal(out.mark, true);
+  assert.deepEqual(f.mcpCalls(), [], 'the wallet->key path is not run when an env key is valid');
+});
+
+test('ensureClawbyAccount: a clawby outage is non-fatal -> "error", mark false, and it never throws', async () => {
+  const { ensureClawbyAccount } = await import('./identity.mjs');
+  const fNet = async () => { throw new TypeError('fetch failed'); };
+  const out = await ensureClawbyAccount({ state: { address: ADDR, mnemonic: PHRASE }, env: {}, fetchImpl: fNet });
+  assert.equal(out.clawby, 'error');
+  assert.equal(out.mark, false);
+  assert.ok(out.warnings.length >= 1 && out.warnings.every((w) => typeof w === 'string'));
+});

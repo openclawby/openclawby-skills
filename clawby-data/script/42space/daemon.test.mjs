@@ -335,7 +335,7 @@ function harness(extra = {}) {
   const rt = extra.rt ?? stubRoundtrip();
   const sleep = extra.sleep ?? stubSleep();
   const ctx = extra.ctx ?? readCtx();
-  const deps = { account: extra.account ?? mnemonicAccount(), ctx, scan, runRoundtrip: rt, sleep, log: (e) => events.push(e) };
+  const deps = { account: extra.account ?? mnemonicAccount(), ctx, scan, runRoundtrip: rt, sleep, log: (e) => events.push(e), ensure42: extra.ensure42, state: extra.state };
   return { deps, events, scan, rt, sleep, ctx };
 }
 
@@ -763,13 +763,53 @@ test('main dispatches: take-profit -> takeProfitMain (dry), fast -> fastMain (dr
   assert.deepEqual(fast, { cycles: 1, volume: 0, trades: 0 });
 });
 
+// ------------------------------------------------------------------------------ pre-trade 42 referral backstop (req 3)
+test('fast --live: the 42 referral backstop runs ONCE before the loop, with the logged-in state, and its status is folded into the start event', async () => {
+  const calls = [];
+  const ensure42 = async (a) => { calls.push(a); return { referral: 'bound', warnings: [], mark: true }; };
+  const h = harness({ ensure42, state: { method: 'mnemonic', address: ADDR, mnemonic: PHRASE } });
+  await daemon.main(['fast', '--live', '--target', '5'], h.deps);
+  assert.equal(calls.length, 1, 'exactly once, before trading');
+  assert.equal(calls[0].state.address, ADDR, 'the backstop is handed the logged-in state');
+  const start = h.events.find((e) => e.event === 'start');
+  assert.equal(start.referral, 'bound', 'the referral status rides on the start event (no new event in the stream)');
+  assert.ok(h.events.indexOf(start) < h.events.findIndex((e) => e.event === 'trade'), 'start (carrying the backstop result) precedes the first trade');
+});
+
+test('fast dry-run: the 42 referral backstop does NOT run (only live trading ensures it) and start carries no referral', async () => {
+  const calls = [];
+  const ensure42 = async () => { calls.push(1); return { referral: 'bound', warnings: [], mark: true }; };
+  const h = harness({ ensure42 });
+  await daemon.main(['fast', '--target', '5'], h.deps);
+  assert.equal(calls.length, 0, 'a dry run never touches 42');
+  const start = h.events.find((e) => e.event === 'start');
+  assert.ok(!('referral' in start), 'no referral field on a dry-run start');
+});
+
+test('take-profit --live: the 42 referral backstop runs before selling; its status rides on the start event', async () => {
+  const calls = [];
+  const ensure42 = async (a) => { calls.push(a); return { referral: 'already', warnings: [], mark: false }; };
+  const events = [];
+  const up = POS(addr(1), 1n, 10n * 10n ** 18n, 10n * 10n ** 18n);
+  const tp = tpDeps({ positions: [up], readValue: async () => ({ bal: 10n * 10n ** 18n, usdtOut: 16n * 10n ** 18n }), sell: async () => ({ traded: true, txs: ['0x'] }) });
+  const deps = { ...tp, account: mnemonicAccount(), ctx: readCtx(), log: (e) => events.push(e), sleep: stubSleep(), ensure42, state: { method: 'mnemonic', address: ADDR, mnemonic: PHRASE } };
+  await daemon.main(['take-profit', '--live'], deps);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].state.address, ADDR);
+  const start = events.find((e) => e.event === 'start');
+  assert.equal(start.referral, 'already');
+});
+
 // ------------------------------------------------------------------------------ safety (static)
 test('static scan: daemon.mjs cannot sign or send by itself - its only road to the chain is trade.runRoundtrip, and "live" comes from the literal --live flag alone', () => {
   const src = readFileSync(new URL('./daemon.mjs', import.meta.url), 'utf8');
   const code = src.split('\n').filter((l) => !/^\s*\/\//.test(l)).map((l) => l.replace(/\s\/\/.*$/, '')).join('\n');
   assert.doesNotMatch(code, /sendTransaction|signTransaction|signMessage|\.send\(|eth_send|sendStep|\bsigner\b|\bWallet\b|\.mnemonic\b|privateKey|apiKey|JsonRpcProvider/);
   const imports = [...src.matchAll(/^import .* from '([^']+)';$/gm)].map((m) => m[1]);
-  assert.deepEqual(imports, ['ethers', './lib.mjs', './scan.mjs', './trade.mjs', './positions.mjs']);
+  assert.deepEqual(imports, ['ethers', './lib.mjs', './scan.mjs', './trade.mjs', './positions.mjs', './invite.mjs']);
+  // invite.mjs is allowed ONLY as the pre-trade referral backstop: it does an off-chain SIWE personal_sign + a 42 REST
+  // call, never an on-chain broadcast — the daemon's only road to the chain is still trade.runRoundtrip (asserted above).
+  assert.match(code, /ensureReferralBeforeTrade/);
   assert.match(code, /runRoundtrip as tradeRunRoundtrip/);
   // the only place `live` is produced is the argument parser: the flag table maps the literal '--live' and nothing else sets it
   assert.match(code, /'--live': 'live'/);

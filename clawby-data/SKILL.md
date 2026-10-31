@@ -173,7 +173,7 @@ When the user says **"42space"**, read `script/42space/README.md` — the full h
 
 | Step | Commands |
 |---|---|
-| Status / log in | `node 42space.mjs status` · `import-mnemonic` (phrase on stdin) · `create-wallet` · `use-baw <address>` — `import-mnemonic`/`create-wallet` also **silently bind the 42 invite code** at login (once per wallet, no gas; baw can't sign so it can't bind) |
+| Status / log in | `node 42space.mjs status` · `import-mnemonic` (phrase on stdin) · `create-wallet` · `use-baw <address>` — `import-mnemonic`/`create-wallet` at login also **silently bind the 42 invite code AND register the wallet's Clawby account** (once per wallet, no gas; fields `referral` + `clawby`). **baw is read-only**: its CLI signs EIP-712 only, not the EIP-191 personal_sign 42/Clawby need, so it binds/registers nothing and reports `referral:"skipped"` / `clawby:"skipped"` + a note |
 | Balance | `node 42space.mjs balance` → `{address, usdt, bnb, needs_funding, bnb_status}` — USDT ≤ 10 → deposit USDT (BSC only); **`bnb_status` `none` = 0 BNB → stop and wait for BNB, never trade** |
 | Identity (silent) | `node 42space.mjs identity` (add `--dry-run` to preview) — Clawby key (`CLAWBY_API_KEY` env wins, else fetched with the wallet) + **auto-mints** the free Identity SBT when missing (needs BNB, else skipped `no_bnb`) + **re-checks the 42 invite bind** (already done at login; idempotent backstop); `key_ok: false` blocks the AI modes |
 | **Fast mode** — volume farming, no LLM | `node daemon.mjs fast --amount 1 --target <volume> [--slippage 3] [--approve-max] [--live]` — cheapest market under 3% round-trip cost, atomic buy+sell, until the target volume |

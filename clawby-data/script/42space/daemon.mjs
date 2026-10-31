@@ -26,6 +26,7 @@ import { parseVolume, bnbStatus, readState } from './lib.mjs';
 import { scanMarkets } from './scan.mjs';
 import { runRoundtrip as tradeRunRoundtrip, runSell as tradeRunSell, readPositionValue, makeContext, loadAccount, assertChain, parseAmount, parseMarket, parseTokenId, slippageBips, explainError, isMain } from './trade.mjs';
 import { listPositions, removePosition } from './positions.mjs';
+import { ensureReferralBeforeTrade } from './invite.mjs';
 
 export const DEFAULT_THRESHOLD_PCT = 3;      // a market is tradable only when its round trip costs strictly LESS than this (percent)
 export const DEFAULT_SLIPPAGE_PCT = '3';     // fast mode's slippage (trade.mjs's own default is 2)
@@ -160,6 +161,17 @@ export async function fastMain(argv, deps = {}) {
       if (status === 'low') log({ event: 'warn', message: `low BNB (${bnb}): each round trip costs gas, top up soon` });
     }
 
+    // Pre-trade backstop (req 3): before trading live, make sure the 42 account is registered and the invite is bound
+    // (register + bind now if the login never did it; short-circuits with no network once bound). Non-fatal — a 42
+    // outage must not stop trading. Folded into the 'start' event, so the machine-readable event stream is unchanged.
+    let referralStatus = null;
+    let referralWarnings = [];
+    if (live) {
+      const ref = await (deps.ensure42 ?? ensureReferralBeforeTrade)({ state: deps.state ?? readState(), env: deps.env, fetchImpl: deps.fetchImpl });
+      referralStatus = ref.referral;
+      referralWarnings = ref.warnings ?? [];
+    }
+
     // What the log lines need beyond the cycle result (whose shape is fixed): question text and scan stats from the last scan, the
     // last round trip's own report. Captured by thin wrappers around the real scan / round trip.
     const questions = new Map();
@@ -186,6 +198,7 @@ export async function fastMain(argv, deps = {}) {
     log({
       event: 'start', mode: live ? 'live' : 'dry-run', address: account.address, amount: o.amount, target: o.target,
       slippage: o.slippage, threshold_pct: thresholdPct, approve_max: o.approveMax, interval_s: o.interval,
+      ...(referralStatus ? { referral: referralStatus } : {}), ...(referralWarnings.length ? { referral_warnings: referralWarnings } : {}),
     });
 
     if (!live) {
@@ -345,11 +358,20 @@ export async function takeProfitMain(argv, deps = {}) {
       if (status === 'none') throw new Error(`wallet ${account.address} has 0 BNB, so there is no gas to sell with - fund it with BNB first (bnb_status none)`);
       if (status === 'low') log({ event: 'warn', message: `low BNB (${bnb}): each sell costs gas, top up soon` });
     }
+    // Pre-trade backstop (req 3): same as fast mode — ensure 42 registered + invite bound before selling live, folded
+    // into the 'start' event, non-fatal.
+    let referralStatus = null;
+    let referralWarnings = [];
+    if (live) {
+      const ref = await (deps.ensure42 ?? ensureReferralBeforeTrade)({ state: deps.state ?? readState(), env: deps.env, fetchImpl: deps.fetchImpl });
+      referralStatus = ref.referral;
+      referralWarnings = ref.warnings ?? [];
+    }
     const readValue = deps.readValue ?? ((market, tokenId) => readPositionValue(rc, parseMarket(market), parseTokenId(tokenId)));
     const sellOne = deps.sell ?? ((args) => narrationToStderr(() => tradeRunSell({ ...args, amount: 'all', approveMode: 'operator', slippage: DEFAULT_SLIPPAGE_PCT, live, account })));
     const onResult = (r) => log({ event: r.action, ...r });
     const cycleDeps = { listPositions: deps.listPositions ?? listPositions, removePosition: deps.removePosition ?? removePosition, readValue, sell: sellOne, onResult };
-    log({ event: 'start', mode: live ? 'live' : 'dry-run', address: account.address, pct, interval_s: o.interval });
+    log({ event: 'start', mode: live ? 'live' : 'dry-run', address: account.address, pct, interval_s: o.interval, ...(referralStatus ? { referral: referralStatus } : {}), ...(referralWarnings.length ? { referral_warnings: referralWarnings } : {}) });
     if (!live) {
       const r = await takeProfitCycle(cycleDeps, { pct, execute: false });
       log({ event: 'done', mode: 'dry-run', checked: r.checked, would_sell: r.results.filter((x) => x.action === 'would_sell').length, note: 'DRY RUN: nothing was sold. Re-run with --live to auto-sell at the target gain.' });

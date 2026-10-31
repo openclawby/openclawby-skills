@@ -46,7 +46,7 @@ test('ensureReferral: nonce -> SIWE login -> referral 200 => bound (mark true); 
   const out = await ensureReferral({ state: mnemonicState, env: {}, fetchImpl: f });
   assert.deepEqual(out, { referral: 'bound', warnings: [], mark: true });
   const bind = f.calls.find((c) => c.path === '/api/v1/user/referral');
-  assert.deepEqual(bind.body, { referral_code: 'jwiLDVi5' });
+  assert.deepEqual(bind.body, { referral_code: 'clawby' });
   assert.equal(bind.headers.authorization ?? bind.headers.Authorization, 'Bearer HEAD.PAYLOAD.SIG');
   const login = f.calls.find((c) => c.path === '/api/v1/auth/login');
   assert.ok(login.body.message.includes('Nonce: NONCE123'));
@@ -106,4 +106,33 @@ test('ensureReferral: an error echoing the access_token or mnemonic is scrubbed 
   const joined = out.warnings.join(' ');
   assert.ok(!joined.includes(token), 'access_token must be scrubbed from warnings');
   assert.ok(!joined.includes('junk'), 'mnemonic must be scrubbed from warnings');
+});
+
+// ---- ensureReferralBeforeTrade (the pre-trade backstop the daemon runs before it trades live) ----
+
+test('ensureReferralBeforeTrade: delegates to ensureReferral and persists referral_bound_for when the bind marks', async () => {
+  const { ensureReferralBeforeTrade } = await import('./invite.mjs');
+  const written = [];
+  const referral = async () => ({ referral: 'bound', warnings: [], mark: true });
+  const out = await ensureReferralBeforeTrade({ state: mnemonicState, referral, write: (s) => written.push(s) });
+  assert.deepEqual(out, { referral: 'bound', warnings: [], mark: true });
+  assert.equal(written.length, 1);
+  assert.equal(written[0].referral_bound_for, ADDR);
+});
+
+test('ensureReferralBeforeTrade: an unmarked result (already / error) writes nothing and still returns it; never throws', async () => {
+  const { ensureReferralBeforeTrade } = await import('./invite.mjs');
+  const written = [];
+  const already = async () => ({ referral: 'already', warnings: [], mark: false });
+  const out = await ensureReferralBeforeTrade({ state: mnemonicState, referral: already, write: (s) => written.push(s) });
+  assert.equal(out.referral, 'already');
+  assert.deepEqual(written, []);
+});
+
+test('ensureReferralBeforeTrade: end-to-end with the real ensureReferral (stubbed 42 REST) registers + binds and persists', async () => {
+  const { ensureReferralBeforeTrade } = await import('./invite.mjs');
+  const written = [];
+  const out = await ensureReferralBeforeTrade({ state: mnemonicState, env: {}, fetchImpl: ft42Stub({ referralStatus: 200 }), write: (s) => written.push(s) });
+  assert.equal(out.referral, 'bound');
+  assert.equal(written[0].referral_bound_for, ADDR);
 });

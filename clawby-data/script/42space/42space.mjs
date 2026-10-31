@@ -12,7 +12,7 @@ import {
   isValidAddress, parseVolume, carryOver, requirePipedStdin,
 } from './lib.mjs';
 import { ft42 } from './clawby.mjs';
-import { ensureIdentity, makeSbtForState, resolveKey, walletFromState } from './identity.mjs';
+import { ensureIdentity, makeSbtForState, resolveKey, walletFromState, ensureClawbyAccount } from './identity.mjs';
 import { ensureReferral } from './invite.mjs';
 
 function out(obj) {
@@ -29,18 +29,24 @@ function readStdin() {
   });
 }
 
-// A wallet login (import-mnemonic / create-wallet) persists its state, then SILENTLY binds the 42.space
-// referral with that wallet — the moment a signable wallet exists, independent of funding / BNB / the Clawby
-// identity step (a referral bind is just an off-chain SIWE signature + one REST call, it costs no gas). This
-// is why a brand-new, unfunded wallet still binds, where the old flow only bound at `identity` (Step 4, behind
-// the balance gate a new wallet never passes). Non-fatal: ensureReferral never throws, so a 42 outage just
-// leaves the login's address returned. Idempotent: a wallet already bound short-circuits with no network, and
-// `mark` caches referral_bound_for on the wallet so later logins of the same wallet skip the round entirely.
-async function bindOnLogin(state, { env, fetchImpl, referral }) {
+// A wallet login (import-mnemonic / create-wallet) persists its state, then SILENTLY does two things with that
+// wallet — the moment a signable wallet exists, independent of funding / BNB / the Clawby identity step (both are
+// just off-chain signatures + one REST call each, no gas):
+//   1. bind the 42.space referral (ensureReferral): register the 42 account via SIWE + bind the invite code.
+//   2. ensure the Clawby account (ensureClawbyAccount): idempotent wallet->key, so the wallet has a Clawby account.
+// This is why a brand-new, unfunded wallet still binds, where the old flow only bound at `identity` (Step 4, behind
+// the balance gate a new wallet never passes). Both are non-fatal: neither throws, so a 42 / clawby outage just
+// leaves the login's address returned. Idempotent: an already-bound / already-registered wallet short-circuits with
+// no network, and the `mark` flags cache referral_bound_for / clawby_registered_for so later logins skip the round.
+async function bindOnLogin(state, { env, fetchImpl, referral, clawbyReg }) {
   writeState(state);
   const ref = await referral({ state, env, fetchImpl });
-  if (ref.mark) writeState({ ...state, referral_bound_for: state.address });
-  return ref;
+  const reg = await clawbyReg({ state, env, fetchImpl });
+  let next = state;
+  if (ref.mark) next = { ...next, referral_bound_for: state.address };
+  if (reg.mark) next = { ...next, clawby_registered_for: state.address };
+  if (next !== state) writeState(next);
+  return { referral: ref.referral, clawby: reg.clawby, warnings: [...ref.warnings, ...reg.warnings] };
 }
 
 // ------------------------------------------------------------------------------------ ai-data / claim-settled
@@ -301,7 +307,7 @@ export async function claimSettled(args, { state, env, fetchImpl, claim } = {}) 
 
 // Injectable seams (tests): fetchImpl for the clawby API, sbt for the SBT port, env for CLAWBY_API_KEY / BSC_RPC,
 // claim for the claim-settled runner (default: trade.mjs claim --live in a child process).
-export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, claim, referral = ensureReferral } = {}) {
+export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, claim, referral = ensureReferral, clawbyReg = ensureClawbyAccount } = {}) {
   const [cmd, ...rest] = argv;
   try {
     switch (cmd) {
@@ -358,21 +364,27 @@ export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, cla
       case 'import-mnemonic': {
         requirePipedStdin(process.stdin);
         const { address, mnemonic } = deriveFromMnemonic(await readStdin());
-        const ref = await bindOnLogin({ ...carryOver(readState(), address), method: 'mnemonic', address, mnemonic }, { env, fetchImpl, referral });
-        out({ address, referral: ref.referral, ...(ref.warnings.length ? { warnings: ref.warnings } : {}) });
+        const res = await bindOnLogin({ ...carryOver(readState(), address), method: 'mnemonic', address, mnemonic }, { env, fetchImpl, referral, clawbyReg });
+        out({ address, referral: res.referral, clawby: res.clawby, ...(res.warnings.length ? { warnings: res.warnings } : {}) });
         break;
       }
       case 'create-wallet': {
         const { address, mnemonic } = createWallet();
-        const ref = await bindOnLogin({ ...carryOver(readState(), address), method: 'created', address, mnemonic }, { env, fetchImpl, referral });
-        out({ address, mnemonic, referral: ref.referral, ...(ref.warnings.length ? { warnings: ref.warnings } : {}) });
+        const res = await bindOnLogin({ ...carryOver(readState(), address), method: 'created', address, mnemonic }, { env, fetchImpl, referral, clawbyReg });
+        out({ address, mnemonic, referral: res.referral, clawby: res.clawby, ...(res.warnings.length ? { warnings: res.warnings } : {}) });
         break;
       }
       case 'use-baw': {
         const address = rest[0];
         if (!isValidAddress(address)) throw new Error('invalid address: ' + address);
         writeState({ ...carryOver(readState(), address), method: 'baw', address });
-        out({ address });
+        // A baw login is READ-ONLY in this module: the 42 referral bind and the Clawby account both need an EIP-191
+        // personal_sign, which the baw CLI (its sign-message is EIP-712 only) cannot produce, and --live trading is
+        // not wired for baw either. Say so, instead of returning a bare address as if a login had registered anything.
+        out({
+          address, referral: 'skipped', clawby: 'skipped',
+          note: 'baw login is read-only here: the 42 invite bind and the Clawby account both need an EIP-191 signature the baw CLI cannot produce (its sign-message is EIP-712 only), and --live trading is not wired for baw. To bind the invite and trade, log in with create-wallet or import-mnemonic; or connect this address on 42.space directly with your Binance wallet.',
+        });
         break;
       }
       case 'set-volume': {
