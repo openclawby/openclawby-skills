@@ -1,5 +1,5 @@
 {
-  "version": "1.0.65",
+  "version": "1.0.66",
   "base_url": "https://www.openclawby.com/clawby-skill/",
   "managed": [
     "SKILL.md",
@@ -52,9 +52,6 @@
     "api/catalog/_index.yaml",
     "api/catalog/address-intel/_index.yaml",
     "api/catalog/address-intel/labels.yaml",
-    "api/catalog/address-intel/profile.yaml",
-    "api/catalog/address-intel/reference.yaml",
-    "api/catalog/address-intel/risk.yaml",
     "api/catalog/derivatives/_index.yaml",
     "api/catalog/derivatives/etf.yaml",
     "api/catalog/derivatives/funding.yaml",

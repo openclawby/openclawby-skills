@@ -1,5 +1,5 @@
-version: 443
-generated_at: "2026-10-04T09:42:25.253431+00:00"
+version: 444
+generated_at: "2026-11-01T12:56:56.420289+00:00"
 base_url: https://api.openclawby.com
 auth_header: X-API-Key
 relay: POST /api/relay  body {name|id, params}
@@ -991,7 +991,7 @@ apis:
     data_types: "address_labels,attribution,entity"
     description: "Address labels & attribution (who owns an on-chain address)"
     docs: |
-       HyperEVM addresses: use coin=HYPE.
+       Address labels & attribution — Clawby local label cache (auto == fast; live upstream attribution was discontinued 2026-11-01, so a cache miss returns no_data). Params: coin* (chain id: ETH/BNB/SOL/SUI/POL-Polygon/ETH-Base/ETH-Arbitrum/HYPE...), address*. Returns {label_list,label_type,cached:true} or {no_data:true}. HyperEVM addresses: use coin=HYPE.
   - id: 291
     name: "etf_bitcoin_list"
     asset_classes: "crypto,etf"
@@ -2091,55 +2091,6 @@ apis:
     description: "Spot price OHLC history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d."
     docs: |
       Spot price OHLC history. exchange=Binance, symbol=BTCUSDT, interval=1h/4h/1d. Required: exchange, symbol, interval. Optional: limit, start_time, end_time.
-  - id: 448
-    name: "address_overview"
-    asset_classes: "crypto,onchain,aml"
-    data_types: "risk,aml,address"
-    description: "Address overview: native balance, tx count, first_seen/last_seen, total received/spent. Params: coin* (chain id e.g. ETH/BTC/TRX/SOL/POL-Pol"
-    docs: |
-      Address overview: native balance, tx count, first_seen/last_seen, total received/spent. Params: coin* (chain id e.g. ETH/BTC/TRX/SOL/POL-Polygon/ETH-Base/ETH-Arbitrum), address*.
-  - id: 449
-    name: "address_risk_score"
-    asset_classes: "crypto,onchain,aml"
-    data_types: "risk,aml,address"
-    description: "AML/KYT risk score. Params: coin*, and address OR txid. Returns score (3-100), risk_level (Low/Moderate/High/Severe), detail_list, hacking_e"
-    docs: |
-      AML/KYT risk score. Params: coin*, and address OR txid. Returns score (3-100), risk_level (Low/Moderate/High/Severe), detail_list, hacking_event, risk_detail (entity/risk_type/exposure_type/hop_num/volume/percent), risk_report_url. risk_type: sanctioned_entity/illicit_activity/mixer/gambling/risk_exchange/bridge. Same score across all coins of one address.
-  - id: 450
-    name: "address_action"
-    asset_classes: "crypto,onchain,aml"
-    data_types: "risk,aml,address"
-    description: "Behavior breakdown: received_txs/spent_txs grouped by action (DEX/Exchange/Mixer/Transfer/Swap) with count & proportion. Key for spotting mi"
-    docs: |
-      Behavior breakdown: received_txs/spent_txs grouped by action (DEX/Exchange/Mixer/Transfer/Swap) with count & proportion. Key for spotting mixer use. Params: coin*, address*.
-  - id: 451
-    name: "address_trace"
-    asset_classes: "crypto,onchain,aml"
-    data_types: "risk,aml,address"
-    description: "Address profile: first_address (gas-funding source), use_platform (exchange/dex/mixer/nft + counts), malicious_event (phishing/ransom/steali"
-    docs: |
-      Address profile: first_address (gas-funding source), use_platform (exchange/dex/mixer/nft + counts), malicious_event (phishing/ransom/stealing/laundering), relation_info (wallet/ens/twitter). Params: coin*, address*.
-  - id: 452
-    name: "address_counterparty"
-    asset_classes: "crypto,onchain,aml"
-    data_types: "risk,aml,address"
-    description: "Top counterparties: list of {name, amount(USD), percent}. Params: coin*, address*. Not supported for exchange hot wallets."
-    docs: |
-      Top counterparties: list of {name, amount(USD), percent}. Params: coin*, address*. Not supported for exchange hot wallets.
-  - id: 453
-    name: "transactions_investigation"
-    asset_classes: "crypto,onchain,aml"
-    data_types: "risk,aml,address"
-    description: "Tx investigation: in/out transfer lists with counterparty address, type (1 normal/2 malicious/3 entity/4 contract), tx_hash_list, amount, la"
-    docs: |
-      Tx investigation: in/out transfer lists with counterparty address, type (1 normal/2 malicious/3 entity/4 contract), tx_hash_list, amount, label; page/total_pages. Params: coin*, address*, type (in/out/all default all), page (default 1), start_timestamp/end_timestamp (unix sec, optional).
-  - id: 454
-    name: "chain_status"
-    asset_classes: "crypto,onchain,aml"
-    data_types: "risk,aml,address"
-    description: "Service status + full list of supported chains/tokens (200+). No params; call to confirm a coin is supported."
-    docs: |
-      Service status + full list of supported chains/tokens (200+). No params; call to confirm a coin is supported.
   - id: 455
     name: "address_labels_fast"
     asset_classes: "crypto,onchain"
@@ -2147,13 +2098,6 @@ apis:
     description: "Address labels (fast, local DB only)"
     docs: |
       Address labels FAST mode: query ONLY Clawby local label DB (no upstream), instant & free. Params: coin* (ETH/BNB/SOL/SUI/POL-Polygon/ETH-Base/ETH-Arbitrum/HYPE...), address*. Returns {label_list,label_type,cached,no_data}.
-  - id: 456
-    name: "address_labels_deep"
-    asset_classes: "crypto,onchain"
-    data_types: "address_labels,attribution"
-    description: "Address labels (deep, live upstream lookup)"
-    docs: |
-      Address labels DEEP mode: live upstream attribution lookup (MistTrack) then cache the result. Use when fast (local DB) returns no_data. Params: coin* (ETH/BNB/SOL/POL-Polygon/ETH-Base/ETH-Arbitrum/HYPE...), address*. Returns {label_list,label_type,cached:false} or no_data. Note: SUI live attribution was discontinued 2026-09-19 — SUI returns cached labels via fast/auto only; deep for SUI returns no_data.
   - id: 459
     name: "dex_token_info"
     asset_classes: "crypto"

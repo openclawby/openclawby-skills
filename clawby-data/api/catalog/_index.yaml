@@ -24,8 +24,8 @@ categories:
     desc: "Prediction markets: Polymarket (events / CLOB prices / trades) + 42.space eventcoins + Aster up/down binaries + Kalshi (CFTC-regulated US exchange)"
     count: 47
   - dir: "address-intel/"
-    desc: "On-chain address intel: label attribution (local / live modes) · AML risk scoring · address profile · counterparties · supported-chain lookup"
-    count: 10
+    desc: "On-chain address label attribution (local cache lookup)"
+    count: 2
   - dir: "dex/"
     desc: "DEX: pair / token search · pools · token quotes · promotion orders"
     count: 8

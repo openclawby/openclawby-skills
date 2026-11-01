@@ -1,56 +1,44 @@
 # ============================================================================
 # Address Intel — Address Labels / Attribution
 # Call: POST /api/relay   {"name": "<name>", "params": {...}}
-# Data: address labels / AML data
+# Data: address labels (who owns an on-chain address)
 # ============================================================================
 category: "Address Labels & Attribution"
 note: >
-  Three variants for different query strategies:
-  fast=local label cache only (instant, zero upstream cost, may return no_data);
-  deep=real-time upstream query then cache (use when fast returns no_data);
-  no suffix=auto (local first, falls back to upstream automatically).
+  Address label / attribution lookup against Clawby's LOCAL label database (no upstream).
+  Two names, same source now: fast = local cache only; auto (address_labels) also reads the
+  local cache. Live real-time upstream attribution was discontinued 2026-11-01, so a cache
+  MISS returns no_data on every chain (there is no on-demand upstream fetch anymore).
   Most addresses have no label — no_data is a normal result, not an error.
+  The cache is richest on BNB / ETH / SOL / POL-Polygon / ETH-Base / ETH-Arbitrum / HYPE.
 
 gotchas_for_all:
-  - "⚠️ coin is the chain ID, not a token symbol. Common values: ETH / BNB / SOL / SUI / BTC / TRX / TON / LTC / DOGE / BCH / POL-Polygon / ETH-Base / ETH-Arbitrum / ETH-Optimism / AVAX-Avalanche / HYPE(HyperEVM). Full list: call chain_status."
-  - "⚠️ Base chain uses ETH-Base, Polygon uses POL-Polygon — suffix is mandatory, never use bare ETH or POL."
+  - "⚠️ coin is the chain ID, not a token symbol. Common values: ETH / BNB / SOL / SUI / BTC / TRX / TON / POL-Polygon / ETH-Base / ETH-Arbitrum / ETH-Optimism / AVAX-Avalanche / HYPE(HyperEVM)."
+  - "⚠️ Base chain uses ETH-Base, Polygon uses POL-Polygon, Arbitrum uses ETH-Arbitrum — suffix is mandatory, never use bare ETH or POL."
   - "EVM addresses (0x prefix) are automatically lowercased; Solana (base58) / SUI addresses are case-sensitive, pass as-is."
+  - "Local-cache only: a no_data result does NOT mean the address is unlabeled upstream — it means Clawby has no cached label for it. There is no deep/live lookup anymore."
 
 interfaces:
   - name: "address_labels"
-    summary: "Address label & attribution lookup (auto mode: checks local cache first, falls back to upstream on miss)"
+    summary: "Address label & attribution lookup (reads Clawby's local label cache; instant, free). Returns the cached label if present, otherwise no_data."
     params:
       - {name: coin,    required: true,  format: "chain ID string", example: "ETH"}
       - {name: address, required: true,  format: "on-chain address",     example: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
     gotchas:
-      - "Auto mode: returns local cache immediately if available; otherwise queries upstream and writes cache. Speed between fast and deep."
-      - "no_data=true means the address has no record in the label database — this is normal."
-      - "Use this interface when you don't need to explicitly control fast/deep mode."
+      - "Identical to address_labels_fast now (both read only the local cache). Kept as an alias for callers that used the auto name."
+      - "no_data=true means the address has no record in the local label DB — this is normal."
     example:
       name: "address_labels"
       params: {coin: "ETH", address: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
 
   - name: "address_labels_fast"
-    summary: "Address label lookup (fast mode: local label cache only, instant response, no upstream quota used)"
+    summary: "Address label lookup (local label cache only, instant response, no upstream). Returns the cached label if present, otherwise no_data."
     params:
       - {name: coin,    required: true,  format: "chain ID string", example: "SOL"}
       - {name: address, required: true,  format: "on-chain address",     example: "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1"}
     gotchas:
-      - "⚠️ Queries local cache only; if no_data=true is returned, there is no local label for this address — use address_labels_deep to trigger a real-time upstream lookup."
-      - "Best for bulk screening or latency-sensitive use cases (upstream quota not consumed)."
+      - "Queries the local cache only; no_data=true means there is no cached label for this address."
+      - "Best for bulk screening or latency-sensitive use cases (instant, free, no upstream quota)."
     example:
       name: "address_labels_fast"
       params: {coin: "SOL", address: "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1"}
-
-  - name: "address_labels_deep"
-    summary: "Address label lookup (deep mode: real-time upstream query with result caching, for when fast returns no_data)"
-    params:
-      - {name: coin,    required: true,  format: "chain ID string", example: "ETH"}
-      - {name: address, required: true,  format: "on-chain address",     example: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}
-    gotchas:
-      - "Every call queries upstream in real time, consuming upstream quota; response is slower than fast (several seconds)."
-      - "Recommended: use fast first; only switch to deep when fast returns no_data."
-      - "⚠️ SUI live attribution was discontinued 2026-09-19: deep mode returns no_data for SUI. SUI labels remain available only from local cache via address_labels_fast / address_labels (auto). All other chains query MistTrack upstream in real time."
-    example:
-      name: "address_labels_deep"
-      params: {coin: "ETH", address: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"}

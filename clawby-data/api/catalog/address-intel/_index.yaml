@@ -1,51 +1,26 @@
 # ============================================================================
 # Address Intel — Category Index
-# This directory provides on-chain address label / risk / AML data interfaces
+# This directory provides on-chain address label / attribution lookup
 # Call: POST /api/relay   {"name": "<name>", "params": {...}}
 # ============================================================================
-category_group: "Address Intel (on-chain address labels / risk / AML)"
+category_group: "Address Intel (on-chain address labels)"
 
 note: >
-  Almost all interfaces require coin (chain ID) + address as mandatory params.
-  For valid coin values see reference.yaml::chain_status.
-  Common pitfall: Base=ETH-Base, Polygon=POL-Polygon, Arbitrum=ETH-Arbitrum — always include the suffix, never use bare ETH.
+  Interfaces require coin (chain ID) + address as mandatory params.
+  coin is the chain ID with a suffix where applicable: Base=ETH-Base, Polygon=POL-Polygon,
+  Arbitrum=ETH-Arbitrum, Optimism=ETH-Optimism, Avalanche=AVAX-Avalanche — always include the
+  suffix, never use bare ETH for those chains. Other common ids: ETH / BNB / SOL / SUI / BTC / TRX / TON / HYPE.
   EVM addresses (0x) are automatically lowercased; Solana / SUI addresses are case-sensitive.
+  Labels come from Clawby's LOCAL cache only — live upstream attribution (MistTrack / Blockberry)
+  was discontinued, so a cache miss returns no_data (no on-demand lookup).
 
 files:
   - file: labels.yaml
-    description: "Address label / attribution lookup (3 interfaces)"
+    description: "Address label / attribution lookup — local cache (2 interfaces)"
     interfaces:
       - name: address_labels
-        summary: "Auto mode: checks local label cache first, falls back to upstream on miss"
+        summary: "Reads the local label cache; returns the cached label or no_data (alias of fast)"
       - name: address_labels_fast
-        summary: "Fast mode: local label cache only (instant, may return no_data)"
-      - name: address_labels_deep
-        summary: "Deep mode: real-time upstream query with caching (use when fast returns no_data)"
+        summary: "Local label cache only (instant, free; may return no_data)"
 
-  - file: risk.yaml
-    description: "AML / KYT risk score (1 interface)"
-    interfaces:
-      - name: address_risk_score
-        summary: "Returns score (3-100) + risk_level (Low/Moderate/High/Severe) + risk breakdown"
-
-  - file: profile.yaml
-    description: "Address profile / behavior analysis (5 interfaces)"
-    interfaces:
-      - name: address_overview
-        summary: "Basic profile: balance, tx count, first/last active time, total sent/received"
-      - name: address_action
-        summary: "Behavior breakdown: tx counts by type (DEX/Exchange/Mixer/Transfer/Swap)"
-      - name: address_trace
-        summary: "Tracing profile: initial fund source, platform usage history, malicious events, linked identities"
-      - name: address_counterparty
-        summary: "Top counterparty list (exchange hot-wallet addresses not supported)"
-      - name: transactions_investigation
-        summary: "Transaction investigation: paginated in/out list with counterparty type labels and time filtering"
-
-  - file: reference.yaml
-    description: "Reference data (1 interface)"
-    interfaces:
-      - name: chain_status
-        summary: "Query all supported chains/tokens (200+); no params required"
-
-total_interfaces: 10
+total_interfaces: 2

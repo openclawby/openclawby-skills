@@ -107,7 +107,7 @@ Interface details (params + ⚠️ gotchas) live in the catalog file — read it
 | Crypto derivatives (cross-exchange): funding · open interest · liquidations · long/short ratios · taker volume · ETF flows · market indicators (fear&greed, RSI…) · whale/exchange reserves | `funding_*` `open_interest_*` `liquidation_*` `etf_*` … | `api/catalog/derivatives/` |
 | Hyperliquid perps: mids · contexts (funding/OI/mark) · order book · candles · a wallet's positions/fills | `hyperliquid_*` | `api/catalog/perps/` |
 | Prediction markets / betting odds (Polymarket) | `polymarket_*` | `api/catalog/prediction-markets/` |
-| Address labels (who owns an address) · AML risk score · address profile/trace/counterparties | `address_*` | `api/catalog/address-intel/` |
+| Address labels / attribution — who owns an address (local cache) | `address_labels` · `address_labels_fast` | `api/catalog/address-intel/` |
 | DEX pairs & token market data, any chain (DexScreener) | `dexscreener_*` | `api/catalog/dex/` |
 | On-chain DEX/memecoin intel: security audit · holders/traders PnL · trending · smart-money/KOL · signals · new launches · swap quotes (read-only) | `dex_*` | `api/catalog/dex-trading/` |
 | US company financials & SEC filings | `sec_*` | `api/catalog/filings/` |
@@ -191,7 +191,7 @@ Everything is **DRY unless `--live`**: run the dry command first, show the user 
 - **Reddit top mentions** and **OHLC bars** take `start` as Unix seconds — `date -u -d '7 days ago' +%s` (Linux) / `date -u -v-7d +%s` (mac).
 - **Quotes are delayed 30 minutes**; the screener is real-time.
 - **Derivatives**: aggregated/coin endpoints take `symbol=BTC`; single-exchange ones take a pair `BTC USDT` style (`BTCUSDT`) — check the catalog entry.
-- **address_labels / address_risk** use special coin ids (`ETH`, `BNB`, `POL-Polygon`, `ETH-Base`, `TRX`, `SOL`, `SUI` …) — see `api/catalog/address-intel/`.
+- **address_labels / address_labels_fast** use special coin ids (`ETH`, `BNB`, `POL-Polygon`, `ETH-Base`, `TRX`, `SOL`, `SUI` …) — local label cache; see `api/catalog/address-intel/`.
 
 ## Plan & access
 
