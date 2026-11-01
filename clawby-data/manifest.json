@@ -1,5 +1,5 @@
 {
-  "version": "1.0.66",
+  "version": "1.0.67",
   "base_url": "https://www.openclawby.com/clawby-skill/",
   "managed": [
     "SKILL.md",
@@ -120,6 +120,7 @@
     "script/baw/fast-send.sh",
     "script/baw/snapshot.sh",
     "script/baw/rescue.sh",
+    "script/baw/auto-sweep.sh",
     "script/42space/README.md",
     "script/42space/42space.mjs",
     "script/42space/lib.mjs",

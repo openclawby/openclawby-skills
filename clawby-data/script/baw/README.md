@@ -17,6 +17,10 @@ goes.
 
 The fast path (auto-execute with no mid-flow pause) is a **mode that is OFF by default**.
 
+> On your **first baw action in a session** the agent proactively offers *both* opt-in modes together —
+> this `yolo` mode **and** `baw 自动归集` (auto-sweep) — one line + risk each, default neither (see
+> `exec/baw/baw.md` → "Opt-in modes"). You can still toggle either any time with the phrases below.
+
 - **Default (yolo OFF)** — the agent runs the safe path: preview/quote, show you the result
   + risks, wait for your confirmation, then execute. It does **not** pass `--yes`.
 - **Enabling it** — the first time an action would move funds (send / swap / contract-call /
@@ -64,6 +68,7 @@ The scripts only remove *turns*, not `baw`'s own trust checks.
 | `fast-send.sh` | `send [→ --confirm receipt]` (gas HIGH) | default prints the intent |
 | `snapshot.sh` | 5 independent reads in **parallel** → one turn | read-only |
 | `rescue.sh` | pending `tx-history → speed-up/cancel` the first stuck tx | default lists the tx |
+| `auto-sweep.sh` | **"baw 自动归集"** mode: sweep all non-native tokens to a fixed address, keep gas | `start`/`stop`/`status`/`run-once` |
 
 ### Common options
 
@@ -104,6 +109,38 @@ bash script/baw/snapshot.sh --binanceChainId 56
 # unstick a pending tx (speed up, or --cancel)
 bash script/baw/rescue.sh --yes          # speed-up the first pending tx (gas HIGH)
 bash script/baw/rescue.sh --cancel --yes # cancel it instead
+```
+
+## "baw 自动归集" (auto-sweep mode) — `auto-sweep.sh`
+
+Unlike the one-shot helpers above, this is a **mode**: it continuously moves **every non-native token**
+out of the wallet to one fixed destination, **keeping each chain's native gas coin** (BNB / ETH / POL /
+...). Use it to auto-forward receipts/profits to a cold address. It moves real funds with **no
+per-transfer confirmation**, so it is armed only by an exact phrase + a one-time address confirmation.
+
+- **Arm / disarm — exact phrases only:** `开启baw自动归集` (on) · `关闭baw自动归集` (off). Nothing else arms
+  it (no fuzzy matching) — deliberate for a fund-moving automation.
+- **Before `start`, the agent restates the destination address in full** and states it is irreversible,
+  ongoing, keeps gas, and must be in the Binance App **address book**; starts only on an explicit yes.
+  One-time setup confirm — not per transfer.
+- **Two triggers (hybrid):**
+  1. **primary — agent hook:** while ON, after **every** baw asset action (mint / swap / send / claim /
+     contract-call / ...) the agent runs `auto-sweep.sh run-once`, so a new balance is swept the instant
+     it appears. `run-once` with no `--to` is a **no-op while the mode is OFF**.
+  2. **safety net — slow poll:** `start` also runs a background daemon sweeping every
+     `CLAWBY_SWEEP_INTERVAL` seconds (default **600 = 10 min**), for arrivals that landed while idle.
+- **What it does per cycle:** sweep every ERC-20 with a balance, on every EVM chain, via
+  `baw wallet send --max` (gas HIGH). **Keeps** native coins (gas); **skips** Solana / non-EVM (can't reach
+  an EVM address). Per-token failures are logged and retried next cycle; a destination not in the address
+  book logs `351703` (add it in the App once).
+- **State / log:** `~/.clawby/baw-auto-sweep/` (`state.json` + `daemon.pid` + `sweep.log`). The destination
+  is stored once at `start` and reused — never re-read from a prompt, so it can't be swapped mid-run.
+
+```bash
+bash script/baw/auto-sweep.sh start --to 0xYourColdAddress   # only after you confirmed the address
+bash script/baw/auto-sweep.sh run-once --dry-run             # preview what WOULD be swept right now
+bash script/baw/auto-sweep.sh status                          # running? destination? recent log
+bash script/baw/auto-sweep.sh stop                            # 关闭baw自动归集
 ```
 
 ## Beyond the scripts (biggest non-script latency wins)
