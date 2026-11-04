@@ -121,6 +121,6 @@ export function parseVolume(raw) {
 // A mnemonic must be piped on stdin; an interactive TTY would hang forever waiting for 'end'.
 export function requirePipedStdin(stdin) {
   if (stdin && stdin.isTTY) {
-    throw new Error('pipe the mnemonic on stdin, e.g. printf %s "<phrase>" | node 42space.mjs import-mnemonic');
+    throw new Error('pipe the JSON secret on stdin, e.g. printf %s \'{"pin":"…"}\' | node 42space.mjs <command>');
   }
 }

@@ -5,21 +5,23 @@
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { getAddress } from 'ethers';
+import { getAddress, Wallet } from 'ethers';
 import {
-  readState, writeState, deriveFromMnemonic, createWallet,
+  readState, writeState, deriveFromMnemonic,
   fetchBalances, needsFunding, bnbStatus, DEFAULT_RPC,
-  isValidAddress, parseVolume, carryOver, requirePipedStdin,
+  parseVolume, carryOver, requirePipedStdin,
 } from './lib.mjs';
-import { ft42 } from './clawby.mjs';
-import { ensureIdentity, makeSbtForState, resolveKey, walletFromState, ensureClawbyAccount } from './identity.mjs';
+import { ft42, clawbyInviteFromEnv } from './clawby.mjs';
+import { ensureIdentity, makeSbtForState, resolveKey, walletFromVault, ensureClawbyAccount } from './identity.mjs';
 import { ensureReferral } from './invite.mjs';
+import { encryptKey, validatePin, hasVault, clearPinFailures, guardedUnlock } from './vault.mjs';
+import * as privyModule from './privy.mjs';
 
 function out(obj) {
   console.log(JSON.stringify(obj));
 }
 
-// Read a secret (mnemonic) from stdin — never from argv/process table.
+// Read secrets from stdin — never from argv/process table.
 function readStdin() {
   return new Promise((resolve) => {
     let data = '';
@@ -27,6 +29,31 @@ function readStdin() {
     process.stdin.on('data', (c) => { data += c; });
     process.stdin.on('end', () => resolve(data));
   });
+}
+
+// A single JSON object of secrets on stdin (e.g. {"pin":"..."} / {"mnemonic":"...","pin":"..."} / {"code":"...","pin":"..."}).
+// `raw` is a test seam (the stdin string); without it a pipe is read (a TTY would hang, so it is refused). On malformed
+// JSON it throws WITHOUT echoing the raw input (it may hold secrets).
+async function readStdinJson(raw) {
+  if (raw === undefined) { requirePipedStdin(process.stdin); raw = await readStdin(); }
+  let obj = null;
+  try { obj = JSON.parse(raw); } catch { /* fall through to the generic error */ }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+    throw new Error('expected a JSON object on stdin (e.g. {"pin":"..."})');
+  }
+  return obj;
+}
+
+// The embedded signer for the logged-in account, decrypted with the PIN. Enforces the brute-force lock first, then
+// decrypts; on a wrong pin it records the failure (and re-throws), on success it clears the counter. Persists the
+// updated attempt counters via writeState. Returns the ethers Wallet (never null here — callers that allow "no pin"
+// handle that before calling). `write` is a test seam.
+function unlockWallet(state, pin, { write = writeState } = {}) {
+  if (!hasVault(state)) throw new Error('no vault: this account has no backed-up key — log in again to back one up');
+  // guardedUnlock enforces the brute-force lock + records/clears failures uniformly (see vault.mjs).
+  const wallet = guardedUnlock(state, pin, (s, p) => walletFromVault(s, p), { write });
+  if (!wallet) throw new Error('no vault to unlock');   // defensive: hasVault already passed
+  return wallet;
 }
 
 // A wallet login (import-mnemonic / create-wallet) persists its state, then SILENTLY does two things with that
@@ -38,15 +65,26 @@ function readStdin() {
 // the balance gate a new wallet never passes). Both are non-fatal: neither throws, so a 42 / clawby outage just
 // leaves the login's address returned. Idempotent: an already-bound / already-registered wallet short-circuits with
 // no network, and the `mark` flags cache referral_bound_for / clawby_registered_for so later logins skip the round.
-async function bindOnLogin(state, { env, fetchImpl, referral, clawbyReg }) {
-  writeState(state);
-  const ref = await referral({ state, env, fetchImpl });
-  const reg = await clawbyReg({ state, env, fetchImpl });
-  let next = state;
-  if (ref.mark) next = { ...next, referral_bound_for: state.address };
-  if (reg.mark) next = { ...next, clawby_registered_for: state.address };
-  if (next !== state) writeState(next);
-  return { referral: ref.referral, clawby: reg.clawby, warnings: [...ref.warnings, ...reg.warnings] };
+async function completeLogin(prevState, { access, embedded }, { pin, method, env, fetchImpl, privy, referral, clawbyReg }) {
+  validatePin(pin);
+  // Export the embedded key (FATAL on failure — no identity to use). It stays in memory only; wiped in `finally`.
+  let privHex = await privy.exportEmbeddedKey({ access, walletId: embedded.id, embeddedAddr: embedded.address, fetchImpl });
+  let wallet = new Wallet(privHex);
+  try {
+    const state = { ...carryOver(prevState, embedded.address), method, address: embedded.address };
+    // Bind + register with the in-memory signer (no PIN needed yet). Both are non-fatal: a 42/clawby outage still
+    // leaves the login's address + a saved vault.
+    const ref = await referral({ wallet, state, env, fetchImpl });
+    const reg = await clawbyReg({ wallet, state, env, fetchImpl, inviteCode: clawbyInviteFromEnv(env) });
+    state.vault = encryptKey(privHex, pin, embedded.address);        // seal the key under the PIN
+    state.vault_attempts = 0; state.vault_locked_until = 0;          // a fresh vault clears any stale wrong-PIN lock (re-login = PIN recovery)
+    if (ref.mark) state.referral_bound_for = embedded.address;
+    if (reg.mark) state.clawby_registered_for = embedded.address;
+    writeState(state);                                              // 0600; no plaintext key/mnemonic persisted
+    return { address: embedded.address, method, referral: ref.referral, clawby: reg.clawby, backed_up: true, warnings: [...ref.warnings, ...reg.warnings] };
+  } finally {
+    privHex = null; wallet = null;
+  }
 }
 
 // ------------------------------------------------------------------------------------ ai-data / claim-settled
@@ -77,15 +115,17 @@ export function parseMarketRef(ref) {
 // second account appears next to the user's own). Otherwise the login's own wallet fetches one. No usable key is a HARD block
 // (ft42 would only answer 401) - an explicit error, never a silent empty result. The key stays in memory: it is never returned to
 // the caller's output, only used for the relay calls.
-async function dataKey({ state, env, fetchImpl }, what) {
+async function dataKey({ state, env, fetchImpl, pin }, what) {
   let wallet = null;
   let walletNote = '';
-  try { wallet = walletFromState(state); } catch (e) { walletNote = `; local wallet unusable: ${firstLine(e.message)}`; }
+  // With a valid CLAWBY_API_KEY no wallet is needed; otherwise the embedded wallet (unlocked by the PIN) fetches one.
+  // The PIN path goes through guardedUnlock so a wrong PIN here counts toward the same brute-force lock.
+  try { wallet = pin ? guardedUnlock(state, pin, (s, p) => walletFromVault(s, p), { write: writeState }) : null; } catch (e) { walletNote = `; vault unusable: ${firstLine(e.message)}`; }
   try {
-    const k = await resolveKey({ wallet, env, fetchImpl });
+    const k = await resolveKey({ wallet, env, fetchImpl, inviteCode: clawbyInviteFromEnv(env) });
     return { key: k.api_key, warnings: k.env_rejected ? ["CLAWBY_API_KEY was rejected by clawby (401); used this wallet's own account instead - it may not be the account that key belonged to"] : [] };
   } catch (e) {
-    throw new Error(`${what} is blocked: no usable clawby API key (${firstLine(e.message)}${walletNote}). Set CLAWBY_API_KEY, or log in with import-mnemonic / create-wallet so one can be fetched - see "identity"`);
+    throw new Error(`${what} is blocked: no usable clawby API key (${firstLine(e.message)}${walletNote}). Set CLAWBY_API_KEY, or log in (login-email / create-wallet / import-mnemonic) and pass the PIN via --pin-stdin so one can be fetched - see "identity"`);
   }
 }
 
@@ -180,10 +220,10 @@ const pickFields = (row, fields) => Object.fromEntries(fields.filter((f) => isOb
 //   warnings      secondary calls that failed (the bundle still arrives, thinner, and says so); only ft42_market is required
 // ai-data --all [--fields a,b]  -> { count, fields, markets, truncated, warnings }: every live market, trimmed to those columns
 // Read-only. Needs the clawby key (a hard block without one) and nothing else - no login. Never prints the key.
-export async function aiData(args, { state, env, fetchImpl } = {}) {
+export async function aiData(args, { state, env, fetchImpl, pin } = {}) {
   const o = parseAiDataArgs(args);
   const address = o.market ? parseMarketRef(o.market) : null;           // a bad reference fails before any key lookup or request
-  const { key, warnings: keyWarnings } = await dataKey({ state, env, fetchImpl }, 'ai-data');
+  const { key, warnings: keyWarnings } = await dataKey({ state, env, fetchImpl, pin }, 'ai-data');
   const warnings = [...keyWarnings];
   const call = (name, params) => ft42(name, params, key, fetchImpl);
 
@@ -219,13 +259,15 @@ const TRADE_CLI = fileURLToPath(new URL('./trade.mjs', import.meta.url));
 // market is validated first, so nothing but an address ever reaches the command line. The child gets the parent environment minus
 // CLAWBY_API_KEY (a claim never needs the clawby key), with BSC_RPC taken from `env` when it sets one.
 // -> { ok: true, tx: [hashes] } | { ok: false, tx: [hashes sent before the failure], error }.  `cli` is a test seam.
-export async function runTradeClaim(market, { env = process.env, cli = TRADE_CLI } = {}) {
+export async function runTradeClaim(market, { env = process.env, cli = TRADE_CLI, pin } = {}) {
   if (typeof market !== 'string' || !ADDRESS_ONLY_RE.test(market)) throw new Error('runTradeClaim: not a market address');
   const childEnv = { ...process.env };
   delete childEnv.CLAWBY_API_KEY;
   if (env?.BSC_RPC) childEnv.BSC_RPC = env.BSC_RPC;
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [cli, 'claim', market, '--live'], { env: childEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+    // A live claim needs the PIN to unlock the embedded signer; hand it to the child on stdin (never argv/env).
+    const child = spawn(process.execPath, [cli, 'claim', market, '--live'], { env: childEnv, stdio: ['pipe', 'pipe', 'pipe'] });
+    child.stdin.end(JSON.stringify({ pin: pin ?? '' }));
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d) => { stdout += d; });
@@ -271,12 +313,12 @@ const isClaimable = (row) => row?.isFinalized === true && row?.isWinner === true
 // DRY unless the literal --live: it only LISTS (`markets` = what would be claimed). With --live the claim runner is invoked once per
 // market, in order (each claim collects ALL winnings in its market), and one failing market does not stop the rest; `claims` holds each
 // result and `failed` counts the ones that did not go through. `claim` is the runner (default runTradeClaim).
-export async function claimSettled(args, { state, env, fetchImpl, claim } = {}) {
+export async function claimSettled(args, { state, env, fetchImpl, claim, pin } = {}) {
   const live = parseClaimArgs(args);
   if (!state?.address) throw new Error('not logged in: no address in state');
   let user;
   try { user = getAddress(String(state.address).toLowerCase()); } catch { throw new Error('state has an invalid address'); }
-  const { key, warnings } = await dataKey({ state, env, fetchImpl }, 'claim-settled');
+  const { key, warnings } = await dataKey({ state, env, fetchImpl, pin }, 'claim-settled');
   const { rows, truncated } = await pagedRows((name, params) => ft42(name, params, key, fetchImpl), 'ft42_positions', { user });
 
   const claimable = [];
@@ -294,10 +336,10 @@ export async function claimSettled(args, { state, env, fetchImpl, claim } = {}) 
 
   const claims = [];
   if (live) {
-    const runner = claim ?? ((market) => runTradeClaim(market, { env }));
+    const runner = claim ?? ((market, p) => runTradeClaim(market, { env, pin: p }));
     for (const market of markets) {
       let r;
-      try { r = await runner(market); } catch (e) { r = { ok: false, error: firstLine(e.message) }; }
+      try { r = await runner(market, pin); } catch (e) { r = { ok: false, error: firstLine(e.message) }; }
       const ok = r?.ok === true;
       claims.push({ market, ok, ...(r?.tx?.length > 0 ? { tx: r.tx } : {}), ...(ok ? {} : { error: firstLine(r?.error ?? 'claim failed') }) });
     }
@@ -305,9 +347,181 @@ export async function claimSettled(args, { state, env, fetchImpl, claim } = {}) 
   return { address: user, live, positions: rows.length, claimable, markets, claims, failed: claims.filter((c) => !c.ok).length, truncated, warnings };
 }
 
+// ------------------------------------------------------------------------------------ points / account stats (read-only)
+// Public 42 endpoints, no auth, no PIN. Base URLs are env-overridable for tests (FT42_POINTS_BASE / FT42_REST_BASE).
+const FT42_POINTS_BASE = 'https://www.42.space';
+const FT42_STATS_BASE = 'https://rest.ft.42.space';
+
+function parseAddressArg(args, cmd) {
+  let address = null;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--address') { address = args[++i]; if (!address) throw new Error('--address needs a value'); }
+    else if (a.startsWith('--address=')) address = a.slice('--address='.length);
+    else throw new Error(`unknown option: ${a} (${cmd} takes only --address <0x…>)`);
+  }
+  return address;
+}
+
+// The address to query: --address, else the logged-in embedded address. Validated/checksummed (a bad one throws).
+function queryAddress(args, state, cmd) {
+  const raw = parseAddressArg(args, cmd) ?? state?.address;
+  if (!raw) throw new Error(`${cmd}: not logged in and no --address <0x…> given`);
+  return getAddress(String(raw));
+}
+
+// points [--address]: the user's 42 points (and rank). -> { address, rank, points, total_traders }; no row -> points null.
+export async function points(args, { state, env = process.env, fetchImpl = fetch } = {}) {
+  const address = queryAddress(args, state, 'points');
+  const base = (typeof env.FT42_POINTS_BASE === 'string' && env.FT42_POINTS_BASE.trim()) || FT42_POINTS_BASE;
+  const url = `${base}/api/points/leaderboard?search=${encodeURIComponent(address.toLowerCase())}&limit=1`;
+  const res = await fetchImpl(url, { headers: { accept: '*/*', referer: 'https://www.42.space/' } });
+  if (!res.ok) throw new Error(`42 points HTTP ${res.status}`);
+  const body = await res.json();
+  const row = Array.isArray(body?.data) ? body.data[0] : null;
+  return { address, rank: row?.rank ?? null, points: row?.points ?? null, total_traders: body?.totalTraders ?? null };
+}
+
+// stats [--address]: the user's 42 trading account stats. -> the main fields of market-data/leaderboard/stats.
+export async function stats(args, { state, env = process.env, fetchImpl = fetch } = {}) {
+  const address = queryAddress(args, state, 'stats');
+  const base = (typeof env.FT42_REST_BASE === 'string' && env.FT42_REST_BASE.trim()) || FT42_STATS_BASE;
+  const url = `${base}/api/v1/market-data/leaderboard/stats/${address}`;
+  const res = await fetchImpl(url, { headers: { accept: '*/*', origin: 'https://www.42.space' } });
+  if (!res.ok) throw new Error(`42 stats HTTP ${res.status}`);
+  const b = await res.json();
+  return {
+    address, pnl: b?.pnl ?? null, winRate: b?.winRate ?? null, totalVolume: b?.totalVolume ?? null,
+    tradeCount: b?.tradeCount ?? null, bestTrade: b?.bestTrade ?? null, worstTrade: b?.worstTrade ?? null,
+    avgTradeSize: b?.avgTradeSize ?? null, buyVolume: b?.buyVolume ?? null, sellVolume: b?.sellVolume ?? null,
+    winningPredictions: b?.winningPredictions ?? null, losingPredictions: b?.losingPredictions ?? null,
+    predictionWinRate: b?.predictionWinRate ?? null, sellWinRate: b?.sellWinRate ?? null,
+  };
+}
+
+// daily [--address] [--days N]: the per-day realized PnL + volume series (buy+sell). Most recent first.
+const DAILY_MAX = 3650;
+export async function daily(args, { state, env = process.env, fetchImpl = fetch } = {}) {
+  let days = DAILY_MAX;
+  const rest = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--days') { days = Number(args[++i]); if (!Number.isFinite(days) || days < 1) throw new Error('--days needs a positive number'); }
+    else if (a.startsWith('--days=')) { days = Number(a.slice(7)); if (!Number.isFinite(days) || days < 1) throw new Error('--days needs a positive number'); }
+    else rest.push(a);
+  }
+  const address = queryAddress(rest, state, 'daily');
+  const base = (typeof env.FT42_REST_BASE === 'string' && env.FT42_REST_BASE.trim()) || FT42_STATS_BASE;
+  const url = `${base}/api/v1/market-data/pnl/daily?user=${address}&limit=${Math.min(Math.floor(days), DAILY_MAX)}`;
+  const res = await fetchImpl(url, { headers: { accept: '*/*', origin: 'https://www.42.space' } });
+  if (!res.ok) throw new Error(`42 daily HTTP ${res.status}`);
+  const body = await res.json();
+  const rows = Array.isArray(body?.data) ? body.data : [];
+  const mapped = rows.map((r) => {
+    const buy = Number(r?.buyVolume) || 0;
+    const sell = Number(r?.sellVolume) || 0;
+    return { date: String(r?.bucket ?? '').slice(0, 10), pnl: Number(r?.realizedPnl) || 0, buy_volume: buy, sell_volume: sell, volume: buy + sell };
+  });
+  return { address, count: mapped.length, days: mapped, truncated: body?.pagination?.hasMore === true };
+}
+
+// ---- report: points + stats + today, composed into a screenshot-friendly card ----
+const fmtNum = (n, dp = 2) => {
+  if (n == null || !Number.isFinite(Number(n))) return '—';
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+};
+const fmtPnl = (n, dp = 2) => {
+  if (n == null || !Number.isFinite(Number(n))) return '—';
+  const v = Number(n);
+  return `${v < 0 ? '🔴 −' : '🟢 +'}${fmtNum(Math.abs(v), dp)}`;
+};
+const fmtPct = (r) => (r == null || !Number.isFinite(Number(r)) ? '—' : `${(Number(r) * 100).toFixed(1)}%`);
+const shortAddr = (a) => (typeof a === 'string' && a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : String(a ?? ''));
+// A unicode block sparkline from a numeric series (empty series -> '').
+function sparkline(nums) {
+  const vals = nums.map((n) => Number(n) || 0);
+  if (vals.length === 0) return '';
+  const blocks = '▁▂▃▄▅▆▇█';
+  const max = Math.max(...vals, 0);
+  if (max <= 0) return blocks[0].repeat(vals.length);
+  return vals.map((v) => blocks[Math.min(blocks.length - 1, Math.round((Math.max(v, 0) / max) * (blocks.length - 1)))]).join('');
+}
+
+// Build the ready-to-show text card from the composed figures. Chinese, section-based, no fragile CJK-width alignment.
+function reportCard({ address, points, rank, total_traders, total, today, last7 }) {
+  const L = [];
+  L.push('📊 42.space 交易报告');
+  L.push(`${shortAddr(address)} · 更新于 ${new Date().toISOString().slice(5, 16).replace('T', ' ')} UTC`);
+  L.push('━━━━━━━━━━━━━━━━━━━━━━━━');
+  const pctRank = (rank && total_traders) ? `（前 ${Math.max(0.01, (rank / total_traders) * 100).toFixed(2)}%）` : '';
+  L.push(`🏆 积分 ${points != null ? fmtNum(points, 0) : '—'}${rank != null ? ` · 排名 #${fmtNum(rank, 0)} / ${fmtNum(total_traders, 0)}${pctRank}` : ''}`);
+  L.push('');
+  if (total) {
+    const roiV = (total.pnl != null && total.volume) ? (total.pnl / total.volume * 100) : null;
+    const roi = roiV != null ? `（ROI ${roiV < 0 ? '−' : '+'}${Math.abs(roiV).toFixed(1)}%）` : '';
+    L.push('💼 累计战绩');
+    L.push(`  💰 总盈亏    ${fmtPnl(total.pnl)} USDT${roi}`);
+    L.push(`  📈 总交易量   ${fmtNum(total.volume)} USDT`);
+    if (total.buy_volume != null || total.sell_volume != null) L.push(`  🔀 买/卖量    ${fmtNum(total.buy_volume)} / ${fmtNum(total.sell_volume)}`);
+    const wl = (total.win_predictions != null && total.lose_predictions != null) ? `（${fmtNum(total.win_predictions, 0)} 胜 / ${fmtNum(total.lose_predictions, 0)} 负）` : '';
+    L.push(`  🎯 预测胜率   ${fmtPct(total.prediction_win_rate)}${wl}`);
+    L.push(`  📊 成交笔数   ${fmtNum(total.trade_count, 0)} 笔 · 均单 ${fmtNum(total.avg_trade_size)} USDT`);
+    L.push(`  ⭐ 最佳/最差  ${fmtPnl(total.best_trade)} / ${fmtPnl(total.worst_trade)} USDT`);
+    L.push('');
+  }
+  if (today) {
+    L.push(`📅 今日 ${String(today.date).slice(5)}（UTC）`);
+    L.push(`  💵 盈亏      ${fmtPnl(today.pnl)} USDT`);
+    L.push(`  📊 交易量    ${fmtNum(today.volume)} USDT`);
+    L.push('');
+  }
+  if (last7 && last7.count > 0) {
+    L.push(`📈 近 ${last7.count} 日   盈亏 ${fmtPnl(last7.pnl)} · 交易量 ${fmtNum(last7.volume)} USDT`);
+    if (last7.spark) L.push(`  量 ${last7.spark}`);
+    L.push('');
+  }
+  L.push('━━━━━━━━━━━━━━━━━━━━━━━━');
+  L.push('by Clawby');
+  return L.join('\n');
+}
+
+// report [--address]: one composed trading report (points + stats + today) + a `card` to show/screenshot. Each source
+// is independent — a failure records a warning and nulls that section; the card still renders.
+export async function report(args, { state, env = process.env, fetchImpl = fetch } = {}) {
+  const address = queryAddress(args, state, 'report');
+  const warnings = [];
+  const soft = async (label, fn) => { try { return await fn(); } catch (e) { warnings.push(`${label}: ${firstLine(e.message)}`); return null; } };
+  const [pt, st, dl] = await Promise.all([
+    soft('points', () => points(['--address', address], { state, env, fetchImpl })),
+    soft('stats', () => stats(['--address', address], { state, env, fetchImpl })),
+    soft('daily', () => daily(['--address', address, '--days', '3650'], { state, env, fetchImpl })),
+  ]);
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const todayRow = dl?.days?.find((d) => d.date === todayDate) ?? null;
+  const today = { date: todayDate, pnl: todayRow?.pnl ?? 0, volume: todayRow?.volume ?? 0 };
+  const recent = (dl?.days ?? []).slice(0, 7);
+  const last7 = {
+    count: recent.length,
+    pnl: recent.reduce((s, d) => s + (d.pnl || 0), 0),
+    volume: recent.reduce((s, d) => s + (d.volume || 0), 0),
+    spark: sparkline([...recent].reverse().map((d) => d.volume)),   // oldest->newest left to right
+  };
+  const total = st ? {
+    pnl: st.pnl, volume: st.totalVolume, trade_count: st.tradeCount, win_rate: st.winRate,
+    best_trade: st.bestTrade, worst_trade: st.worstTrade, avg_trade_size: st.avgTradeSize,
+    buy_volume: st.buyVolume, sell_volume: st.sellVolume,
+    win_predictions: st.winningPredictions, lose_predictions: st.losingPredictions, prediction_win_rate: st.predictionWinRate,
+  } : null;
+  const composed = {
+    address, points: pt?.points ?? null, rank: pt?.rank ?? null, total_traders: pt?.total_traders ?? null,
+    total, today, last7: { count: last7.count, pnl: last7.pnl, volume: last7.volume },
+  };
+  return { ...composed, card: reportCard({ ...composed, last7 }), ...(warnings.length ? { warnings } : {}) };
+}
+
 // Injectable seams (tests): fetchImpl for the clawby API, sbt for the SBT port, env for CLAWBY_API_KEY / BSC_RPC,
 // claim for the claim-settled runner (default: trade.mjs claim --live in a child process).
-export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, claim, referral = ensureReferral, clawbyReg = ensureClawbyAccount } = {}) {
+export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, claim, referral = ensureReferral, clawbyReg = ensureClawbyAccount, privy = privyModule, stdin } = {}) {
   const [cmd, ...rest] = argv;
   try {
     switch (cmd) {
@@ -317,8 +531,68 @@ export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, cla
           logged_in: !!s.address,
           method: s.method ?? null,
           address: s.address ?? null,
+          has_vault: hasVault(s),
+          referral_bound: !!(s.referral_bound_for && s.referral_bound_for === s.address),
+          clawby_registered: !!(s.clawby_registered_for && s.clawby_registered_for === s.address),
           has_daily_volume: s.daily_volume != null,
         });
+        break;
+      }
+      case 'login-email-init': {
+        const email = rest[0];
+        if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('login-email-init needs an email address');
+        const r = await privy.loginEmailInit(email, { fetchImpl });
+        out({ sent: r.sent === true, email });
+        break;
+      }
+      case 'login-email-verify': {
+        const email = rest[0];
+        if (!email) throw new Error('login-email-verify needs the email address (the code + pin come on stdin as JSON)');
+        const { code, pin } = await readStdinJson(stdin);
+        if (!code) throw new Error('stdin json needs a "code" (the 6-digit email code)');
+        validatePin(pin);
+        const auth = await privy.loginEmailVerify(email, String(code), { fetchImpl });
+        const res = await completeLogin(readState(), auth, { pin, method: 'email', env, fetchImpl, privy, referral, clawbyReg });
+        out(res);
+        break;
+      }
+      case 'create-wallet': {
+        const { pin } = await readStdinJson(stdin);
+        validatePin(pin);
+        const ext = Wallet.createRandom();                      // the external login wallet; its mnemonic is the user's Privy credential
+        const auth = await privy.loginWallet(ext, { fetchImpl });
+        const res = await completeLogin(readState(), auth, { pin, method: 'created', env, fetchImpl, privy, referral, clawbyReg });
+        // Show the login wallet's mnemonic ONCE (back it up — it is the Privy login), plus its address; the embedded
+        // address is `res.address`, the 42 identity.
+        out({ ...res, login_wallet_address: ext.address, mnemonic: ext.mnemonic.phrase });
+        break;
+      }
+      case 'import-mnemonic': {
+        const { mnemonic, pin } = await readStdinJson(stdin);
+        if (!mnemonic) throw new Error('stdin json needs a "mnemonic"');
+        deriveFromMnemonic(mnemonic);                           // validate (throws "invalid mnemonic") before anything else
+        validatePin(pin);
+        const ext = Wallet.fromPhrase(String(mnemonic).trim());
+        const auth = await privy.loginWallet(ext, { fetchImpl });
+        const res = await completeLogin(readState(), auth, { pin, method: 'imported', env, fetchImpl, privy, referral, clawbyReg });
+        out(res);                                               // the user's own mnemonic is never echoed back
+        break;
+      }
+      case 'export-key': {
+        const { pin } = await readStdinJson(stdin);
+        validatePin(pin);
+        const s = readState();
+        const wallet = unlockWallet(s, pin);
+        out({ address: s.address, private_key: wallet.privateKey });
+        break;
+      }
+      case 'logout': {
+        const s = readState();
+        const kept = {};
+        if (s.daily_volume != null) kept.daily_volume = s.daily_volume;
+        if (s.rpc != null) kept.rpc = s.rpc;
+        writeState(kept);                                       // drops vault + address + all secrets/caches
+        out({ logged_out: true });
         break;
       }
       case 'balance': {
@@ -337,13 +611,21 @@ export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, cla
         // Silent identity: ensure the clawby key + Clawby Identity SBT, then silently bind the 42 referral.
         // AUTO-MINTS the SBT by default when the wallet has none and has BNB for gas; --dry-run only checks and
         // reports would_mint, sending nothing. The clawby api key and the 42 session token are never printed.
-        const stray = rest.find((a) => a !== '--dry-run');
-        if (stray !== undefined) throw new Error(`unknown option: ${stray} (identity takes only --dry-run)`);
+        const stray = rest.find((a) => a !== '--dry-run' && a !== '--pin-stdin');
+        if (stray !== undefined) throw new Error(`unknown option: ${stray} (identity takes --dry-run and/or --pin-stdin)`);
         const autoMint = !rest.includes('--dry-run');
         const s = readState();
         if (!s.address) throw new Error('not logged in: no address in state');
-        // The real SBT port is built only when none is injected. On a dry run it holds no signer, so it cannot send.
-        const port = sbt ?? makeSbtForState(s, { env, live: autoMint });
+        // --pin-stdin unlocks the embedded signer — needed to AUTO-MINT the SBT, and to fetch the clawby key with the
+        // wallet when there is no CLAWBY_API_KEY. Without it, identity still resolves an env key and previews/reads.
+        let wallet = null;
+        if (rest.includes('--pin-stdin')) {
+          const { pin } = await readStdinJson(stdin);
+          validatePin(pin);
+          wallet = unlockWallet(s, pin);
+        }
+        // The real SBT port is built only when none is injected; its signer is the unlocked embedded wallet (live only).
+        const port = sbt ?? makeSbtForState(s, { env, live: autoMint, signer: wallet });
         // Gas is read on the SBT port's own rpc, and only inside ensureSbt's mint branch (it resolves this thunk there),
         // so a dry run and an already-minted wallet never read the BNB balance.
         const hasGas = async () => {
@@ -351,40 +633,14 @@ export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, cla
         };
         let idResult;
         try {
-          idResult = await ensureIdentity({ state: s, env, fetchImpl, sbt: port, live: autoMint, hasGas });
+          idResult = await ensureIdentity({ state: s, wallet, env, fetchImpl, sbt: port, live: autoMint, hasGas });
         } finally {
           if (!sbt) port.close();
         }
         // Silently bind the 42 referral (non-fatal). mark:true means persist, so later runs of this wallet short-circuit.
-        const ref = await referral({ state: s, env, fetchImpl });
+        const ref = await referral({ wallet, state: s, env, fetchImpl });
         if (ref.mark) writeState({ ...s, referral_bound_for: s.address });
         out({ ...idResult, referral: ref.referral, warnings: [...idResult.warnings, ...ref.warnings] });
-        break;
-      }
-      case 'import-mnemonic': {
-        requirePipedStdin(process.stdin);
-        const { address, mnemonic } = deriveFromMnemonic(await readStdin());
-        const res = await bindOnLogin({ ...carryOver(readState(), address), method: 'mnemonic', address, mnemonic }, { env, fetchImpl, referral, clawbyReg });
-        out({ address, referral: res.referral, clawby: res.clawby, ...(res.warnings.length ? { warnings: res.warnings } : {}) });
-        break;
-      }
-      case 'create-wallet': {
-        const { address, mnemonic } = createWallet();
-        const res = await bindOnLogin({ ...carryOver(readState(), address), method: 'created', address, mnemonic }, { env, fetchImpl, referral, clawbyReg });
-        out({ address, mnemonic, referral: res.referral, clawby: res.clawby, ...(res.warnings.length ? { warnings: res.warnings } : {}) });
-        break;
-      }
-      case 'use-baw': {
-        const address = rest[0];
-        if (!isValidAddress(address)) throw new Error('invalid address: ' + address);
-        writeState({ ...carryOver(readState(), address), method: 'baw', address });
-        // A baw login is READ-ONLY in this module: the 42 referral bind and the Clawby account both need an EIP-191
-        // personal_sign, which the baw CLI (its sign-message is EIP-712 only) cannot produce, and --live trading is
-        // not wired for baw either. Say so, instead of returning a bare address as if a login had registered anything.
-        out({
-          address, referral: 'skipped', clawby: 'skipped',
-          note: 'baw login is read-only here: the 42 invite bind and the Clawby account both need an EIP-191 signature the baw CLI cannot produce (its sign-message is EIP-712 only), and --live trading is not wired for baw. To bind the invite and trade, log in with create-wallet or import-mnemonic; or connect this address on 42.space directly with your Binance wallet.',
-        });
         break;
       }
       case 'set-volume': {
@@ -393,14 +649,33 @@ export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, cla
         out({ daily_volume });
         break;
       }
+      case 'points': {
+        out(await points(rest, { state: readState(), env, fetchImpl }));
+        break;
+      }
+      case 'stats': {
+        out(await stats(rest, { state: readState(), env, fetchImpl }));
+        break;
+      }
+      case 'daily': {
+        out(await daily(rest, { state: readState(), env, fetchImpl }));
+        break;
+      }
+      case 'report': {
+        out(await report(rest, { state: readState(), env, fetchImpl }));
+        break;
+      }
       case 'ai-data': {
         // Read-only 42.space data bundle for the host agent (ft42_* via the clawby relay); needs the clawby key, never prints it.
-        out(await aiData(rest, { state: readState(), env, fetchImpl }));
+        // --pin-stdin lets the embedded wallet fetch the key when there is no CLAWBY_API_KEY (normally the env key is used).
+        const aiPin = rest.includes('--pin-stdin') ? (({ pin }) => (validatePin(pin), pin))(await readStdinJson(stdin)) : null;
+        out(await aiData(rest.filter((a) => a !== '--pin-stdin'), { state: readState(), env, fetchImpl, pin: aiPin }));
         break;
       }
       case 'claim-settled': {
         // Lists the won, settled, unclaimed positions of the logged-in wallet; sends claims (trade.mjs claim --live) only with --live.
-        const result = await claimSettled(rest, { state: readState(), env, fetchImpl, claim });
+        const clPin = rest.includes('--pin-stdin') ? (({ pin }) => (validatePin(pin), pin))(await readStdinJson(stdin)) : null;
+        const result = await claimSettled(rest.filter((a) => a !== '--pin-stdin'), { state: readState(), env, fetchImpl, claim, pin: clPin });
         out(result);
         if (result.failed > 0) process.exitCode = 1;
         break;

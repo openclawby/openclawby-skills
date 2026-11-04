@@ -15,10 +15,16 @@ import {
   buildRoundtripMulticall, planRoundtrip, roundtripOutlook, printRoundtripQuote, planBuy, planSell, decodeForDisplay, gasUnitsFor,
 } from './trade.mjs';
 import { writeState, DEFAULT_RPC } from './lib.mjs';
+import { encryptKey } from './vault.mjs';
+import { Wallet } from 'ethers';
 
 const PHRASE = 'test test test test test test test test test test test junk';
 const ADDR = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';        // m/44'/60'/0'/0/0 of PHRASE (public test vector)
 const OTHER = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';       // a different, valid address
+const TPIN = '775533';                                            // the vault pin used across the signing tests
+const VKEY = Wallet.fromPhrase(PHRASE).privateKey;                // the embedded key that derives to ADDR
+// A vault-model state: the ADDR embedded key sealed under TPIN. `addr` lets a test mint a vault for a FOREIGN address.
+const vaultState = (extra = {}, addr = ADDR) => ({ method: 'email', address: addr, vault: encryptKey(VKEY, TPIN, addr), ...extra });
 const MKT = '0x38D8CA35d8662b2c6C94199497d787c93Aa34fEE';
 const coder = AbiCoder.defaultAbiCoder();
 
@@ -218,26 +224,26 @@ test('resolveClaimTarget: claim takes only [market]; tokenId / amount are reject
 
 // ------------------------------------------------------------------------------ wallet = logged-in account
 
-test('loadAccount: a mnemonic login derives the known BIP39 address and can sign', () => {
+test('loadAccount: a vault login with the pin derives the embedded address and can sign', () => {
   withTempState();
-  writeState({ method: 'mnemonic', address: ADDR, mnemonic: PHRASE });
-  const a = loadAccount();                                // reads the state via lib.readState()
+  writeState(vaultState());
+  const a = loadAccount(undefined, { pin: TPIN });        // reads the state via lib.readState()
   assert.equal(a.address, ADDR);
   assert.equal(a.canSign, true);
-  assert.equal(a.method, 'mnemonic');
+  assert.equal(a.method, 'email');
   assert.equal(a.signer.address, ADDR);
   assert.equal(a.signer.provider, null);                  // unconnected: cannot send anything by itself
   assert.equal(a.rpc, DEFAULT_RPC);                       // no "rpc" in state -> lib's default
 });
 
-test('loadAccount: a baw login has an address but no signer (read-only)', () => {
+test('loadAccount: without the pin the account is read-only (no signer)', () => {
   withTempState();
-  writeState({ method: 'baw', address: ADDR });
-  const a = loadAccount();
+  writeState(vaultState());
+  const a = loadAccount();                                 // no pin -> read-only
   assert.equal(a.address, ADDR);
   assert.equal(a.canSign, false);
   assert.equal(a.signer, null);
-  assert.equal(a.method, 'baw');
+  assert.equal(a.method, 'email');
 });
 
 test('loadAccount: an empty / missing / null state is "not logged in"', () => {
@@ -247,20 +253,19 @@ test('loadAccount: an empty / missing / null state is "not logged in"', () => {
   assert.throws(() => loadAccount(), /not logged in/);
   assert.throws(() => loadAccount({}), /not logged in/);
   assert.throws(() => loadAccount(null), /not logged in/);
-  assert.throws(() => loadAccount({ method: 'mnemonic', mnemonic: PHRASE }), /not logged in/);   // mnemonic without address
+  assert.throws(() => loadAccount({ vault: { ct: 'x' } }, { pin: TPIN }), /not logged in/);   // a vault without an address
 });
 
-test('loadAccount: a mnemonic that does not derive state.address is refused', () => {
+test('loadAccount: a vault whose key is not the state address is refused (with the pin)', () => {
   withTempState();
-  writeState({ method: 'mnemonic', address: OTHER, mnemonic: PHRASE });
-  assert.throws(() => loadAccount(), /does not match/);
+  writeState(vaultState({}, OTHER));                       // address OTHER, but the sealed key derives to ADDR
+  assert.throws(() => loadAccount(undefined, { pin: TPIN }), /does not match/);
 });
 
-test('loadAccount: bad state fails with generic messages that never echo the secret', () => {
-  const secret = 'zebra zebra zebra zebra zebra zebra zebra zebra zebra zebra zebra zebra';
-  assert.throws(() => loadAccount({ address: ADDR, mnemonic: secret }), (e) => {
-    assert.match(e.message, /mnemonic is invalid/);
-    assert.doesNotMatch(e.message, /zebra/);              // details suppressed
+test('loadAccount: a wrong pin throws "wrong pin" (no key echoed); a bad address is rejected', () => {
+  assert.throws(() => loadAccount(vaultState(), { pin: '000000' }), (e) => {
+    assert.match(e.message, /wrong pin/i);
+    assert.ok(!e.message.includes(VKEY));                  // the key is never echoed
     return true;
   });
   assert.throws(() => loadAccount({ address: 'not-an-address' }), /invalid address/);
@@ -268,42 +273,38 @@ test('loadAccount: bad state fails with generic messages that never echo the sec
 });
 
 test('loadAccount: honours state.rpc, accepts a lowercase address, takes an explicit state object', () => {
-  const a = loadAccount({ method: 'baw', address: ADDR.toLowerCase(), rpc: 'http://example.invalid:8545' });
+  const a = loadAccount({ method: 'email', address: ADDR.toLowerCase(), rpc: 'http://example.invalid:8545' });
   assert.equal(a.address, ADDR);                          // checksummed
   assert.equal(a.rpc, 'http://example.invalid:8545');
-  assert.equal(a.method, 'baw');
+  assert.equal(a.method, 'email');
   assert.equal(loadAccount({ address: ADDR }).method, null);   // method absent -> null
 });
 
 // ------------------------------------------------------------------------------ context: live gate + rpc precedence
 
-test('makeContext: --live refuses a login with no local key (baw), before anything is built', () => {
-  const account = loadAccount({ method: 'baw', address: ADDR });
-  assert.throws(
-    () => makeContext({ live: true, account }),
-    /this login \(method=baw\) has no local key to sign with\. Use import-mnemonic or create-wallet; baw signing is not wired yet\./,
-  );
+test('makeContext: --live refuses a login with no signer (no pin / no vault), before anything is built', () => {
+  const account = loadAccount({ method: 'email', address: ADDR });   // read-only (no pin)
+  assert.throws(() => makeContext({ live: true, account }), /needs the PIN to unlock the embedded key/);
 });
 
 test('makeContext: a dry run never attaches a signer, even for a login that can sign', () => {
-  const account = loadAccount({ method: 'mnemonic', address: ADDR, mnemonic: PHRASE });
+  const account = loadAccount(vaultState(), { pin: TPIN });
   const c = makeContext({ live: false, account });
   try {
     assert.equal(c.live, false);
     assert.equal(c.signer, null);
     assert.equal(c.address, ADDR);
-    assert.equal(c.method, 'mnemonic');
+    assert.equal(c.method, 'email');
     assert.deepEqual(c.sent, []);
   } finally { c.provider.destroy(); }
-  const baw = makeContext({ live: false, account: loadAccount({ method: 'baw', address: ADDR }) });   // read-only login is fine in a dry run
+  const ro = makeContext({ live: false, account: loadAccount({ method: 'email', address: ADDR }) });   // read-only login is fine in a dry run
   try {
-    assert.equal(baw.signer, null);
-    assert.equal(baw.method, 'baw');
-  } finally { baw.provider.destroy(); }
+    assert.equal(ro.signer, null);
+  } finally { ro.provider.destroy(); }
 });
 
 test('makeContext: the signer exists (connected to the provider) only when live and the login can sign', () => {
-  const account = loadAccount({ method: 'created', address: ADDR, mnemonic: PHRASE });
+  const account = loadAccount(vaultState({ method: 'created' }), { pin: TPIN });
   const c = makeContext({ live: true, account });          // builds a signer; nothing is sent
   try {
     assert.equal(c.live, true);
@@ -1009,7 +1010,7 @@ test('static scan: one broadcast call (inside sendStep) and no console line ment
   assert.ok(from > 0 && to > from);
   assert.ok(sends[0].index > from && sends[0].index < to, 'the broadcast call lives inside sendStep');
   assert.match(src, /const live = wantsLive\(cmd, opts\.live\);/, 'main derives live only through wantsLive()');
-  assert.equal([...src.matchAll(/makeContext\(\{ live \}\)/g)].length, 1);   // the one context main builds uses that value
+  assert.equal([...src.matchAll(/makeContext\(\{ live, account \}\)/g)].length, 1);   // the one context main builds (account unlocked just above)
   assert.doesNotMatch(src, /eth_sendRawTransaction|broadcastTransaction|sendUncheckedTransaction|\.signTransaction\(|\.send\(\s*['"]eth_send/);
   for (const line of src.split('\n')) {
     if (/console\.(log|error|warn|info|debug)/.test(line)) assert.doesNotMatch(line, /mnemonic|privateKey|\bphrase\b/i, `leaky line: ${line}`);
@@ -1233,10 +1234,10 @@ test('runRoundtrip: only the boolean true goes live - "true", 1, "--live", {} an
 
 test('runRoundtrip: --live on a login with no local key is refused by makeContext - the single gate - before any network or chain read', async () => {
   const { runRoundtrip } = await import('./trade.mjs');
-  const account = loadAccount({ method: 'baw', address: ADDR });
+  const account = loadAccount({ method: 'email', address: ADDR });   // read-only (no vault / no pin)
   // rpcUrl points at a closed loopback port: even a regression that got past the gate could only ever touch localhost
   await assert.rejects(runRoundtrip({ ...RUN, live: true, account, rpcUrl: 'http://127.0.0.1:1' }),
-    /this login \(method=baw\) has no local key to sign with/);
+    /needs the PIN to unlock the embedded key/);
 });
 
 test('runRoundtrip (live): too little USDT stops BEFORE anything is estimated or sent, and the context is still released', async () => {
@@ -1548,14 +1549,38 @@ test('main: set-operator is a known command; with no login (even with --live) it
   await assert.rejects(main(['set-operators']), /unknown command "set-operators"/);   // the exact name only
 });
 
-test('main: set-operator --live goes through the one live gate (makeContext): a login with no local key (baw) is refused before any network or chain read', async () => {
+test('main: set-operator --live goes through the one live gate (makeContext): a login with no signer (no vault) is refused before any network or chain read', async () => {
   withTempState();
-  writeState({ method: 'baw', address: ADDR });            // an address but no mnemonic: it cannot sign
+  writeState({ method: 'email', address: ADDR });          // an address but no vault: it cannot sign
   const prev = process.env.BSC_RPC;
   process.env.BSC_RPC = 'http://127.0.0.1:1';              // belt and braces: even a regression past the gate could only ever touch a closed loopback port
   try {
-    await assert.rejects(main(['set-operator', '--live']), /this login \(method=baw\) has no local key to sign with/);
+    // the pin is piped (via the seam) but there is no vault to unlock, so makeContext's live gate refuses it
+    await assert.rejects(main(['set-operator', '--live'], { stdin: JSON.stringify({ pin: TPIN }) }), /needs the PIN to unlock the embedded key/);
   } finally {
     if (prev === undefined) delete process.env.BSC_RPC; else process.env.BSC_RPC = prev;
   }
+});
+
+test('main --live: a wrong PIN is recorded toward the brute-force lock (the throttle is wired on the trading path, not only export-key)', async () => {
+  withTempState();
+  writeState(vaultState());                                  // a real vault for ADDR
+  const prev = process.env.BSC_RPC;
+  process.env.BSC_RPC = 'http://127.0.0.1:1';                // belt and braces; the wrong pin throws before any chain use anyway
+  try {
+    await assert.rejects(
+      main(['set-operator', '0x1111111111111111111111111111111111111111', '--live'], { stdin: JSON.stringify({ pin: '000000' }) }),
+      /wrong pin/i,
+    );
+    const { readState } = await import('./lib.mjs');
+    assert.equal(readState().vault_attempts, 1, 'trade.mjs main recorded the wrong-PIN attempt (guardedUnlock)');
+  } finally {
+    if (prev === undefined) delete process.env.BSC_RPC; else process.env.BSC_RPC = prev;
+  }
+});
+
+test('explainError redacts URL path/query (a keyed private RPC endpoint must not leak into a trade/daemon error)', () => {
+  const msg = explainError(new Error('connect ETIMEDOUT to https://bsc-mainnet.example.com/v2/SUPERSECRETKEY123?x=1 after 20s'));
+  assert.ok(!msg.includes('SUPERSECRETKEY123'), 'the embedded key is stripped');
+  assert.ok(msg.includes('https://bsc-mainnet.example.com'), 'the host is kept for diagnosis');
 });

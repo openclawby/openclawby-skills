@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import http from 'node:http';
-import { verifyMessage, getAddress } from 'ethers';
+import { verifyMessage, getAddress, Wallet } from 'ethers';
 
 // Tripwire: every test injects its own fetchImpl; a forgotten one must fail loudly instead of reaching the real clawby API.
 globalThis.fetch = async (url) => { throw new Error('offline tests: real fetch attempted for ' + url); };
@@ -91,7 +91,7 @@ async function captureRun(argv, opts) {
 test('status reflects an empty state', async () => {
   withTempState();
   const out = await captureRun(['status']);
-  assert.deepEqual(out, { logged_in: false, method: null, address: null, has_daily_volume: false });
+  assert.deepEqual(out, { logged_in: false, method: null, address: null, has_vault: false, referral_bound: false, clawby_registered: false, has_daily_volume: false });
 });
 
 test('status reflects a logged-in state with a daily volume', async () => {
@@ -127,84 +127,164 @@ test('createWallet mnemonic re-derives to the same address', async () => {
   assert.equal(deriveFromMnemonic(w.mnemonic).address, w.address);
 });
 
-test('import-mnemonic reads the phrase from stdin and persists method=mnemonic', async () => {
-  const f = withTempState();
-  const phrase = 'test test test test test test test test test test test junk';
-  const r = runCli(['import-mnemonic'], { input: phrase + '\n', stateFile: f });
-  assert.equal(r.code, 0);
-  assert.equal(JSON.parse(r.stdout).address, '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266');
-  assert.equal(JSON.parse(r.stdout).referral, 'error');     // dead base -> the 42 bind is non-fatal, login still succeeds
-  assert.equal(JSON.parse(r.stdout).clawby, 'error');       // dead base -> the clawby registration is non-fatal too
-  const { readState } = await import('./lib.mjs');
-  process.env.CLAWBY_42SPACE_STATE = f;
-  assert.equal(readState().method, 'mnemonic');
-  assert.equal(readState().referral_bound_for, undefined);     // a failed bind is not cached
-  assert.equal(readState().clawby_registered_for, undefined);  // a failed registration is not cached
+// ---- login: Privy (email / create / import) -> embedded wallet -> encrypted PIN vault ----
+
+const EMB_PRIV = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
+const EMB_ADDR = new Wallet(EMB_PRIV).address;   // the embedded wallet = the real 42 identity
+const PIN = '428913';
+
+// A fake Privy client seam: login returns a fixed embedded wallet; export returns its private key.
+function fakePrivy({ embPriv = EMB_PRIV, embAddr = EMB_ADDR, exportThrows = false } = {}) {
+  return {
+    loginEmailInit: async (email) => ({ sent: true, email }),
+    loginEmailVerify: async () => ({ access: 'ACCESS', embedded: { id: 'w1', address: embAddr } }),
+    loginWallet: async () => ({ access: 'ACCESS', embedded: { id: 'w1', address: embAddr } }),
+    exportEmbeddedKey: async () => { if (exportThrows) throw new Error('export failed HTTP 500'); return embPriv; },
+  };
+}
+
+test('login-email-init asks Privy to send the code', async () => {
+  withTempState();
+  const out = await captureRun(['login-email-init', 'alice@example.com'], { privy: fakePrivy() });
+  assert.deepEqual(out, { sent: true, email: 'alice@example.com' });
 });
 
-test('import-mnemonic on a bad phrase exits non-zero and writes nothing', async () => {
+test('login-email-verify: the Privy embedded wallet becomes the 42 identity, its key is sealed in the vault, invite bound + clawby registered', async () => {
   const f = withTempState();
-  const r = runCli(['import-mnemonic'], { input: 'garbage not a mnemonic\n', stateFile: f });
+  const fetchImpl = ft42FetchStub({ referralStatus: 200 });
+  const out = await captureRun(['login-email-verify', 'alice@example.com'], { privy: fakePrivy(), fetchImpl, stdin: JSON.stringify({ code: '123456', pin: PIN }) });
+  assert.equal(out.address, EMB_ADDR);
+  assert.equal(out.method, 'email');
+  assert.equal(out.referral, 'bound');
+  assert.equal(out.clawby, 'registered');
+  assert.equal(out.backed_up, true);
+  // the 42 SIWE login is signed by the EMBEDDED wallet, and binds to its address (the old-bug fix)
+  const login = fetchImpl.calls.find((c) => c.path === '/api/v1/auth/login');
+  assert.equal(getAddress(verifyMessage(login.body.message, login.body.signature)), EMB_ADDR);
+  const mcpAuth = fetchImpl.calls.find((c) => c.path === '/api/mcp/auth');
+  assert.equal(mcpAuth.body.invite_code, '7rt6jo', 'clawby registered with invite 7rt6jo');
+  process.env.CLAWBY_42SPACE_STATE = f;
+  const { readState } = await import('./lib.mjs');
+  const s = readState();
+  assert.ok(s.vault && s.vault.ct, 'the embedded key is sealed in the vault');
+  assert.equal(s.address, EMB_ADDR);
+  assert.ok(!('mnemonic' in s), 'no plaintext mnemonic on disk');
+  assert.ok(!JSON.stringify(s).includes(EMB_PRIV), 'no plaintext key on disk');
+  assert.equal(s.referral_bound_for, EMB_ADDR);
+  assert.equal(s.clawby_registered_for, EMB_ADDR);
+  assert.ok(!JSON.stringify(out).includes(EMB_PRIV) && !JSON.stringify(out).includes(PIN) && !JSON.stringify(out).includes('ck_STUB_KEY'), 'no secret in the output');
+});
+
+test('create-wallet: generates an external login wallet (mnemonic shown once), logs into Privy, seals the embedded key', async () => {
+  const f = withTempState();
+  const out = await captureRun(['create-wallet'], { privy: fakePrivy(), fetchImpl: ft42FetchStub({ referralStatus: 200 }), stdin: JSON.stringify({ pin: PIN }) });
+  assert.equal(out.address, EMB_ADDR, 'the 42 identity is the embedded wallet');
+  assert.equal(out.method, 'created');
+  assert.ok(out.mnemonic && out.mnemonic.split(' ').length >= 12, 'the external login mnemonic is shown once');
+  assert.match(out.login_wallet_address, /^0x[0-9a-fA-F]{40}$/);
+  assert.notEqual(out.login_wallet_address, EMB_ADDR, 'the login wallet is not the embedded wallet');
+  process.env.CLAWBY_42SPACE_STATE = f;
+  const { readState } = await import('./lib.mjs');
+  const s = readState();
+  assert.ok(s.vault && s.vault.ct);
+  assert.ok(!JSON.stringify(s).includes(out.mnemonic), 'the external mnemonic is NOT persisted');
+});
+
+test('import-mnemonic: an external mnemonic logs into Privy; the embedded wallet is the identity; the user mnemonic is not echoed', async () => {
+  const f = withTempState();
+  const phrase = 'test test test test test test test test test test test junk';
+  const out = await captureRun(['import-mnemonic'], { privy: fakePrivy(), fetchImpl: ft42FetchStub({ referralStatus: 409 }), stdin: JSON.stringify({ mnemonic: phrase, pin: PIN }) });
+  assert.equal(out.address, EMB_ADDR);
+  assert.equal(out.method, 'imported');
+  assert.equal(out.referral, 'already');   // 409 -> already, still cached
+  assert.ok(!JSON.stringify(out).includes(phrase), 'the user mnemonic is never echoed');
+  process.env.CLAWBY_42SPACE_STATE = f;
+  const { readState } = await import('./lib.mjs');
+  assert.ok(!JSON.stringify(readState()).includes(phrase), 'the user mnemonic is not persisted');
+});
+
+test('login: an export failure is FATAL — an error, and NO "logged in" state is written', async () => {
+  const f = withTempState();
+  const out = await captureRun(['login-email-verify', 'a@b.com'], { privy: fakePrivy({ exportThrows: true }), fetchImpl: ft42FetchStub(), stdin: JSON.stringify({ code: '1', pin: PIN }) });
+  assert.ok(out.error && /export failed/i.test(out.error));
+  process.env.CLAWBY_42SPACE_STATE = f;
+  const { readState } = await import('./lib.mjs');
+  assert.equal(readState().address, undefined, 'nothing is written on a fatal export failure');
+});
+
+test('login: a 42 / clawby outage is NON-fatal — the address is returned and the vault is saved', async () => {
+  const f = withTempState();
+  const dead = async (url) => { throw new Error('ECONNREFUSED ' + url); };
+  const out = await captureRun(['login-email-verify', 'a@b.com'], { privy: fakePrivy(), fetchImpl: dead, stdin: JSON.stringify({ code: '1', pin: PIN }) });
+  assert.equal(out.address, EMB_ADDR);
+  assert.equal(out.backed_up, true);
+  assert.equal(out.referral, 'error');
+  assert.equal(out.clawby, 'error');
+  process.env.CLAWBY_42SPACE_STATE = f;
+  const { readState } = await import('./lib.mjs');
+  assert.ok(readState().vault, 'the vault is saved even when the bind/register fail');
+});
+
+test('export-key: the right PIN prints the embedded private key; a wrong PIN errors without leaking it', async () => {
+  const f = withTempState();
+  await captureRun(['login-email-verify', 'a@b.com'], { privy: fakePrivy(), fetchImpl: ft42FetchStub(), stdin: JSON.stringify({ code: '1', pin: PIN }) });
+  process.env.CLAWBY_42SPACE_STATE = f;
+  const ok = await captureRun(['export-key'], { stdin: JSON.stringify({ pin: PIN }) });
+  assert.equal(ok.address, EMB_ADDR);
+  assert.equal(ok.private_key, EMB_PRIV);
+  const bad = await captureRun(['export-key'], { stdin: JSON.stringify({ pin: '000000' }) });
+  assert.ok(bad.error && /wrong pin/i.test(bad.error));
+  assert.ok(!JSON.stringify(bad).includes('000000'));
+});
+
+test('logout: clears the vault + address but keeps rpc / daily_volume', async () => {
+  const f = withTempState();
+  const { writeState, readState } = await import('./lib.mjs');
+  writeState({ method: 'email', address: EMB_ADDR, vault: { ct: 'x' }, daily_volume: 100, rpc: 'http://r' });
+  const out = await captureRun(['logout']);
+  assert.deepEqual(out, { logged_out: true });
+  process.env.CLAWBY_42SPACE_STATE = f;
+  const s = readState();
+  assert.equal(s.address, undefined);
+  assert.equal(s.vault, undefined);
+  assert.equal(s.daily_volume, 100);
+  assert.equal(s.rpc, 'http://r');
+});
+
+test('login clears a stale wrong-PIN lock (re-login is the PIN-recovery path)', async () => {
+  const f = withTempState();
+  const { writeState, readState } = await import('./lib.mjs');
+  // a prior wrong-PIN streak locked the vault for this same embedded address
+  writeState({ method: 'email', address: EMB_ADDR, vault: { ct: 'stale' }, vault_attempts: 5, vault_locked_until: Date.now() + 1e6 });
+  await captureRun(['login-email-verify', 'a@b.com'], { privy: fakePrivy(), fetchImpl: ft42FetchStub(), stdin: JSON.stringify({ code: '1', pin: PIN }) });
+  process.env.CLAWBY_42SPACE_STATE = f;
+  const s = readState();
+  assert.ok(!s.vault_attempts, 'the stale wrong-PIN counter is cleared by a fresh login');
+  assert.ok(!s.vault_locked_until, 'the stale lock window is cleared too');
+});
+
+test('a secret command rejects a malformed stdin JSON without echoing it', async () => {
+  withTempState();
+  const out = await captureRun(['export-key'], { stdin: 'not json 842193' });
+  assert.ok(out.error && /json object on stdin/i.test(out.error));
+  assert.ok(!out.error.includes('842193'));
+});
+
+test('a bad PIN (wrong length/charset) is rejected before any Privy call', async () => {
+  withTempState();
+  let privyCalled = false;
+  const privy = { ...fakePrivy(), loginWallet: async () => { privyCalled = true; return { access: 'a', embedded: { id: 'w', address: EMB_ADDR } }; } };
+  const out = await captureRun(['create-wallet'], { privy, fetchImpl: ft42FetchStub(), stdin: JSON.stringify({ pin: '123' }) });
+  assert.ok(out.error && /pin must be/i.test(out.error));
+  assert.equal(privyCalled, false, 'a bad pin never reaches Privy');
+});
+
+test('import-mnemonic (real CLI child): a bad phrase exits non-zero and writes nothing — before any network', async () => {
+  const f = withTempState();
+  const r = runCli(['import-mnemonic'], { input: JSON.stringify({ mnemonic: 'garbage not a mnemonic', pin: PIN }), stateFile: f });
   assert.equal(r.code, 1);
   assert.match(r.stdout, /invalid mnemonic/i);
   assert.equal(existsSync(f), false);
-});
-
-test('create-wallet prints and persists a fresh mnemonic (method=created)', async () => {
-  const f = withTempState();
-  const r = runCli(['create-wallet'], { stateFile: f });
-  assert.equal(r.code, 0);
-  const out = JSON.parse(r.stdout);
-  assert.match(out.address, /^0x[0-9a-fA-F]{40}$/);
-  assert.ok(out.mnemonic && out.mnemonic.split(' ').length >= 12);
-  assert.equal(out.referral, 'error');                      // dead base -> the 42 bind is non-fatal, login still succeeds
-  assert.equal(out.clawby, 'error');                        // dead base -> the clawby registration is non-fatal too
-  process.env.CLAWBY_42SPACE_STATE = f;
-  const { readState } = await import('./lib.mjs');
-  assert.equal(readState().method, 'created');
-  assert.equal(readState().address, out.address);
-  assert.equal(readState().referral_bound_for, undefined);     // a failed bind is not cached
-  assert.equal(readState().clawby_registered_for, undefined);  // a failed registration is not cached
-});
-
-test('create-wallet silently binds the 42 referral AND registers the clawby account at login, caching both marks', async () => {
-  const f = withTempState();
-  let seenRefState = null;
-  let seenRegState = null;
-  const refMark = async ({ state }) => { seenRefState = state; return { referral: 'bound', warnings: [], mark: true }; };
-  const regMark = async ({ state }) => { seenRegState = state; return { clawby: 'registered', warnings: [], mark: true }; };
-  const out = await captureRun(['create-wallet'], { referral: refMark, clawbyReg: regMark });
-  assert.equal(out.referral, 'bound');
-  assert.equal(out.clawby, 'registered');
-  assert.match(out.address, /^0x[0-9a-fA-F]{40}$/);
-  assert.equal(seenRefState.address, out.address, 'referral is invoked with the freshly created wallet');
-  assert.equal(seenRegState.address, out.address, 'clawby registration is invoked with the same wallet');
-  assert.equal(seenRefState.method, 'created');
-  assert.ok(typeof seenRefState.mnemonic === 'string' && seenRefState.mnemonic.split(' ').length >= 12);
-  process.env.CLAWBY_42SPACE_STATE = f;
-  const { readState } = await import('./lib.mjs');
-  assert.equal(readState().referral_bound_for, out.address, 'the marked 42 bind is cached to the wallet');
-  assert.equal(readState().clawby_registered_for, out.address, 'the marked clawby registration is cached to the wallet');
-});
-
-test('create-wallet: binds the referral AND registers the clawby account end-to-end through the real ensure* (SIWE + mcp/auth recover to the wallet; key never leaks)', async () => {
-  const f = withTempState();
-  const fetchImpl = ft42FetchStub({ referralStatus: 200 });
-  const out = await captureRun(['create-wallet'], { fetchImpl });       // referral + clawbyReg both default to the REAL impls
-  assert.equal(out.referral, 'bound');
-  assert.equal(out.clawby, 'registered');
-  const login = fetchImpl.calls.find((c) => c.path === '/api/v1/auth/login');
-  assert.equal(getAddress(verifyMessage(login.body.message, login.body.signature)), out.address);
-  const bind = fetchImpl.calls.find((c) => c.path === '/api/v1/user/referral');
-  assert.deepEqual(bind.body, { referral_code: 'clawby' });              // the default clawby invite, bound at login
-  assert.equal(bind.headers.authorization ?? bind.headers.Authorization, 'Bearer STUB.JWT.TOKEN');
-  const mcpAuth = fetchImpl.calls.find((c) => c.path === '/api/mcp/auth');
-  assert.equal(getAddress(verifyMessage(mcpAuth.body.message, mcpAuth.body.signature)), out.address, 'the clawby challenge is signed by the same wallet');
-  process.env.CLAWBY_42SPACE_STATE = f;
-  const { readState } = await import('./lib.mjs');
-  assert.equal(readState().referral_bound_for, out.address);
-  assert.equal(readState().clawby_registered_for, out.address);
-  assert.ok(!JSON.stringify(out).includes('ck_STUB_KEY'), 'the clawby api key is never in the login output');
 });
 
 test('a re-login of the same wallet keeps referral_bound_for (idempotent); a new wallet drops it', async () => {
@@ -321,19 +401,16 @@ test('balance: bnb_status is independent of needs_funding — funded USDT with n
   }
 });
 
-// ---- email login removed (wallet-only: mnemonic / create-wallet / baw) ----
+// ---- login surface: email login added, use-baw removed ----
 
-test('email login is removed — email-init/email-verify are unknown subcommands', async () => {
+test('use-baw is removed — it is now an unknown subcommand', async () => {
   withTempState();
-  const noFetch = async () => { throw new Error('should not hit the network'); };
-  const a = await captureRun(['email-init', 'a@b.com'], { fetchImpl: noFetch });
-  assert.match(a.error || '', /unknown subcommand: email-init/);
-  const b = await captureRun(['email-verify', 'a@b.com', '123456'], { fetchImpl: noFetch });
-  assert.match(b.error || '', /unknown subcommand: email-verify/);
+  const out = await captureRun(['use-baw', '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'], { privy: fakePrivy() });
+  assert.match(out.error || '', /unknown subcommand: use-baw/);
   process.exitCode = 0; // captureRun error-path sets exitCode; reset so the suite exit stays clean
 });
 
-// ---- Task 5: use-baw + set-volume ----
+// ---- set-volume ----
 
 test('isValidAddress accepts a real address and rejects junk', async () => {
   const { isValidAddress } = await import('./lib.mjs');
@@ -351,30 +428,6 @@ test('parseVolume accepts presets and custom positives, rejects non-positive', a
   assert.throws(() => parseVolume('0'), /volume/i);
   assert.throws(() => parseVolume('-5'), /volume/i);
   assert.throws(() => parseVolume('abc'), /volume/i);
-});
-
-test('use-baw rejects a non-address and writes nothing', async () => {
-  const f = withTempState();
-  const r = runCli(['use-baw', 'not-an-address'], { stateFile: f });
-  assert.equal(r.code, 1);
-  assert.match(r.stdout, /address/i);
-  assert.equal(existsSync(f), false);
-});
-
-test('use-baw records the address but reports it is READ-ONLY: no 42 bind / no clawby registration (baw cannot personal_sign)', async () => {
-  const f = withTempState();
-  const addr = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
-  const r = runCli(['use-baw', addr], { stateFile: f });
-  assert.equal(r.code, 0);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.address, addr);
-  assert.equal(out.referral, 'skipped', 'baw cannot bind the 42 referral (no EIP-191 personal_sign)');
-  assert.equal(out.clawby, 'skipped', 'baw cannot register the clawby account either');
-  assert.match(out.note, /read-only|EIP-191|create-wallet|import-mnemonic/);
-  process.env.CLAWBY_42SPACE_STATE = f;
-  const { readState } = await import('./lib.mjs');
-  assert.equal(readState().method, 'baw');
-  assert.equal(readState().address, addr);
 });
 
 test('set-volume persists the daily volume', async () => {
@@ -420,17 +473,16 @@ test('carryOver drops stale secrets when the address changes, keeps config', asy
   assert.equal(same.mnemonic, 'seed words');
 });
 
-test('switching from a created wallet to baw drops the old mnemonic from state', async () => {
+test('a login for a different address drops the previous vault, keeps config (carryOver)', async () => {
   const f = withTempState();
-  const addr = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
-  runCli(['create-wallet'], { stateFile: f });
-  runCli(['use-baw', addr], { stateFile: f });
+  const { writeState, readState } = await import('./lib.mjs');
+  writeState({ method: 'email', address: '0x0000000000000000000000000000000000000001', vault: { ct: 'OLDVAULT' }, daily_volume: 50 });
+  await captureRun(['login-email-verify', 'a@b.com'], { privy: fakePrivy(), fetchImpl: ft42FetchStub(), stdin: JSON.stringify({ code: '1', pin: PIN }) });
   process.env.CLAWBY_42SPACE_STATE = f;
-  const { readState } = await import('./lib.mjs');
   const s = readState();
-  assert.equal(s.method, 'baw');
-  assert.equal(s.address, addr);
-  assert.equal(s.mnemonic, undefined); // stale seed phrase must not linger
+  assert.equal(s.address, EMB_ADDR, 'the new embedded identity');
+  assert.ok(s.vault && s.vault.ct !== 'OLDVAULT', 'the previous vault is dropped and a new one sealed');
+  assert.equal(s.daily_volume, 50, 'config is kept across the address change');
 });
 
 test('requirePipedStdin throws on a TTY and passes a pipe', async () => {
@@ -448,6 +500,7 @@ const ID_ADDR = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';          // m/44'/
 const ID_ENV_KEY = 'pk_cli_ENVSECRET_0123456789';
 const ID_WALLET_KEY = 'pk_cli_WALLETSECRET_9876543210';
 const ID_ACCOUNT = { address: ID_ADDR, wallet_address: ID_ADDR };
+const ID_PIN = '771122';
 
 const idRes = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 const idNoNet = async (url) => { throw new Error('offline test: unexpected request to ' + url); };
@@ -506,6 +559,15 @@ async function loginMnemonic(extra = {}) {
   withTempState();
   const { writeState } = await import('./lib.mjs');
   writeState({ method: 'mnemonic', address: ID_ADDR, mnemonic: ID_PHRASE, ...extra });
+}
+
+// A vault-model login state: the ID_ADDR embedded key sealed under ID_PIN (unlock with `--pin-stdin` + {pin: ID_PIN}).
+async function loginVault(extra = {}) {
+  withTempState();
+  const { writeState } = await import('./lib.mjs');
+  const { encryptKey } = await import('./vault.mjs');
+  const priv = Wallet.fromPhrase(ID_PHRASE).privateKey;
+  writeState({ method: 'email', address: ID_ADDR, vault: encryptKey(priv, ID_PIN, ID_ADDR), ...extra });
 }
 
 // Loopback-only BSC JSON-RPC stub (127.0.0.1, ephemeral port): enough for the real SBT port's chain check + reads.
@@ -616,15 +678,15 @@ test('identity: a referral bind with mark:true is persisted to referral_bound_fo
 });
 
 test('identity: with no env key it fetches one with the state wallet; neither key is printed', async () => {
-  await loginMnemonic();
+  await loginVault();
   const f = idClawby({
     mcp: (path, body) => {
       if (path === '/api/mcp/challenge') return idRes(200, { message: 'login nonce 5', token: 'tok-5' });
-      assert.equal(verifyMessage(body.message, body.signature), ID_ADDR, 'signed by the wallet derived from the state mnemonic');
+      assert.equal(verifyMessage(body.message, body.signature), ID_ADDR, 'signed by the embedded wallet decrypted from the vault');
       return idRes(200, { created: true, account: { address: ID_ADDR, username: 'bob' }, api_key: ID_WALLET_KEY });
     },
   });
-  const lines = await captureAll(['identity'], { fetchImpl: f, sbt: idSbt({ bal: 1n }), env: {}, referral: REF });
+  const lines = await captureAll(['identity', '--pin-stdin'], { fetchImpl: f, sbt: idSbt({ bal: 1n }), env: {}, referral: REF, stdin: JSON.stringify({ pin: ID_PIN }) });
   assert.equal(lines.length, 1);
   const out = JSON.parse(lines[0].text);
   assert.equal(out.key_ok, true);
@@ -728,12 +790,12 @@ test('static scan: identity auto-mints by default (only --dry-run turns it off),
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('./42space.mjs', import.meta.url), 'utf8');
   const from = src.indexOf("case 'identity':");
-  const to = src.indexOf("case 'import-mnemonic':");
+  const to = src.indexOf("case '", from + 10);   // the next case after identity bounds its body
   assert.ok(from > 0 && to > from);
   const body = src.slice(from, to);
   assert.match(body, /const autoMint = !rest\.includes\('--dry-run'\);/);
-  assert.match(body, /makeSbtForState\(s, \{ env, live: autoMint \}\)/, 'a dry run builds a read-only port (no signer)');
-  assert.match(body, /ensureIdentity\(\{ state: s, env, fetchImpl, sbt: port, live: autoMint, hasGas \}\)/);
+  assert.match(body, /makeSbtForState\(s, \{ env, live: autoMint, signer: wallet \}\)/, 'the signer is the unlocked embedded wallet (live only)');
+  assert.match(body, /ensureIdentity\(\{ state: s, wallet, env, fetchImpl, sbt: port, live: autoMint, hasGas \}\)/);
   assert.match(body, /port\.getBnb\(\)/, 'gas is read on the SBT port, not a second RPC source');
   assert.match(body, /referral_bound_for: s\.address/, 'a successful bind is cached to the wallet');
   assert.doesNotMatch(body, /live\s*[:=]\s*(true|1)\b|process\.argv|sendMint|sendTransaction/, 'no direct live-on, no direct send');
@@ -951,22 +1013,21 @@ test('ai-data: a valid CLAWBY_API_KEY is used as-is and the wallet->key (mcp/aut
 });
 
 test('ai-data: with no env key a mnemonic login fetches the key with its wallet (idempotent mcp/auth) and uses it; it is not printed', async () => {
-  await loginMnemonic();
+  await loginVault();
   const WALLET_KEY = 'pk_ft42_WALLETKEY_9876543210';
   const f = ftClawby({
     relay: ftMarketRelay(),
     mcp: (path, body) => {
       if (path === '/api/mcp/challenge') return idRes(200, { message: 'login nonce 9', token: 'tok-9' });
-      assert.equal(verifyMessage(body.message, body.signature), ID_ADDR, 'signed by the wallet of the state mnemonic');
+      assert.equal(verifyMessage(body.message, body.signature), ID_ADDR, 'signed by the embedded wallet decrypted from the vault');
       return idRes(200, { created: false, account: { address: ID_ADDR }, api_key: WALLET_KEY });
     },
   });
-  const lines = await captureAll(['ai-data', '--market', FT_MARKET], { fetchImpl: f, env: {} });
+  const lines = await captureAll(['ai-data', '--market', FT_MARKET, '--pin-stdin'], { fetchImpl: f, env: {}, stdin: JSON.stringify({ pin: ID_PIN }) });
   assert.equal(lines.length, 1);
   assert.deepEqual(f.mcpCalls, ['/api/mcp/challenge', '/api/mcp/auth']);
   assert.ok(f.calls.length > 0 && f.calls.every((c) => c.key === WALLET_KEY));
   assert.ok(!lines[0].text.includes(WALLET_KEY));
-  assert.ok(!lines[0].text.includes('test test test'));
 });
 
 test('ai-data: NO usable clawby key is a HARD block - an explicit error, exit 1, and not a single request is made (Review Focus #2)', async () => {
@@ -981,7 +1042,7 @@ test('ai-data: NO usable clawby key is a HARD block - an explicit error, exit 1,
   ]) {
     const lines = await captureAll(argv, { fetchImpl: f, env });
     const out = JSON.parse(lines.at(-1).text);
-    assert.match(out.error, /^ai-data is blocked: no usable clawby API key \(.*\)\. Set CLAWBY_API_KEY, or log in with import-mnemonic \/ create-wallet/s, JSON.stringify(env));
+    assert.match(out.error, /^ai-data is blocked: no usable clawby API key \(.*\)\. Set CLAWBY_API_KEY, or log in \(login-email \/ create-wallet \/ import-mnemonic\) and pass the PIN/s, JSON.stringify(env));
     assert.equal(process.exitCode, 1);
     process.exitCode = 0;
   }
@@ -999,14 +1060,14 @@ test('ai-data: needs no login at all when CLAWBY_API_KEY is valid (market data i
 });
 
 test('ai-data: a rejected env key falls back to the wallet and says so in warnings (the account may differ)', async () => {
-  await loginMnemonic();
+  await loginVault();
   const f = ftClawby({
     relay: ftMarketRelay(),
     mcp: (path) => (path === '/api/mcp/challenge'
       ? idRes(200, { message: 'm', token: 't' })
       : idRes(200, { created: false, account: { address: ID_ADDR }, api_key: 'pk_ft42_WALLETKEY_1' })),
   });
-  const bundle = await captureRun(['ai-data', '--market', FT_MARKET], { fetchImpl: f, env: { CLAWBY_API_KEY: 'pk_old_rejected_key' } });
+  const bundle = await captureRun(['ai-data', '--market', FT_MARKET, '--pin-stdin'], { fetchImpl: f, env: { CLAWBY_API_KEY: 'pk_old_rejected_key' }, stdin: JSON.stringify({ pin: ID_PIN }) });
   assert.match(bundle.warnings.join('\n'), /CLAWBY_API_KEY was rejected by clawby \(401\); used this wallet's own account/);
   assert.ok(!JSON.stringify(bundle).includes('pk_old_rejected_key'));
 });
@@ -1244,6 +1305,16 @@ test('claim-settled --live: invokes the claim runner ONCE PER MARKET, in order, 
   assert.ok(!lines[0].text.includes(FT_KEY));
 });
 
+test('claim-settled --live --pin-stdin: the PIN is handed to the per-market claim runner (which pipes it to the trade.mjs child)', async () => {
+  await loginBawWithKey();
+  const f = ftClawby({ relay: { ft42_positions: [pos()] } });
+  let seenPin = null;
+  const claim = async (market, p) => { seenPin = p; return { ok: true, tx: [] }; };
+  await captureRun(['claim-settled', '--live', '--pin-stdin'], { fetchImpl: f, env: FT_ENV, claim, stdin: JSON.stringify({ pin: '913755' }) });
+  assert.equal(seenPin, '913755', 'the pin reaches the claim runner, to be piped to the trade.mjs claim child');
+  process.exitCode = 0;
+});
+
 test('claim-settled --live with nothing claimable invokes nothing and succeeds; --live all-ok leaves the exit code alone', async () => {
   await loginBawWithKey();
   const none = ftClawby({ relay: { ft42_positions: [pos({ isClaimed: true })] } });
@@ -1383,4 +1454,167 @@ test('static scan: 42space.mjs has no broadcast call of its own; the claim runne
   const casesBody = src.slice(casesFrom, src.indexOf('default:', casesFrom));
   assert.ok(casesFrom > 0 && casesBody.includes("case 'claim-settled':") && casesBody.length > 100, 'the slice is not vacuous');
   assert.doesNotMatch(casesBody, /console\.|live\s*[:=]\s*(true|1)/, 'the new cases print only through out() and never force live');
+});
+
+// ---- points & account stats (read-only, public 42 endpoints) ----
+
+const PT_ADDR = '0xCedaf8BAE164BbeCaf141d04441C973F7E96768C';
+
+function statsFetch({
+  points = { data: [{ address: PT_ADDR.toLowerCase(), rank: 1, points: 338573 }], totalTraders: 10505 },
+  stats = { walletAddress: PT_ADDR, pnl: -6526.5, winRate: 0.65, totalVolume: 216441.62, tradeCount: 8154, bestTrade: 918, worstTrade: -1045, avgTradeSize: 26.5, predictionWinRate: 0.33, sellWinRate: 0.65 },
+  pointsStatus = 200, statsStatus = 200,
+} = {}) {
+  const res = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+  const calls = [];
+  const f = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes('/api/points/leaderboard')) return res(pointsStatus, points);
+    if (String(url).includes('/api/v1/market-data/leaderboard/stats/')) return res(statsStatus, stats);
+    throw new Error('unexpected url ' + url);
+  };
+  f.calls = calls;
+  return f;
+}
+
+test('points: maps the logged-in address leaderboard row (points / rank / total_traders)', async () => {
+  withTempState();
+  const { writeState } = await import('./lib.mjs');
+  writeState({ method: 'email', address: PT_ADDR });
+  const f = statsFetch();
+  const out = await captureRun(['points'], { fetchImpl: f });
+  assert.equal(out.address, PT_ADDR);
+  assert.equal(out.points, 338573);
+  assert.equal(out.rank, 1);
+  assert.equal(out.total_traders, 10505);
+  assert.ok(f.calls[0].includes('search=' + PT_ADDR.toLowerCase()), 'the leaderboard is searched by the lowercased address');
+});
+
+test('points: --address overrides the logged-in address; no match -> points null', async () => {
+  withTempState();
+  const f = statsFetch({ points: { data: [], totalTraders: 9 } });
+  const out = await captureRun(['points', '--address', PT_ADDR], { fetchImpl: f });
+  assert.equal(out.address, PT_ADDR);
+  assert.equal(out.points, null);
+  assert.equal(out.rank, null);
+});
+
+test('stats: maps the account stats fields for the logged-in address', async () => {
+  withTempState();
+  const { writeState } = await import('./lib.mjs');
+  writeState({ method: 'email', address: PT_ADDR });
+  const f = statsFetch();
+  const out = await captureRun(['stats'], { fetchImpl: f });
+  assert.equal(out.address, PT_ADDR);
+  assert.equal(out.tradeCount, 8154);
+  assert.equal(out.winRate, 0.65);
+  assert.ok('pnl' in out && 'totalVolume' in out && 'predictionWinRate' in out);
+  assert.ok(f.calls[0].includes('/stats/' + PT_ADDR), 'stats is queried by the checksummed address');
+});
+
+test('points / stats: not logged in and no --address is an explicit error', async () => {
+  withTempState();
+  const a = await captureRun(['points'], { fetchImpl: statsFetch() });
+  assert.match(a.error || '', /not logged in|--address/);
+  const b = await captureRun(['stats'], { fetchImpl: statsFetch() });
+  assert.match(b.error || '', /not logged in|--address/);
+  process.exitCode = 0;
+});
+
+// ---- daily pnl/volume + report ----
+
+// Fixed far-past dates, so they never collide with the real "today" when the suite runs.
+const DAILY_ROWS = [
+  { bucket: '2020-01-03T00:00:00Z', realizedPnl: '12.34', buyVolume: '40.0', sellVolume: '16.78' },
+  { bucket: '2020-01-02T00:00:00Z', realizedPnl: '-5.5', buyVolume: '20.0', sellVolume: '0' },
+  { bucket: '2020-01-01T00:00:00Z', realizedPnl: '1.0', buyVolume: '10.0', sellVolume: '0' },
+];
+function reportFetch({ points, stats, daily = DAILY_ROWS, pointsFail = false, statsFail = false, dailyFail = false } = {}) {
+  const p = points ?? { data: [{ address: PT_ADDR.toLowerCase(), rank: 1, points: 338573 }], totalTraders: 10505 };
+  const s = stats ?? { walletAddress: PT_ADDR, pnl: -6526.5, winRate: 0.654, totalVolume: 216441.62, tradeCount: 8154, bestTrade: 918.16, worstTrade: -1045.79, avgTradeSize: 26.54, buyVolume: 110864.05, sellVolume: 29096.69, winningPredictions: 1204, losingPredictions: 2458, predictionWinRate: 0.329, sellWinRate: 0.654 };
+  const res = (ok, body) => ({ ok, status: ok ? 200 : 500, json: async () => body });
+  return async (url) => {
+    if (String(url).includes('/api/points/leaderboard')) return res(!pointsFail, p);
+    if (String(url).includes('/api/v1/market-data/pnl/daily')) return res(!dailyFail, { data: daily, pagination: { hasMore: false, totalResults: daily.length } });
+    if (String(url).includes('/api/v1/market-data/leaderboard/stats/')) return res(!statsFail, s);
+    throw new Error('unexpected url ' + url);
+  };
+}
+
+test('daily: maps the pnl/daily series (bucket->date, volume=buy+sell, numbers), most recent first', async () => {
+  withTempState();
+  const { writeState } = await import('./lib.mjs');
+  writeState({ method: 'email', address: PT_ADDR });
+  const out = await captureRun(['daily'], { fetchImpl: reportFetch() });
+  assert.equal(out.address, PT_ADDR);
+  assert.equal(out.count, 3);
+  assert.deepEqual(out.days[0], { date: '2020-01-03', pnl: 12.34, buy_volume: 40, sell_volume: 16.78, volume: 56.78 });
+  assert.equal(out.days[1].volume, 20);
+  assert.equal(out.truncated, false);
+});
+
+test('daily: --days caps the limit and is sent to the endpoint; truncated reflects hasMore', async () => {
+  withTempState();
+  let seenUrl;
+  const f = async (url) => { seenUrl = String(url); return { ok: true, status: 200, json: async () => ({ data: DAILY_ROWS, pagination: { hasMore: true, totalResults: 999 } }) }; };
+  const out = await captureRun(['daily', '--address', PT_ADDR, '--days', '7'], { fetchImpl: f });
+  assert.ok(seenUrl.includes('limit=7'));
+  assert.ok(seenUrl.includes('user=' + PT_ADDR));   // checksummed in the path/query
+  assert.equal(out.truncated, true);
+});
+
+test('report: composes points + stats + today + a screenshot card', async () => {
+  withTempState();
+  const { writeState } = await import('./lib.mjs');
+  writeState({ method: 'email', address: PT_ADDR });
+  // make "today" deterministic: a daily row whose bucket is today's UTC date
+  const today = new Date().toISOString().slice(0, 10);
+  const daily = [{ bucket: today + 'T00:00:00Z', realizedPnl: '12.34', buyVolume: '40', sellVolume: '16.78' }, ...DAILY_ROWS.slice(1)];
+  const out = await captureRun(['report'], { fetchImpl: reportFetch({ daily }) });
+  assert.equal(out.address, PT_ADDR);
+  assert.equal(out.points, 338573);
+  assert.equal(out.rank, 1);
+  assert.equal(out.total.pnl, -6526.5);
+  assert.equal(out.total.volume, 216441.62);
+  assert.equal(out.total.trade_count, 8154);
+  assert.equal(out.today.date, today);
+  assert.equal(out.today.pnl, 12.34);
+  assert.equal(out.today.volume, 56.78);
+  // the card is a ready-to-show text block with the headline figures
+  assert.equal(typeof out.card, 'string');
+  assert.match(out.card, /42\.space 交易报告/);
+  assert.ok(out.card.includes('338,573'), 'points, thousands-separated');
+  assert.ok(out.card.includes('216,441.62'), 'total volume');
+  assert.match(out.card, /今日/);
+  assert.ok(!out.card.includes(PT_ADDR), 'the card shortens the address, never prints a secret');
+});
+
+test('report: no trades today -> today pnl/volume are 0', async () => {
+  withTempState();
+  const { writeState } = await import('./lib.mjs');
+  writeState({ method: 'email', address: PT_ADDR });
+  // DAILY_ROWS are all in the past (2026-11-02..04), not "today"
+  const out = await captureRun(['report'], { fetchImpl: reportFetch() });
+  const today = new Date().toISOString().slice(0, 10);
+  assert.equal(out.today.date, today);
+  assert.equal(out.today.pnl, 0);
+  assert.equal(out.today.volume, 0);
+});
+
+test('report: a failing source is non-fatal — that section is null + a warning, the card still renders', async () => {
+  withTempState();
+  const { writeState } = await import('./lib.mjs');
+  writeState({ method: 'email', address: PT_ADDR });
+  const out = await captureRun(['report'], { fetchImpl: reportFetch({ pointsFail: true }) });
+  assert.equal(out.points, null);
+  assert.ok((out.warnings || []).some((w) => /points/i.test(w)));
+  assert.equal(out.total.pnl, -6526.5);          // stats still came through
+  assert.equal(typeof out.card, 'string');       // the card still renders
+});
+
+test('report: not logged in and no --address is an explicit error', async () => {
+  withTempState();
+  const out = await captureRun(['report'], { fetchImpl: reportFetch() });
+  assert.match(out.error || '', /not logged in|--address/);
+  process.exitCode = 0;
 });

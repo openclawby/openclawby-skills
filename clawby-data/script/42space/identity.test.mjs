@@ -6,7 +6,8 @@
 import http from 'node:http';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Interface, verifyMessage } from 'ethers';
+import { Interface, verifyMessage, Wallet } from 'ethers';
+import { encryptKey } from './vault.mjs';
 
 globalThis.fetch = async (url) => { throw new Error('offline tests: real fetch attempted for ' + url); };
 
@@ -68,6 +69,13 @@ function sbtStub({ bal = 0n, paused = false, tx = '0xminttx', balError = null, s
 const names = (sbt) => sbt.calls.map((c) => c[0]);
 
 const mnemonicState = { method: 'mnemonic', address: ADDR, mnemonic: PHRASE };
+
+// Vault-model equivalents: the embedded signer is injected by the command layer (walletFromVault), and the
+// state carries an encrypted vault instead of a plaintext mnemonic.
+const PIN = '424242';
+const WALLET = Wallet.fromPhrase(PHRASE);          // address === ADDR
+const VKEY = WALLET.privateKey;
+const vaultState = { method: 'email', address: ADDR, vault: encryptKey(VKEY, PIN, ADDR) };
 
 // A loopback-only JSON-RPC node (127.0.0.1, ephemeral port): enough of BSC for the real reader's chain guard + reads.
 async function fakeBscNode({ chainId = '0x38', balance = 0n, paused = false, bnbWei = 2n * 10n ** 18n } = {}) {
@@ -289,26 +297,27 @@ test('ensureSbt: a missing port is an error, and a failing mint propagates (ensu
 
 // ---- walletFromState / rpcFor ----
 
-test('walletFromState: derives the signing wallet from the state mnemonic; no mnemonic means no wallet', async () => {
-  const { walletFromState } = await import('./identity.mjs');
-  assert.equal(walletFromState(mnemonicState).address, ADDR);
-  assert.equal(walletFromState({ ...mnemonicState, mnemonic: '  ' + PHRASE + '\n' }).address, ADDR);
-  assert.equal(walletFromState({ ...mnemonicState, address: ADDR.toLowerCase() }).address, ADDR);   // address compare is case-insensitive
-  assert.equal(walletFromState({ method: 'baw', address: ADDR }), null);
-  assert.equal(walletFromState({}), null);
-  assert.equal(walletFromState(undefined), null);
+test('walletFromVault: decrypts the vault with the pin to the embedded signer; no vault or no pin -> null', async () => {
+  const { walletFromVault } = await import('./identity.mjs');
+  assert.equal(walletFromVault(vaultState, PIN).address, ADDR);
+  assert.equal(walletFromVault({ ...vaultState, address: ADDR.toLowerCase() }, PIN).address, ADDR);  // address compare is case-insensitive
+  assert.equal(walletFromVault({ method: 'email', address: ADDR }, PIN), null);   // no vault
+  assert.equal(walletFromVault(vaultState, null), null);                          // no pin -> caller decides
+  assert.equal(walletFromVault(vaultState, ''), null);
+  assert.equal(walletFromVault(undefined, PIN), null);
 });
 
-test('walletFromState: a bad or foreign mnemonic is refused with a generic message that does not echo the phrase', async () => {
-  const { walletFromState } = await import('./identity.mjs');
-  assert.throws(() => walletFromState({ address: ADDR, mnemonic: 'not a valid mnemonic phrase at all' }), (e) => {
-    assert.match(e.message, /invalid/);
-    assert.ok(!e.message.includes('not a valid'));
+test('walletFromVault: wrong pin throws "wrong pin"; a vault whose key is a different address is refused, echoing no secret', async () => {
+  const { walletFromVault } = await import('./identity.mjs');
+  assert.throws(() => walletFromVault(vaultState, '000000'), (e) => {
+    assert.match(e.message, /wrong pin/i);
+    assert.ok(!e.message.includes(VKEY));
     return true;
   });
-  assert.throws(() => walletFromState({ address: OTHER, mnemonic: PHRASE }), (e) => {
+  const foreign = { method: 'email', address: OTHER, vault: encryptKey(VKEY, PIN, OTHER) };
+  assert.throws(() => walletFromVault(foreign, PIN), (e) => {
     assert.match(e.message, /does not match/);
-    assert.ok(!e.message.includes('junk'));
+    assert.ok(!e.message.includes(VKEY));
     return true;
   });
 });
@@ -322,20 +331,17 @@ test('rpcFor: BSC_RPC env > state rpc > the public default (same precedence as t
   assert.equal(rpcFor(undefined, {}), DEFAULT_RPC);
 });
 
-test('makeSbtForState: a signer is attached only for a live run on a login that holds a usable local key (no I/O)', async () => {
+test('makeSbtForState: canSign is true only for a live run with an injected signer (no I/O)', async () => {
   const { makeSbtForState } = await import('./identity.mjs');
-  const baw = { method: 'baw', address: ADDR };
   const cases = [
-    ['dry run, mnemonic login', mnemonicState, false, false],
-    ['dry run, baw login', baw, false, false],
-    ['live, mnemonic login', mnemonicState, true, true],
-    ['live, baw login (no local key at all)', baw, true, false],
-    ['live, unusable mnemonic', { method: 'mnemonic', address: ADDR, mnemonic: 'garbage' }, true, false],
-    ['live, mnemonic of another wallet', { method: 'mnemonic', address: OTHER, mnemonic: PHRASE }, true, false],
-    ['"live" must be exactly true, a truthy string is a dry run', mnemonicState, 'true', false],
+    ['dry run, no signer', false, null, false],
+    ['dry run, even with a signer', false, WALLET, false],
+    ['live, with injected signer', true, WALLET, true],
+    ['live, no signer (no key)', true, null, false],
+    ['"live" must be exactly true, a truthy string is a dry run', 'true', WALLET, false],
   ];
-  for (const [label, state, live, want] of cases) {
-    const sbt = makeSbtForState(state, { env: {}, live });
+  for (const [label, live, signer, want] of cases) {
+    const sbt = makeSbtForState(vaultState, { env: {}, live, signer });
     try {
       assert.equal(sbt.canSign, want, label);
     } finally {
@@ -475,7 +481,11 @@ test('static scan: identity.mjs has no broadcast call of its own (the only send 
   for (const line of src.split('\n')) {
     if (/console\.(log|error|warn|info|debug)/.test(line)) assert.doesNotMatch(line, /mnemonic|privateKey|\bphrase\b|api_key|apiKey/i, `leaky line: ${line}`);
   }
-  assert.doesNotMatch(src, /privateKey/);
+  // privateKey may be referenced ONLY to add the embedded key to the scrub list (so it is redacted from warnings),
+  // never printed or returned.
+  for (const line of src.split('\n')) {
+    if (/privateKey/.test(line)) assert.match(line, /secrets|wallet\?\.privateKey/, `privateKey only in a scrub context: ${line}`);
+  }
 });
 
 test('ensureSbt: balanceOf 0, not paused, live, hasGas:false -> skipped no_bnb and sendMint is never called', async () => {
@@ -515,7 +525,7 @@ test('ensureIdentity: forwards hasGas to ensureSbt — hasGas:false with a minta
   const { ensureIdentity } = await import('./identity.mjs');
   const f = clawbyStub({ validKeys: { [ENV_KEY]: WALLET_FIRST } });
   const sbt = sbtStub({ bal: 0n });
-  const out = await ensureIdentity({ state: mnemonicState, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt, live: true, hasGas: false });
+  const out = await ensureIdentity({ state: vaultState, wallet: WALLET, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt, live: true, hasGas: false });
   assert.deepEqual(out.sbt, { had: false, minted: false, skipped: 'no_bnb' });
   assert.equal(names(sbt).includes('sendMint'), false);
 });
@@ -528,7 +538,7 @@ test('ensureIdentity: env key + existing SBT -> everything ok, no warnings, and 
   const { ensureIdentity } = await import('./identity.mjs');
   const f = clawbyStub({ validKeys: { [ENV_KEY]: WALLET_FIRST } });
   const sbt = sbtStub({ bal: 1n });
-  const out = await ensureIdentity({ state: mnemonicState, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt });
+  const out = await ensureIdentity({ state: vaultState, wallet: WALLET, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt });
   assert.deepEqual(out, { key_ok: true, key_source: 'env', sbt: { had: true, minted: false }, bound: true, warnings: [] });
   assert.deepEqual(f.mcpCalls(), []);
   assert.deepEqual(Object.keys(out).sort(), SUMMARY_KEYS);
@@ -539,7 +549,7 @@ test('ensureIdentity: with no env key it fetches one with the state wallet (boun
   const { ensureIdentity } = await import('./identity.mjs');
   const f = clawbyStub({ mcp: mcpOk({ created: true }) });
   const sbt = sbtStub({ bal: 1n });
-  const out = await ensureIdentity({ state: mnemonicState, env: {}, fetchImpl: f, sbt });
+  const out = await ensureIdentity({ state: vaultState, wallet: WALLET, env: {}, fetchImpl: f, sbt });
   assert.equal(out.key_ok, true);
   assert.equal(out.key_source, 'wallet');
   assert.equal(out.bound, true, 'a wallet-first account is bound to the wallet that created it');
@@ -551,7 +561,7 @@ test('ensureIdentity: with no env key it fetches one with the state wallet (boun
 test('ensureIdentity: an env key clawby rejects falls back to the wallet and WARNS that the account may differ', async () => {
   const { ensureIdentity } = await import('./identity.mjs');
   const f = clawbyStub({ validKeys: {}, mcp: mcpOk() });
-  const out = await ensureIdentity({ state: mnemonicState, env: { CLAWBY_API_KEY: 'pk_revoked_000000' }, fetchImpl: f, sbt: sbtStub({ bal: 1n }) });
+  const out = await ensureIdentity({ state: vaultState, wallet: WALLET, env: { CLAWBY_API_KEY: 'pk_revoked_000000' }, fetchImpl: f, sbt: sbtStub({ bal: 1n }) });
   assert.equal(out.key_ok, true);
   assert.equal(out.key_source, 'wallet');
   assert.equal(out.warnings.length, 1);
@@ -563,7 +573,7 @@ test('ensureIdentity: an SBT read failure is swallowed into warnings — it neit
   const { ensureIdentity } = await import('./identity.mjs');
   const f = clawbyStub({ validKeys: { [ENV_KEY]: WALLET_FIRST } });
   const sbt = sbtStub({ balError: new Error('RPC HTTP 502') });
-  const out = await ensureIdentity({ state: mnemonicState, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt, live: true });
+  const out = await ensureIdentity({ state: vaultState, wallet: WALLET, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt, live: true });
   assert.equal(out.key_ok, true);
   assert.equal(out.key_source, 'env');
   assert.ok(out.warnings.length > 0);
@@ -577,7 +587,7 @@ test('ensureIdentity: a mint that reverts (AlreadyMinted / MintingIsPaused) is l
   for (const reason of ['AlreadyMinted()', 'MintingIsPaused()']) {
     const f = clawbyStub({ validKeys: { [ENV_KEY]: WALLET_FIRST } });
     const sbt = sbtStub({ bal: 0n, sendError: new Error('execution reverted: ' + reason) });
-    const out = await ensureIdentity({ state: mnemonicState, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt, live: true });
+    const out = await ensureIdentity({ state: vaultState, wallet: WALLET, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt, live: true });
     assert.equal(out.key_ok, true, reason);
     assert.equal(out.sbt.minted, false, reason);
     assert.match(out.warnings.join('\n'), new RegExp(reason.replace(/[()]/g, '\\$&')));
@@ -588,7 +598,7 @@ test('ensureIdentity: no key is key_ok:false + a warning (the hard block for AI 
   const { ensureIdentity } = await import('./identity.mjs');
   const f = clawbyStub({ mcp: () => res(503, {}) });
   const sbt = sbtStub({ bal: 0n });
-  const out = await ensureIdentity({ state: mnemonicState, env: {}, fetchImpl: f, sbt, live: true });
+  const out = await ensureIdentity({ state: vaultState, wallet: WALLET, env: {}, fetchImpl: f, sbt, live: true });
   assert.equal(out.key_ok, false);
   assert.equal(out.key_source, null);
   assert.equal(out.bound, false);
@@ -630,7 +640,7 @@ test('ensureIdentity: `bound` follows the account — wallet_address match (any 
   ];
   for (const [label, account, want] of cases) {
     const f = clawbyStub({ validKeys: { [ENV_KEY]: account } });
-    const out = await ensureIdentity({ state: mnemonicState, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt: sbtStub({ bal: 1n }) });
+    const out = await ensureIdentity({ state: vaultState, wallet: WALLET, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt: sbtStub({ bal: 1n }) });
     assert.equal(out.key_ok, true, label);
     assert.equal(out.bound, want, label);
     if (want) assert.deepEqual(out.warnings, [], label);
@@ -660,28 +670,15 @@ test('ensureIdentity: bound is false (never "undefined === undefined") when ther
   assert.equal(out2.bound, false);
 });
 
-test('ensureIdentity: a mnemonic that does not match the state address is not used to sign — it warns and the env key still works', async () => {
-  const { ensureIdentity } = await import('./identity.mjs');
-  const f = clawbyStub({ validKeys: { [ENV_KEY]: WALLET_FIRST } });              // mcp would throw if the foreign wallet were used
-  const out = await ensureIdentity({ state: { method: 'mnemonic', address: OTHER, mnemonic: PHRASE }, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt: sbtStub({ bal: 1n }) });
-  assert.equal(out.key_ok, true);
-  assert.match(out.warnings.join('\n'), /does not match/);
-  const f2 = clawbyStub({ mcp: mcpOk() });
-  const out2 = await ensureIdentity({ state: { method: 'mnemonic', address: OTHER, mnemonic: PHRASE }, env: {}, fetchImpl: f2, sbt: sbtStub() });
-  assert.equal(out2.key_ok, false, 'a wallet that is not the logged-in account never fetches a key');
-  assert.deepEqual(f2.mcpCalls(), []);
-  assert.ok(!JSON.stringify(out2).includes('junk'));
-});
-
 test('ensureIdentity: live mints when needed; dry (the default) only reports would_mint', async () => {
   const { ensureIdentity } = await import('./identity.mjs');
   const f = clawbyStub({ validKeys: { [ENV_KEY]: WALLET_FIRST } });
   const dry = sbtStub({ bal: 0n });
-  const outDry = await ensureIdentity({ state: mnemonicState, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt: dry });
+  const outDry = await ensureIdentity({ state: vaultState, wallet: WALLET, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt: dry });
   assert.deepEqual(outDry.sbt, { had: false, minted: false, would_mint: true });
   assert.equal(names(dry).includes('sendMint'), false);
   const live = sbtStub({ bal: 0n, tx: '0xfeed' });
-  const outLive = await ensureIdentity({ state: mnemonicState, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt: live, live: true });
+  const outLive = await ensureIdentity({ state: vaultState, wallet: WALLET, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f, sbt: live, live: true });
   assert.deepEqual(outLive.sbt, { had: false, minted: true, tx: '0xfeed' });
   assert.deepEqual(names(live), ['balanceOf', 'mintingPaused', 'sendMint']);
 });
@@ -690,18 +687,18 @@ test('ensureIdentity: the api key never reaches the result, even when an error m
   const { ensureIdentity } = await import('./identity.mjs');
   // validation blows up with the key in the message (e.g. a proxy echoing the request): it must be scrubbed from warnings
   const leaky = async () => { throw new Error('upstream said: bad key ' + ENV_KEY + ' !'); };
-  const out = await ensureIdentity({ state: mnemonicState, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: leaky, sbt: sbtStub() });
+  const out = await ensureIdentity({ state: vaultState, wallet: WALLET, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: leaky, sbt: sbtStub() });
   assert.equal(out.key_ok, false);
   assert.ok(out.warnings.length > 0);
   assert.ok(!JSON.stringify(out).includes(ENV_KEY), 'env key scrubbed');
   // and a failing SBT after a wallet-fetched key: the fetched key and the mnemonic are scrubbed too
   const f = clawbyStub({ mcp: mcpOk() });
-  const sbt = sbtStub({ balError: new Error(`rpc fail ${WALLET_KEY} / ${PHRASE}`) });
-  const out2 = await ensureIdentity({ state: mnemonicState, env: {}, fetchImpl: f, sbt });
+  const sbt = sbtStub({ balError: new Error(`rpc fail ${WALLET_KEY} / ${VKEY}`) });
+  const out2 = await ensureIdentity({ state: vaultState, wallet: WALLET, env: {}, fetchImpl: f, sbt });
   assert.equal(out2.key_ok, true);
   const text = JSON.stringify(out2);
   assert.ok(!text.includes(WALLET_KEY), 'fetched key scrubbed');
-  assert.ok(!text.includes('test test test'), 'mnemonic scrubbed');
+  assert.ok(!text.includes(VKEY), 'embedded private key scrubbed');
   assert.ok(out2.warnings.length > 0);
 });
 
@@ -716,16 +713,28 @@ test('ensureIdentity: warnings are plain strings', async () => {
 test('ensureClawbyAccount: a new wallet registers (created) -> "registered", mark true, and the api key never leaks into the result', async () => {
   const { ensureClawbyAccount } = await import('./identity.mjs');
   const f = clawbyStub({ mcp: mcpOk({ created: true }) });
-  const out = await ensureClawbyAccount({ state: { method: 'created', address: ADDR, mnemonic: PHRASE }, env: {}, fetchImpl: f });
+  const out = await ensureClawbyAccount({ state: { method: 'created', address: ADDR }, wallet: WALLET, env: {}, fetchImpl: f });
   assert.deepEqual(out, { clawby: 'registered', warnings: [], mark: true });
   assert.deepEqual(f.calls, ['POST /api/mcp/challenge', 'POST /api/mcp/auth']);
   assert.ok(!JSON.stringify(out).includes(WALLET_KEY), 'the api key is never returned');
 });
 
+test('ensureClawbyAccount: sends the Clawby invite code 7rt6jo on register (default)', async () => {
+  const { ensureClawbyAccount } = await import('./identity.mjs');
+  let sentInvite;
+  const mcp = (_m, path, body) => {
+    if (path === '/api/mcp/challenge') return res(200, { message: 'm', token: 't' });
+    sentInvite = body.invite_code;
+    return res(200, { created: true, account: { address: ADDR }, api_key: WALLET_KEY });
+  };
+  await ensureClawbyAccount({ state: { method: 'created', address: ADDR }, wallet: WALLET, env: {}, fetchImpl: clawbyStub({ mcp }) });
+  assert.equal(sentInvite, '7rt6jo');
+});
+
 test('ensureClawbyAccount: a wallet that already had an account -> "existing" (created:false), mark true', async () => {
   const { ensureClawbyAccount } = await import('./identity.mjs');
   const f = clawbyStub({ mcp: mcpOk({ created: false }) });
-  const out = await ensureClawbyAccount({ state: { method: 'mnemonic', address: ADDR, mnemonic: PHRASE }, env: {}, fetchImpl: f });
+  const out = await ensureClawbyAccount({ state: { method: 'imported', address: ADDR }, wallet: WALLET, env: {}, fetchImpl: f });
   assert.equal(out.clawby, 'existing');
   assert.equal(out.mark, true);
 });
@@ -733,7 +742,7 @@ test('ensureClawbyAccount: a wallet that already had an account -> "existing" (c
 test('ensureClawbyAccount: already cached for this exact wallet short-circuits with NO network', async () => {
   const { ensureClawbyAccount } = await import('./identity.mjs');
   const f = clawbyStub({ mcp: mcpOk() });
-  const out = await ensureClawbyAccount({ state: { address: ADDR, mnemonic: PHRASE, clawby_registered_for: ADDR }, env: {}, fetchImpl: f });
+  const out = await ensureClawbyAccount({ state: { address: ADDR, clawby_registered_for: ADDR }, wallet: WALLET, env: {}, fetchImpl: f });
   assert.deepEqual(out, { clawby: 'already', warnings: [], mark: false });
   assert.deepEqual(f.calls, [], 'no request when already registered for this wallet');
 });
@@ -741,7 +750,7 @@ test('ensureClawbyAccount: already cached for this exact wallet short-circuits w
 test('ensureClawbyAccount: a valid CLAWBY_API_KEY is used as-is -> "env", and NO wallet-first account is created', async () => {
   const { ensureClawbyAccount } = await import('./identity.mjs');
   const f = clawbyStub({ validKeys: { [ENV_KEY]: WALLET_FIRST } });    // any mcp request would throw
-  const out = await ensureClawbyAccount({ state: { address: ADDR, mnemonic: PHRASE }, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f });
+  const out = await ensureClawbyAccount({ state: { address: ADDR }, wallet: WALLET, env: { CLAWBY_API_KEY: ENV_KEY }, fetchImpl: f });
   assert.equal(out.clawby, 'env');
   assert.equal(out.mark, true);
   assert.deepEqual(f.mcpCalls(), [], 'the wallet->key path is not run when an env key is valid');
@@ -750,7 +759,7 @@ test('ensureClawbyAccount: a valid CLAWBY_API_KEY is used as-is -> "env", and NO
 test('ensureClawbyAccount: a clawby outage is non-fatal -> "error", mark false, and it never throws', async () => {
   const { ensureClawbyAccount } = await import('./identity.mjs');
   const fNet = async () => { throw new TypeError('fetch failed'); };
-  const out = await ensureClawbyAccount({ state: { address: ADDR, mnemonic: PHRASE }, env: {}, fetchImpl: fNet });
+  const out = await ensureClawbyAccount({ state: { address: ADDR }, wallet: WALLET, env: {}, fetchImpl: fNet });
   assert.equal(out.clawby, 'error');
   assert.equal(out.mark, false);
   assert.ok(out.warnings.length >= 1 && out.warnings.every((w) => typeof w === 'string'));

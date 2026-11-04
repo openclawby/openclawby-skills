@@ -87,7 +87,8 @@ import {
   AbiCoder, Contract, Interface, JsonRpcProvider, MaxUint256, Network, Wallet,
   ZeroAddress, formatUnits, getAddress, isAddress, parseUnits,
 } from 'ethers';
-import { readState, DEFAULT_RPC } from './lib.mjs';
+import { readState, writeState, DEFAULT_RPC } from './lib.mjs';
+import { decryptKey, hasVault, guardedUnlock } from './vault.mjs';
 import { recordPosition } from './positions.mjs';
 
 // ------------------------------------------------------------------------------------ constants
@@ -245,9 +246,11 @@ export function explainError(e) {
     if (parsed) return `${parsed.name}(${parsed.args.map(String).join(', ')})`;
     return `unrecognised custom error ${data.slice(0, 10)}`;
   }
-  if (e?.shortMessage) return e.shortMessage;
-  if (e?.reason) return String(e.reason);
-  return String(e?.message ?? e).split('\n')[0].slice(0, 300);
+  // Redact any URL's path/query (a private BSC_RPC can embed an API key, e.g. .../v2/<KEY>): keep only scheme://host.
+  const redactUrls = (s) => String(s).replace(/\bhttps?:\/\/[^\s"')]+/gi, (u) => { try { return new URL(u).origin; } catch { return u; } });
+  if (e?.shortMessage) return redactUrls(e.shortMessage).slice(0, 300);
+  if (e?.reason) return redactUrls(String(e.reason)).slice(0, 300);
+  return redactUrls(String(e?.message ?? e).split('\n')[0]).slice(0, 300);
 }
 
 // --------------------------------------------------------------------------------- CLI parsing
@@ -305,21 +308,34 @@ export function resolveClaimTarget(opts, rest) {
 
 // ---------------------------------------------------------------------------------------- wallet
 // The wallet is the module's logged-in 42 account (lib.mjs readState(); CLAWBY_42SPACE_STATE overrides the path).
-// `signer` is an UNCONNECTED Wallet (cannot send anything without a provider) and exists only when the state holds
-// a mnemonic (import-mnemonic / create-wallet); a baw login has none (canSign=false). All failure messages are
-// deliberately generic: the underlying errors can echo state content.
-export function loadAccount(state = readState()) {
-  if (!state || !state.address) throw new Error('not logged in: run import-mnemonic / create-wallet / use-baw first');
+// `signer` is an UNCONNECTED Wallet (cannot send without a provider) and exists only when a PIN is given AND the state
+// holds an encrypted vault — the embedded key is decrypted in memory. Without a pin the account is read-only
+// (canSign=false), which is correct for dry runs. A wrong pin throws 'wrong pin'; a vault whose key is not the
+// logged-in address is refused. Messages are generic — underlying errors can echo state content.
+export function loadAccount(state = readState(), { pin } = {}) {
+  if (!state || !state.address) throw new Error('not logged in: run login-email / create-wallet / import-mnemonic first');
   let address;
   try { address = getAddress(state.address); } catch { throw new Error('state has an invalid address'); }
   let signer = null;
-  if (typeof state.mnemonic === 'string' && state.mnemonic.trim()) {
-    let w;
-    try { w = Wallet.fromPhrase(state.mnemonic.trim()); } catch { throw new Error('state mnemonic is invalid (details suppressed)'); }
-    if (w.address !== address) throw new Error('state address does not match its mnemonic - refusing to continue');
+  if (pin && hasVault(state)) {
+    const hex = decryptKey(state.vault, pin);          // throws Error('wrong pin') on a bad pin
+    const w = new Wallet(hex);
+    if (w.address !== address) throw new Error('vault address does not match the logged-in account - refusing to continue');
     signer = w;
   }
   return { address, signer, canSign: signer !== null, method: state.method ?? null, rpc: state.rpc || DEFAULT_RPC };
+}
+
+// Read {"pin":"..."} from stdin (for a --live run). `raw` is a test seam; without it a pipe is required (a TTY would hang).
+export async function readPinJson(raw) {
+  if (raw === undefined) {
+    if (process.stdin.isTTY) throw new Error('pipe {"pin":"..."} on stdin for a --live run');
+    raw = await new Promise((resolve) => { let d = ''; process.stdin.setEncoding('utf8'); process.stdin.on('data', (c) => { d += c; }); process.stdin.on('end', () => resolve(d)); });
+  }
+  let o = null;
+  try { o = JSON.parse(raw); } catch { /* fall through */ }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('expected {"pin":"..."} on stdin for a --live run');
+  return o;
 }
 
 // -------------------------------------------------------------------------------------- context
@@ -327,7 +343,7 @@ export function loadAccount(state = readState()) {
 export function makeContext({ live = false, account = loadAccount(), rpcUrl } = {}) {
   // Checked before anything is built: a live run needs a local key (baw logins are read-only here).
   if (live && !account.canSign) {
-    throw new Error(`this login (method=${account.method}) has no local key to sign with. Use import-mnemonic or create-wallet; baw signing is not wired yet.`);
+    throw new Error('a --live run needs the PIN to unlock the embedded key (pipe {"pin":"..."} on stdin); this run has no signer');
   }
   const url = rpcUrl || process.env.BSC_RPC || account.rpc || DEFAULT_RPC;
   // pollingInterval 1s (ethers default is 4s): BSC blocks are sub-second, so confirmations are reported sooner.
@@ -1248,7 +1264,7 @@ function noteSent(c, e) {
   }
 }
 
-export async function main(argv) {
+export async function main(argv, { stdin } = {}) {
   const { opts, pos } = parseArgs(argv);
   const [cmd, ...rest] = pos;
   if (opts.help || !cmd || cmd === 'help') { console.log(USAGE); return; }
@@ -1263,7 +1279,18 @@ export async function main(argv) {
   const live = wantsLive(cmd, opts.live);   // quote/status can never send
   if (opts.live && !live) console.log('(note: --live has no effect on quote/status; they never send)');
   if (opts.approveMax && cmd !== 'buy' && cmd !== 'roundtrip') console.log('(note: --approve-max only applies to buy and roundtrip (the USDT approval); it has no effect here)');
-  const c = makeContext({ live });
+  // A live send needs the PIN (stdin) to unlock the embedded signer; a login check runs first so "not logged in"
+  // never waits on stdin. Dry runs read nothing and build a read-only account.
+  const state = readState();
+  let account;
+  if (live && state?.address) {
+    const { pin } = await readPinJson(stdin);
+    // guardedUnlock enforces the brute-force lock and records/clears wrong-PIN failures (shared with the other CLIs).
+    account = guardedUnlock(state, pin, (s, p) => loadAccount(s, { pin: p }), { write: writeState });
+  } else {
+    account = loadAccount(state);   // dry run, or not-logged-in (loadAccount throws 'not logged in' before any stdin read)
+  }
+  const c = makeContext({ live, account });
   try {
     await assertChain(c);
     if (cmd === 'quote') await cmdQuote(c, side, opts, args);

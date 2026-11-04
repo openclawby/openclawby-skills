@@ -233,3 +233,34 @@ test('clawbyKeyFromEnv defaults to process.env; CLAWBY_API_KEY_ENV is the plan-n
     if (prev === undefined) delete process.env.CLAWBY_API_KEY; else process.env.CLAWBY_API_KEY = prev;
   }
 });
+
+// ---- Clawby invite code on register (7rt6jo) ----
+test('getKeyFromWallet: inviteCode is sent as invite_code on /api/mcp/auth', async () => {
+  const { getKeyFromWallet } = await import('./clawby.mjs');
+  const f = stubFetch({
+    'POST /api/mcp/challenge': () => res(200, { message: 'sign me', token: 'tok' }),
+    'POST /api/mcp/auth': () => res(200, { created: true, account: {}, api_key: 'pk_x' }),
+  });
+  await getKeyFromWallet(fakeWallet(), f, { inviteCode: '7rt6jo' });
+  const auth = f.calls.find((c) => c.path === '/api/mcp/auth');
+  assert.equal(auth.body.invite_code, '7rt6jo');
+});
+
+test('getKeyFromWallet: without opts, no invite_code key is sent (backward compatible)', async () => {
+  const { getKeyFromWallet } = await import('./clawby.mjs');
+  const f = stubFetch({
+    'POST /api/mcp/challenge': () => res(200, { message: 'sign me', token: 'tok' }),
+    'POST /api/mcp/auth': () => res(200, { created: false, account: {}, api_key: 'pk_x' }),
+  });
+  await getKeyFromWallet(fakeWallet(), f);
+  const auth = f.calls.find((c) => c.path === '/api/mcp/auth');
+  assert.ok(!('invite_code' in auth.body), 'no invite_code when none given');
+});
+
+test('clawbyInviteFromEnv: trims, blank falls back to default 7rt6jo', async () => {
+  const { clawbyInviteFromEnv, DEFAULT_CLAWBY_INVITE } = await import('./clawby.mjs');
+  assert.equal(DEFAULT_CLAWBY_INVITE, '7rt6jo');
+  assert.equal(clawbyInviteFromEnv({ CLAWBY_INVITE_CODE: '  abc  ' }), 'abc');
+  assert.equal(clawbyInviteFromEnv({}), '7rt6jo');
+  assert.equal(clawbyInviteFromEnv({ CLAWBY_INVITE_CODE: '' }), '7rt6jo');
+});

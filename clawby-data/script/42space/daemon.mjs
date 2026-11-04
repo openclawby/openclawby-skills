@@ -22,9 +22,10 @@
 // OUTPUT: one JSON event per line on STDOUT (start / plan / trade / wait / warn / done, and error from the CLI wrapper); the trade
 // narration trade.mjs prints with console.log is routed to STDERR while a round trip runs, so stdout stays machine-readable.
 import { formatUnits } from 'ethers';
-import { parseVolume, bnbStatus, readState } from './lib.mjs';
+import { parseVolume, bnbStatus, readState, writeState } from './lib.mjs';
+import { guardedUnlock } from './vault.mjs';
 import { scanMarkets } from './scan.mjs';
-import { runRoundtrip as tradeRunRoundtrip, runSell as tradeRunSell, readPositionValue, makeContext, loadAccount, assertChain, parseAmount, parseMarket, parseTokenId, slippageBips, explainError, isMain } from './trade.mjs';
+import { runRoundtrip as tradeRunRoundtrip, runSell as tradeRunSell, readPositionValue, makeContext, loadAccount, readPinJson, assertChain, parseAmount, parseMarket, parseTokenId, slippageBips, explainError, isMain } from './trade.mjs';
 import { listPositions, removePosition } from './positions.mjs';
 import { ensureReferralBeforeTrade } from './invite.mjs';
 
@@ -149,7 +150,7 @@ export async function fastMain(argv, deps = {}) {
   const account = deps.account ?? loadAccount();
   // Up front, before any chain or network use: a login with no local key can scan but cannot trade.
   if (live && !account.canSign) {
-    throw new Error(`--live needs a local key to sign with, and this login (method=${account.method}) has none: log in with import-mnemonic or create-wallet first`);
+    throw new Error('--live needs the PIN to unlock the embedded key (pipe {"pin":"..."} on stdin); this run has no signer');
   }
   const rc = deps.ctx ?? makeContext({ live: false, account });      // read-only: the scan only ever eth_calls
   try {
@@ -167,7 +168,7 @@ export async function fastMain(argv, deps = {}) {
     let referralStatus = null;
     let referralWarnings = [];
     if (live) {
-      const ref = await (deps.ensure42 ?? ensureReferralBeforeTrade)({ state: deps.state ?? readState(), env: deps.env, fetchImpl: deps.fetchImpl });
+      const ref = await (deps.ensure42 ?? ensureReferralBeforeTrade)({ state: deps.state ?? readState(), wallet: account.signer, env: deps.env, fetchImpl: deps.fetchImpl });
       referralStatus = ref.referral;
       referralWarnings = ref.warnings ?? [];
     }
@@ -305,8 +306,13 @@ export async function takeProfitCycle(deps, { pct, execute } = {}) {
     if (value.finalised) { remove(market, tokenId); removed += 1; emit({ market, tokenId, action: 'settled' }); continue; }   // market settled -> can't sell, leave for claim; drop from monitoring (no infinite retry)
     const bal = BigInt(value.bal);
     if (bal <= 0n) { remove(market, tokenId); removed += 1; emit({ market, tokenId, action: 'gone' }); continue; }
-    const entryOt = BigInt(pos.entryOt);
-    const costForBal = entryOt > 0n ? BigInt(pos.entryUsdt) * bal / entryOt : 0n;   // entry cost scaled to the balance still held
+    // Entry fields come straight off the on-disk ledger; a hand-edited / truncated / future-schema row must skip, not
+    // throw (that would strand every other in-profit position). positions.mjs guarantees whole-file resilience; this
+    // guards a single malformed row.
+    let entryOt, entryUsdt;
+    try { entryOt = BigInt(pos.entryOt); entryUsdt = BigInt(pos.entryUsdt); }
+    catch { emit({ market, tokenId, action: 'skip', reason: 'unusable entry row' }); continue; }
+    const costForBal = entryOt > 0n ? entryUsdt * bal / entryOt : 0n;   // entry cost scaled to the balance still held
     if (costForBal <= 0n) { emit({ market, tokenId, action: 'skip', reason: 'unusable entry cost' }); continue; }
     const usdtOut = BigInt(value.usdtOut);
     const gainPct = Number((usdtOut - costForBal) * 10000n / costForBal) / 100;
@@ -345,7 +351,7 @@ export async function takeProfitMain(argv, deps = {}) {
   const log = deps.log ?? defaultLog;
   const account = deps.account ?? loadAccount();
   if (live && !account.canSign) {
-    throw new Error(`--live needs a local key to sign with, and this login (method=${account.method}) has none: log in with import-mnemonic or create-wallet first`);
+    throw new Error('--live needs the PIN to unlock the embedded key (pipe {"pin":"..."} on stdin); this run has no signer');
   }
   const stored = Number(readState().take_profit_pct);
   const pct = o.pct ?? (positive(stored) ? stored : DEFAULT_TAKE_PROFIT_PCT);
@@ -363,7 +369,7 @@ export async function takeProfitMain(argv, deps = {}) {
     let referralStatus = null;
     let referralWarnings = [];
     if (live) {
-      const ref = await (deps.ensure42 ?? ensureReferralBeforeTrade)({ state: deps.state ?? readState(), env: deps.env, fetchImpl: deps.fetchImpl });
+      const ref = await (deps.ensure42 ?? ensureReferralBeforeTrade)({ state: deps.state ?? readState(), wallet: account.signer, env: deps.env, fetchImpl: deps.fetchImpl });
       referralStatus = ref.referral;
       referralWarnings = ref.warnings ?? [];
     }
@@ -388,6 +394,16 @@ export async function takeProfitMain(argv, deps = {}) {
 // Dispatch the two daemon modes. `fast` keeps buying+selling to a volume target; `take-profit` watches held positions
 // and sells each at a target gain. Both are DRY unless --live and broadcast only through trade.mjs.
 export async function main(argv, deps = {}) {
+  // A live run needs the PIN (stdin) to unlock the embedded signer; inject the unlocked account so fastMain/takeProfitMain
+  // can sign. Dry runs (no --live) read nothing and stay read-only. deps.account (tests) short-circuits this.
+  if (!deps.account && argv.includes('--live')) {
+    const state = readState();
+    if (state?.address) {
+      const { pin } = await readPinJson(deps.stdin);
+      // guardedUnlock enforces the brute-force lock + records/clears wrong-PIN failures (shared with the other CLIs).
+      deps = { ...deps, account: guardedUnlock(state, pin, (s, p) => loadAccount(s, { pin: p }), { write: writeState }) };
+    }
+  }
   if (argv[0] === 'take-profit') return takeProfitMain(argv, deps);
   return fastMain(argv, deps);
 }

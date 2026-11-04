@@ -12,7 +12,8 @@
 // key is NOT swallowed: it yields key_ok:false + a warning, which the playbook treats as a hard block for the AI modes.
 import { Contract, Interface, JsonRpcProvider, Network, Wallet, formatUnits, getAddress } from 'ethers';
 import { DEFAULT_RPC } from './lib.mjs';
-import { getKeyFromWallet, getAccount, clawbyKeyFromEnv } from './clawby.mjs';
+import { decryptKey, hasVault } from './vault.mjs';
+import { getKeyFromWallet, getAccount, clawbyKeyFromEnv, clawbyInviteFromEnv } from './clawby.mjs';
 import { sendStep, CHAIN_ID } from './trade.mjs';
 
 // ------------------------------------------------------------------------------------ SBT contract
@@ -68,21 +69,17 @@ export async function ensureSbt({ address, sbt, live = false, hasGas = true }) {
 }
 
 // ------------------------------------------------------------------------------------ wallet / rpc from state
-// The signing wallet of the logged-in account: derived from the state mnemonic (import-mnemonic / create-wallet), or
-// null for a baw / address-only login (it has no local key). A mnemonic that is invalid, or whose address is not the
-// logged-in account's, is refused — never act with a wallet that is not the account. The messages are deliberately
-// generic: the underlying errors can echo the phrase.
-export function walletFromState(state) {
-  const phrase = typeof state?.mnemonic === 'string' ? state.mnemonic.trim() : '';
-  if (!phrase) return null;
-  let wallet;
-  try {
-    wallet = Wallet.fromPhrase(phrase);
-  } catch {
-    throw new Error('state mnemonic is invalid (details suppressed)');
-  }
+// The signing wallet of the logged-in account: the embedded private key decrypted from the PIN vault. Returns null
+// when there is no vault OR no pin (the caller decides whether that is fatal — RULING-PF2); throws only on a wrong
+// pin (surfaced by vault.decryptKey) or when the decrypted key is not the logged-in address (never act with a wallet
+// that is not the account). Messages are generic: they never echo the key.
+export function walletFromVault(state, pin) {
+  if (!hasVault(state)) return null;
+  if (pin == null || pin === '') return null;
+  const hex = decryptKey(state.vault, pin);        // throws Error('wrong pin') on a bad pin
+  const wallet = new Wallet(hex);
   if (state.address && wallet.address.toLowerCase() !== String(state.address).toLowerCase()) {
-    throw new Error('state address does not match its mnemonic - not using the local key');
+    throw new Error('vault address does not match the logged-in account - not using the local key');
   }
   return wallet;
 }
@@ -149,14 +146,10 @@ async function muted(fn) {
 }
 
 // The port the CLI uses for the logged-in account: reads on rpcFor(state, env), and a signer ONLY for a live run
-// (live === true) on a login that holds a usable local key — a dry run, a baw login, or a mnemonic that is invalid
-// or foreign gets a read-only port that cannot send even by mistake.
-export function makeSbtForState(state, { env = process.env, live = false } = {}) {
-  let signer = null;
-  if (live === true) {
-    try { signer = walletFromState(state); } catch { signer = null; }
-  }
-  return makeSbt({ rpc: rpcFor(state, env), signer, address: state?.address ?? null });
+// (live === true) with an injected signer (the embedded wallet the command built via walletFromVault). A dry run,
+// or a run with no signer (no pin / no vault), gets a read-only port that cannot send even by mistake.
+export function makeSbtForState(state, { env = process.env, live = false, signer = null } = {}) {
+  return makeSbt({ rpc: rpcFor(state, env), signer: live === true ? signer : null, address: state?.address ?? null });
 }
 
 // ------------------------------------------------------------------------------------ resolveKey
@@ -167,7 +160,7 @@ export function makeSbtForState(state, { env = process.env, live = false } = {})
 //     the 401 case so the caller can warn that this may be a different account than the one that env key belonged to).
 //   * the env key could not be CHECKED (5xx / network) -> getAccount throws and so do we: a blip must never be answered
 //     by creating an account.
-export async function resolveKey({ wallet = null, env = process.env, fetchImpl = fetch } = {}) {
+export async function resolveKey({ wallet = null, env = process.env, fetchImpl = fetch, inviteCode } = {}) {
   const envKey = clawbyKeyFromEnv(env);
   let envRejected = false;
   if (envKey) {
@@ -177,10 +170,10 @@ export async function resolveKey({ wallet = null, env = process.env, fetchImpl =
   }
   if (!wallet) {
     throw new Error(envRejected
-      ? 'CLAWBY_API_KEY was rejected (401) and this login has no local key to fetch another with'
-      : 'no clawby API key: set CLAWBY_API_KEY (this login has no local key to fetch one with)');
+      ? 'CLAWBY_API_KEY was rejected (401) and this login has no local key to fetch another with (provide the PIN, or set a valid CLAWBY_API_KEY)'
+      : 'no clawby API key: set CLAWBY_API_KEY, or provide the PIN so the embedded wallet can fetch one');
   }
-  const { api_key, account, created } = await getKeyFromWallet(wallet, fetchImpl);
+  const { api_key, account, created } = await getKeyFromWallet(wallet, fetchImpl, { inviteCode });
   return envRejected
     ? { api_key, source: 'wallet', account, created, env_rejected: true }
     : { api_key, source: 'wallet', account, created };
@@ -195,23 +188,18 @@ export async function resolveKey({ wallet = null, env = process.env, fetchImpl =
 //   -> { clawby: 'registered'|'existing'|'env'|'already'|'skipped'|'error', warnings, mark }
 //      registered = a new wallet account was created; existing = the wallet already had one; env = an env key's account
 //      was used (nothing created); already = cached for this wallet; skipped = no usable wallet+key; error = failed.
-export async function ensureClawbyAccount({ state, env = process.env, fetchImpl = fetch } = {}) {
+export async function ensureClawbyAccount({ state, wallet = null, env = process.env, fetchImpl = fetch, inviteCode } = {}) {
   if (state?.clawby_registered_for && state.clawby_registered_for === state.address) {
     return { clawby: 'already', warnings: [], mark: false };
   }
-  const secrets = [clawbyKeyFromEnv(env ?? {}), typeof state?.mnemonic === 'string' ? state.mnemonic.trim() : null];
+  const code = inviteCode ?? clawbyInviteFromEnv(env);
+  const secrets = [clawbyKeyFromEnv(env ?? {}), typeof wallet?.privateKey === 'string' ? wallet.privateKey : null];
   const warn = (msg) => scrub(msg, secrets).slice(0, 240);
-  let wallet = null;
-  try {
-    wallet = walletFromState(state);
-  } catch (e) {
-    return { clawby: 'skipped', warnings: [warn(`clawby registration skipped: local wallet unusable: ${describe(e)}`)], mark: false };
-  }
   if (!wallet && !clawbyKeyFromEnv(env ?? {})) {
-    return { clawby: 'skipped', warnings: ['clawby registration skipped: this login has no local key (baw/address-only) and no CLAWBY_API_KEY'], mark: false };
+    return { clawby: 'skipped', warnings: ['clawby registration skipped: this login has no signable wallet and no CLAWBY_API_KEY'], mark: false };
   }
   try {
-    const key = await resolveKey({ wallet, env, fetchImpl });     // key.api_key is a secret; it is deliberately never read out here
+    const key = await resolveKey({ wallet, env, fetchImpl, inviteCode: code });     // key.api_key is a secret; never read out here
     if (key.source === 'env') return { clawby: 'env', warnings: [], mark: true };
     const status = key.created === true ? 'registered' : key.created === false ? 'existing' : 'wallet';
     return { clawby: status, warnings: [], mark: true };
@@ -249,22 +237,21 @@ function accountOwns(account, address) {
 //     Dry by default: `live` (strictly true) is what lets ensureSbt mint.
 //   * bound: whether the account is tied to this wallet. A key fetched with the wallet is wallet-first, hence bound; an
 //     env-key account that is not has no pk_ bind endpoint, so it is recorded (warning) and skipped, never blocking.
-export async function ensureIdentity({ state, env = process.env, fetchImpl = fetch, sbt, live = false, hasGas = true } = {}) {
+export async function ensureIdentity({ state, wallet = null, env = process.env, fetchImpl = fetch, sbt, live = false, hasGas = true } = {}) {
   const warnings = [];
-  const secrets = [clawbyKeyFromEnv(env ?? {}), typeof state?.mnemonic === 'string' ? state.mnemonic.trim() : null];
+  const secrets = [
+    clawbyKeyFromEnv(env ?? {}),
+    typeof wallet?.privateKey === 'string' ? wallet.privateKey : null,
+    typeof state?.mnemonic === 'string' ? state.mnemonic.trim() : null,
+  ];
   const warn = (msg) => warnings.push(scrub(msg, secrets).slice(0, 240));      // scrub BEFORE truncating: a cut secret would escape
 
-  let wallet = null;
-  try {
-    wallet = walletFromState(state);
-  } catch (e) {
-    warn(`local wallet unusable: ${describe(e)}`);
-  }
+  // The signer is injected by the command layer (walletFromVault, which already validated pin + address).
   const address = wallet?.address ?? state?.address ?? null;
 
   let key = null;
   try {
-    key = await resolveKey({ wallet, env, fetchImpl });
+    key = await resolveKey({ wallet, env, fetchImpl, inviteCode: clawbyInviteFromEnv(env) });
     secrets.push(key.api_key);
     if (key.env_rejected) {
       warn("CLAWBY_API_KEY was rejected by clawby (401); used this wallet's own account instead - it may not be the account that key belonged to");

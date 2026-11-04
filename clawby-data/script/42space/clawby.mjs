@@ -4,6 +4,14 @@
 // the API key lives in memory only, is sent only as the X-API-Key header, and is never put in an error message.
 export const CLAWBY_BASE = 'https://api.openclawby.com';
 
+// The invite code recorded as the inviter when the wallet registers a new Clawby account.
+export const DEFAULT_CLAWBY_INVITE = '7rt6jo';
+
+// The Clawby invite code to use, from the env (CLAWBY_INVITE_CODE overrides), trimmed; blank -> default.
+export function clawbyInviteFromEnv(env = process.env) {
+  return String(env.CLAWBY_INVITE_CODE ?? '').trim() || DEFAULT_CLAWBY_INVITE;
+}
+
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 // The API base is env-overridable (CLAWBY_API_BASE) ONLY so offline tests can point the wallet->key / account /
@@ -16,7 +24,7 @@ function apiBase() {
 // Wallet -> key via the agent channel (idempotent: a known wallet gets its original key back, created:false; a new
 // wallet is registered and bound to itself, created:true). `wallet` is any object with .address and an async
 // .signMessage(msg) (EIP-191 personal_sign) — an ethers Wallet in real use, a fake in tests.
-export async function getKeyFromWallet(wallet, fetchImpl = fetch) {
+export async function getKeyFromWallet(wallet, fetchImpl = fetch, opts = {}) {
   if (!wallet || !wallet.address || typeof wallet.signMessage !== 'function') {
     throw new Error('clawby auth: wallet needs an address and signMessage()');
   }
@@ -30,7 +38,10 @@ export async function getKeyFromWallet(wallet, fetchImpl = fetch) {
   if (!message || !token) throw new Error('clawby auth: malformed challenge response');
 
   const signature = await wallet.signMessage(message);
-  const auth = await post('/api/mcp/auth', { address: wallet.address, message, token, signature });
+  // invite_code is sent only when given, so existing callers' /api/mcp/auth body is byte-for-byte unchanged.
+  const authBody = { address: wallet.address, message, token, signature };
+  if (opts.inviteCode) authBody.invite_code = opts.inviteCode;
+  const auth = await post('/api/mcp/auth', authBody);
   if (!auth.ok) throw new Error('clawby auth HTTP ' + auth.status);
   const { api_key, created, account } = await auth.json();
   if (!api_key) throw new Error('clawby auth: response has no api_key');

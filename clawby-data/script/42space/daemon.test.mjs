@@ -14,6 +14,8 @@ import { Interface, ZeroAddress, ZeroHash, getAddress } from 'ethers';
 import * as daemon from './daemon.mjs';
 import { loadAccount, runRoundtrip as tradeRunRoundtrip, LENS_ABI, ERC20_ABI, MARKET_ABI } from './trade.mjs';
 import { scanMarkets } from './scan.mjs';
+import { encryptKey } from './vault.mjs';
+import { Wallet } from 'ethers';
 
 const STATE_FILE = join(mkdtempSync(join(tmpdir(), '42d-')), '42space.json');
 process.env.CLAWBY_42SPACE_STATE = STATE_FILE;
@@ -315,8 +317,14 @@ test('parseDaemonArgs: only "fast" exists; --target is required; typos, strays a
 });
 
 // ------------------------------------------------------------------------------ main (CLI glue) - dependency-injected, offline
-const mnemonicAccount = () => loadAccount({ method: 'mnemonic', address: ADDR, mnemonic: PHRASE });
-const bawAccount = () => loadAccount({ method: 'baw', address: ADDR });
+// A signing account in the vault model: the ADDR embedded key sealed under DPIN, unlocked with that pin.
+const DPIN = '771199';
+const mnemonicAccount = () => loadAccount(
+  { method: 'email', address: ADDR, vault: encryptKey(Wallet.fromPhrase(PHRASE).privateKey, DPIN, ADDR) },
+  { pin: DPIN },
+);
+// A read-only account (no vault / no pin) — it cannot sign.
+const bawAccount = () => loadAccount({ method: 'email', address: ADDR });
 // A stand-in for the read-only trade context main scans with: a lens marker and the three provider calls main makes.
 function readCtx({ chain = '0x38', bnb = 5n * 10n ** 18n } = {}) {
   const log = [];
@@ -430,9 +438,9 @@ test('main --live: refuses to start with 0 BNB (no gas) - before any scan or tra
   assert.equal(dry.rt.calls.length, 1);
 });
 
-test('main --live: a login with no local key (baw) is refused up front, before any chain or network use', async () => {
+test('main --live: a login with no signer (no pin / no vault) is refused up front, before any chain or network use', async () => {
   const h = harness({ account: bawAccount() });
-  await assert.rejects(daemon.main(['fast', '--live', '--target', '5'], h.deps), /--live needs a local key.*method=baw/s);
+  await assert.rejects(daemon.main(['fast', '--live', '--target', '5'], h.deps), /--live needs the PIN/s);
   assert.deepEqual(h.ctx.log, [], 'not even the chain was asked');
   assert.equal(h.scan.calls.length, 0);
   assert.equal(h.rt.calls.length, 0);
@@ -630,14 +638,15 @@ test('CLI entry: a usage error prints ONE JSON error event on stdout and exits 1
 
 test('CLI entry: --live with a baw login (no local key) is refused up front - JSON error, exit 1, and the unreachable RPC is never even tried', () => {
   const f = join(mkdtempSync(join(tmpdir(), '42d-')), '42space.json');
-  writeFileSync(f, JSON.stringify({ method: 'baw', address: ADDR }), { mode: 0o600 });
-  const r = spawnSync(process.execPath, [CLI, 'fast', '--live', '--target', '5'], { encoding: 'utf8', env: cliEnv(f) });
+  writeFileSync(f, JSON.stringify({ method: 'email', address: ADDR }), { mode: 0o600 });   // an address but no vault: cannot sign
+  // a pin is piped, but there is no vault to unlock, so the live gate refuses it before any chain/RPC use
+  const r = spawnSync(process.execPath, [CLI, 'fast', '--live', '--target', '5'], { encoding: 'utf8', env: cliEnv(f), input: JSON.stringify({ pin: DPIN }) });
   assert.equal(r.status, 1, r.stderr);
   const lines = r.stdout.trim().split('\n');
   assert.equal(lines.length, 1);
   const e = JSON.parse(lines[0]);
   assert.equal(e.event, 'error');
-  assert.match(e.error, /--live needs a local key/);
+  assert.match(e.error, /--live needs the PIN/);
   assert.equal(r.stderr, '');
 });
 
@@ -738,6 +747,19 @@ test('takeProfitCycle: a sell that throws (finalised market) is a skip; the posi
   assert.ok(deps._results.some((x) => x.action === 'skip'));
 });
 
+test('takeProfitCycle: a malformed entry row is skipped (not fatal) — other positions are still processed', async () => {
+  const good = POS(addr(1), 1n, 10n * 10n ** 18n, 10n * 10n ** 18n);          // entry 10 USDT / 10 OT
+  const bad = { market: addr(9), tokenId: '1', entryUsdt: '10', entryOt: 'not-a-number', ts: 1 };
+  const readValue = async () => ({ bal: 10n * 10n ** 18n, usdtOut: 20n * 10n ** 18n, finalised: false });  // both well in profit
+  const deps = tpDeps({ positions: [bad, good], readValue });
+  const r = await daemon.takeProfitCycle(deps, { pct: 50, execute: true });   // must NOT throw on the bad row
+  const byMarket = Object.fromEntries(deps._results.map((x) => [x.market, x]));
+  assert.equal(byMarket[addr(9)].action, 'skip');
+  assert.match(byMarket[addr(9)].reason, /unusable entry row/);
+  assert.equal(byMarket[addr(1)].action, 'sold', 'the valid position was still sold despite the earlier bad row');
+  assert.equal(r.sold, 1);
+});
+
 test('runTakeProfitLoop: cycles until the ledger is empty', async () => {
   const up = POS(addr(1), 1n, 10n * 10n ** 18n, 10n * 10n ** 18n);
   const deps = tpDeps({ positions: [up], readValue: async () => ({ bal: 10n * 10n ** 18n, usdtOut: 16n * 10n ** 18n }), sell: async () => ({ traded: true, txs: ['0x'] }) });
@@ -804,9 +826,11 @@ test('take-profit --live: the 42 referral backstop runs before selling; its stat
 test('static scan: daemon.mjs cannot sign or send by itself - its only road to the chain is trade.runRoundtrip, and "live" comes from the literal --live flag alone', () => {
   const src = readFileSync(new URL('./daemon.mjs', import.meta.url), 'utf8');
   const code = src.split('\n').filter((l) => !/^\s*\/\//.test(l)).map((l) => l.replace(/\s\/\/.*$/, '')).join('\n');
-  assert.doesNotMatch(code, /sendTransaction|signTransaction|signMessage|\.send\(|eth_send|sendStep|\bsigner\b|\bWallet\b|\.mnemonic\b|privateKey|apiKey|JsonRpcProvider/);
+  // daemon may HOLD account.signer to hand to trade.runRoundtrip and to the off-chain referral backstop, but it must
+  // never broadcast or sign on-chain by itself (no sendTransaction/sendStep/signMessage/JsonRpcProvider/raw sends).
+  assert.doesNotMatch(code, /sendTransaction|signTransaction|signMessage|\.send\(|eth_send|sendStep|\bWallet\b|\.mnemonic\b|privateKey|apiKey|JsonRpcProvider/);
   const imports = [...src.matchAll(/^import .* from '([^']+)';$/gm)].map((m) => m[1]);
-  assert.deepEqual(imports, ['ethers', './lib.mjs', './scan.mjs', './trade.mjs', './positions.mjs', './invite.mjs']);
+  assert.deepEqual(imports, ['ethers', './lib.mjs', './vault.mjs', './scan.mjs', './trade.mjs', './positions.mjs', './invite.mjs']);
   // invite.mjs is allowed ONLY as the pre-trade referral backstop: it does an off-chain SIWE personal_sign + a 42 REST
   // call, never an on-chain broadcast — the daemon's only road to the chain is still trade.runRoundtrip (asserted above).
   assert.match(code, /ensureReferralBeforeTrade/);
