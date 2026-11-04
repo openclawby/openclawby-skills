@@ -9,7 +9,7 @@ import { generateKeyPairSync, verify as nodeVerify, createECDH } from 'node:cryp
 import { Wallet } from 'ethers';
 import {
   APP_ID, canonicalJson, spkiB64, hpkeOpen, hpkeSeal, signAuthorization,
-  loginWallet, loginEmailVerify, loginEmailInit, exportEmbeddedKey,
+  loginWallet, loginEmailVerify, loginEmailInit, exportEmbeddedKey, createEmbeddedWallet,
 } from './privy.mjs';
 
 const resp = (obj, ok = true, status = 200) => ({
@@ -93,6 +93,35 @@ test('loginEmailVerify returns embedded wallet', async () => {
   };
   const r = await loginEmailVerify('a@b.com', '123456', { fetchImpl: stub });
   assert.equal(r.access, 'ACC2');
+  assert.equal(r.embedded.address, EMB);
+});
+
+test('createEmbeddedWallet posts {chain_type:ethereum} with the access token and returns the new wallet', async () => {
+  let sent;
+  const stub = async (url, opts) => {
+    if (url.endsWith('/api/v1/wallets')) { sent = { body: JSON.parse(opts.body), auth: opts.headers.authorization, idem: opts.headers['privy-idempotency-key'] }; return resp({ id: 'wNEW', address: '0x' + '5'.repeat(40), chain_type: 'ethereum' }); }
+    throw new Error('unexpected ' + url);
+  };
+  const w = await createEmbeddedWallet({ access: 'ACCESS', fetchImpl: stub });
+  assert.deepEqual(w, { id: 'wNEW', address: '0x' + '5'.repeat(40) });
+  assert.deepEqual(sent.body, { chain_type: 'ethereum' });
+  assert.equal(sent.auth, 'Bearer ACCESS');
+  assert.ok(sent.idem && sent.idem.length >= 16, 'an idempotency key is sent');
+});
+
+test('loginWallet: a first-time user with no embedded wallet gets one created (POST /wallets)', async () => {
+  const EMB = '0x' + '7'.repeat(40);
+  const w = { address: '0x' + '2'.repeat(40), signMessage: async () => '0xsig' };
+  let created = false;
+  const stub = async (url) => {
+    if (url.endsWith('/siwe/init')) return resp({ nonce: 'N' });
+    if (url.endsWith('/siwe/authenticate')) return resp({ privy_access_token: 'ACCESS', user: { linked_accounts: [{ connector_type: 'wallet', address: w.address }] } }); // NO embedded yet
+    if (url.endsWith('/api/v1/wallets')) { created = true; return resp({ id: 'wCreated', address: EMB }); }
+    throw new Error('unexpected ' + url);
+  };
+  const r = await loginWallet(w, { fetchImpl: stub });
+  assert.equal(created, true, 'the embedded wallet was created for the brand-new user');
+  assert.equal(r.embedded.id, 'wCreated');
   assert.equal(r.embedded.address, EMB);
 });
 

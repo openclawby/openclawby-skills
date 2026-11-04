@@ -9,7 +9,7 @@
 // verified end-to-end against live Privy. Do not "simplify" the crypto — the exact suite ids, the DER
 // signature encoding and the canonical-byte input are load-bearing (other encodings return 401).
 import {
-  randomUUID, createECDH, createHmac, createDecipheriv, createCipheriv,
+  randomUUID, randomBytes, createECDH, createHmac, createDecipheriv, createCipheriv,
   createPrivateKey, sign as nodeSign,
 } from 'node:crypto';
 import { Wallet, getAddress } from 'ethers';
@@ -104,13 +104,42 @@ export function privySiweMessage(address, nonce, issuedAt) {
   ].join('\n');
 }
 
-// Pull { access, user, embedded } out of a Privy authenticate response. The embedded wallet is the 42 identity.
+// Pull { access, user, embedded } out of a Privy authenticate response. A brand-new Privy user has NO embedded wallet
+// yet (the React SDK provisions it client-side after login) — embedded is null then, and the caller creates one.
 function pickAuth(d) {
   const access = d?.privy_access_token;
-  const embedded = (d?.user?.linked_accounts || []).find((a) => a.connector_type === 'embedded');
   if (!access) throw new Error('privy authenticate: no access token in response');
-  if (!embedded?.id || !embedded?.address) throw new Error('privy authenticate: no embedded wallet in response');
-  return { access, user: d.user, embedded: { id: embedded.id, address: embedded.address } };
+  const e = (d?.user?.linked_accounts || []).find((a) => a.connector_type === 'embedded');
+  const embedded = (e?.id && e?.address) ? { id: e.id, address: e.address } : null;
+  return { access, user: d.user, embedded };
+}
+
+// Create the account's embedded wallet when it has none (first-time registration). Mirrors what the Privy React SDK
+// does after login: POST /api/v1/wallets {chain_type:"ethereum"} with the user's access token -> the new wallet.
+// Idempotency key guards against a double-create on retry.
+export async function createEmbeddedWallet({ access, fetchImpl = fetch }) {
+  const r = await fetchImpl(PRIVY_BASE + '/api/v1/wallets', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json', accept: 'application/json',
+      'privy-app-id': APP_ID, 'privy-ca-id': randomUUID(), 'privy-client': 'react-auth:3.12.0',
+      'privy-idempotency-key': randomBytes(32).toString('hex'),
+      authorization: 'Bearer ' + access, origin: 'https://www.42.space', referer: 'https://www.42.space/',
+    },
+    body: JSON.stringify({ chain_type: 'ethereum' }),
+  });
+  if (!r.ok) throw new Error('privy create embedded wallet HTTP ' + r.status);
+  const body = await r.json();
+  const w = body?.address ? body : (body?.wallet ?? body?.data ?? {});   // tolerate a wrapped response
+  if (!w.id || !w.address) throw new Error('privy create embedded wallet: no id/address in response');
+  return { id: w.id, address: w.address };
+}
+
+// Ensure an embedded wallet exists on the authenticated account, creating one if the authenticate response had none.
+async function resolveEmbedded(auth, fetchImpl) {
+  if (auth.embedded) return auth;
+  const embedded = await createEmbeddedWallet({ access: auth.access, fetchImpl });
+  return { ...auth, embedded };
 }
 
 // ---------------------------------------------------------------- login
@@ -127,7 +156,7 @@ export async function loginEmailVerify(email, code, { fetchImpl = fetch } = {}) 
     method: 'POST', headers: loginHeaders(), body: JSON.stringify({ email, code }),
   });
   if (!r.ok) throw new Error('privy passwordless authenticate HTTP ' + r.status);
-  return pickAuth(await r.json());
+  return resolveEmbedded(pickAuth(await r.json()), fetchImpl);
 }
 
 export async function loginWallet(wallet, { fetchImpl = fetch } = {}) {
@@ -144,7 +173,7 @@ export async function loginWallet(wallet, { fetchImpl = fetch } = {}) {
     body: JSON.stringify({ message, signature, chainId: 'eip155:56', walletClientType: 'okx_wallet', connectorType: 'injected', mode: 'login-or-sign-up' }),
   });
   if (!authR.ok) throw new Error('privy siwe authenticate HTTP ' + authR.status);
-  return pickAuth(await authR.json());
+  return resolveEmbedded(pickAuth(await authR.json()), fetchImpl);
 }
 
 // ---------------------------------------------------------------- export embedded key
