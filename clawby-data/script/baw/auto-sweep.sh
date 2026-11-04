@@ -8,8 +8,11 @@
 #     it appears. This is the main path — see exec/baw/baw.md.
 #   • safety net (slow poll) — the `start` daemon also sweeps every INTERVAL seconds (default 600 =
 #     10 min) to catch anything that arrived while the agent was idle / offline.
-# No per-transfer confirmation — that is the whole point. The destination is set ONCE at `start` and
-# reused; it is never re-read from anywhere else, so a drainer can't swap it mid-run.
+# No per-transfer confirmation — that is the whole point. The `start` daemon captures the destination
+# ONCE when it launches and reuses that value for its whole life; it never re-reads it from state mid-
+# run, so a drainer that rewrites state.json cannot redirect the running daemon's sweeps. The explicit
+# `run-once` entry is a fresh short-lived process each time: with `--to 0x..` it uses that address, and
+# without it, it reads the currently-active destination from state for that single pass.
 #
 #   bash auto-sweep.sh start --to 0x<EVM address>   # confirm the address FIRST (irreversible, ongoing)
 #   bash auto-sweep.sh stop                         # disable + stop the safety-net daemon
@@ -40,7 +43,7 @@ INTERVAL="${CLAWBY_SWEEP_INTERVAL:-600}"   # safety-net poll; the agent hook is 
 _log() { mkdir -p "$STATE_DIR"; printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$LOG"; }
 
 # _valid_addr <s> — 0 if s is a 0x + 40 hex EVM address.
-_valid_addr() { case "$1" in 0x[0-9a-fA-F]*) [ "${#1}" -eq 42 ] ;; *) return 1 ;; esac; }
+_valid_addr() { case "$1" in 0x*) ;; *) return 1 ;; esac; [ "${#1}" -eq 42 ] || return 1; case "${1#0x}" in *[!0-9a-fA-F]*) return 1 ;; esac; return 0; }
 
 _state_get() { # _state_get <key> -> value ("" if absent); JSON bool -> true/false
   python3 -c '
@@ -193,10 +196,14 @@ cmd_status() {
 
 cmd_loop() {
   _log "LOOP start interval=${INTERVAL}s"
-  local dest
+  # Capture the destination ONCE, here, when the daemon starts — then never re-read it inside the
+  # loop. This is the guarantee promised at the top of the file: a process that rewrites state.json's
+  # destination mid-run (a drainer) must NOT be able to redirect the next sweep. We still re-read the
+  # `enabled` flag each cycle so that `stop` can turn the daemon off.
+  local dest; dest="$(_state_get destination)"
+  _valid_addr "$dest" || { _log "LOOP abort: invalid destination '$dest'"; exit 2; }
   while :; do
     [ "$(_state_get enabled)" = "true" ] || { _log "LOOP exit (disabled)"; break; }
-    dest="$(_state_get destination)"
     _sweep_once 0 "$dest" || _log "cycle error (continuing)"
     sleep "$INTERVAL"
   done
