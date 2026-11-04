@@ -822,6 +822,92 @@ test('take-profit --live: the 42 referral backstop runs before selling; its stat
   assert.equal(start.referral, 'already');
 });
 
+// ------------------------------------------------------------------------------ blitz (Token Race) CLI
+const BLITZ_DAY = 1_700_000_000 - (1_700_000_000 % 86_400);
+const BLITZ_NOON = BLITZ_DAY + 12 * 3_600;     // in-hours (04:00-18:00 UTC)
+
+test('parseBlitzArgs: required flags + defaults + rejections', () => {
+  const o = daemon.parseBlitzArgs(['blitz', '--amount', '1', '--max-loss', '5', '--take-profit', '10']);
+  assert.equal(o.amount, '1');
+  assert.equal(o.slippage, '10');
+  assert.equal(o.maxRounds, 500);
+  assert.equal(o.interval, 4);
+  assert.equal(o.idleTimeout, 600);
+  assert.equal(o.live, false);
+  assert.equal(o.amountWei, WAD);
+  assert.equal(o.maxLossWei, 5n * WAD);
+  assert.equal(o.takeProfitWei, 10n * WAD);
+  const live = daemon.parseBlitzArgs(['blitz', '--amount=2', '--max-loss=3', '--take-profit=4', '--slippage', '5', '--max-rounds', '50', '--interval', '6', '--idle-timeout', '120', '--live']);
+  assert.equal(live.live, true);
+  assert.equal(live.slippage, '5');
+  assert.equal(live.maxRounds, 50);
+  assert.equal(live.interval, 6);
+  assert.equal(live.idleTimeout, 120);
+  assert.throws(() => daemon.parseBlitzArgs(['blitz']), /--amount <usdt> is required/);
+  assert.throws(() => daemon.parseBlitzArgs(['blitz', '--amount', '1']), /--max-loss .* is required/);
+  assert.throws(() => daemon.parseBlitzArgs(['blitz', '--amount', '1', '--max-loss', '5']), /--take-profit .* is required/);
+  assert.throws(() => daemon.parseBlitzArgs(['fast', '--amount', '1']), /unknown command "fast"/);
+  assert.throws(() => daemon.parseBlitzArgs(['blitz', '--amount', '0', '--max-loss', '5', '--take-profit', '10']), /must be > 0/);
+  assert.throws(() => daemon.parseBlitzArgs(['blitz', '--amount', '1', '--max-loss', '5', '--take-profit', '10', '--slippage', '100']), /slippage must be below 100/);
+  assert.throws(() => daemon.parseBlitzArgs(['blitz', '--amount', '1', '--max-loss', '5', '--take-profit', '10', '--max-rounds', '0']), /--max-rounds must be a positive integer/);
+  assert.throws(() => daemon.parseBlitzArgs(['blitz', '--amount', '1', '--max-loss', '5', '--take-profit', '10', '--idle-timeout', '0']), /--idle-timeout must be at least 1/);
+  assert.throws(() => daemon.parseBlitzArgs(['blitz', '--amount', '1', '--max-loss', '5', '--take-profit', '10', '--live=1']), /--live takes no value/);
+  assert.throws(() => daemon.parseBlitzArgs(['blitz', '--amount', '1', '--max-loss', '5', '--take-profit', '10', 'extra']), /unexpected argument: extra/);
+  assert.throws(() => daemon.parseBlitzArgs(['blitz', '--amount', '1', '--max-loss', '5', '--take-profit', '10', '--bogus', 'x']), /unknown option: --bogus/);
+});
+
+test('blitzMain (dry): emits start + plan with the random pick it WOULD make, broadcasts nothing', async () => {
+  const events = [];
+  await daemon.blitzMain(['blitz', '--amount', '1', '--max-loss', '5', '--take-profit', '10'], {
+    account: bawAccount(), ctx: readCtx(), now: () => BLITZ_NOON,
+    listRaces: async () => [{ address: addr(0x42), tradingStart: BLITZ_NOON + 100, tradingEnd: BLITZ_NOON + 110 }],
+    snapshot: async () => ({ tokenIds: [1n, 2n, 4n], timestampStart: BLITZ_NOON + 100, timestampEnd: BLITZ_NOON + 110, isFinalised: false, answer: 0n }),
+    log: (e) => events.push(e),
+  });
+  assert.deepEqual(events.map((e) => e.event), ['start', 'plan']);
+  assert.equal(events[0].mode, 'dry-run');
+  assert.equal(events[1].market, addr(0x42));
+  assert.ok(['BTC', 'ETH', 'SOL'].includes(events[1].would_pick), `would_pick: ${events[1].would_pick}`);
+});
+
+test('blitzMain (live): runs the loop with the injected playRound, emits start + round(s) + done, stops at a P&L gate', async () => {
+  const events = [];
+  const out = await daemon.blitzMain(['blitz', '--live', '--amount', '1', '--max-loss', '3', '--take-profit', '100'], {
+    account: mnemonicAccount(), ctx: readCtx({ bnb: 5n * WAD }),
+    ensure42: async () => ({ referral: 'already', warnings: [] }),
+    ensureApproval: async () => ({ approved: false }),
+    now: () => BLITZ_NOON, sleep: stubSleep(),
+    listRaces: async () => [{ address: addr(0x42), tradingStart: BLITZ_NOON + 100, tradingEnd: BLITZ_NOON + 110 }],
+    playRound: async () => ({ result: 'bet', asset: 'BTC', tokenId: 1n, won: false, realized: -WAD }),
+    log: (e) => events.push(e),
+  });
+  assert.equal(out.stopped, 'stop-loss');
+  assert.equal(events[0].event, 'start');
+  assert.equal(events[0].mode, 'live');
+  assert.equal(events.filter((e) => e.event === 'round').length, 3);
+  assert.equal(events.at(-1).event, 'done');
+  assert.equal(events.at(-1).stopped, 'stop-loss');
+});
+
+test('blitzMain: --live with a read-only (baw) login is refused before any network use', async () => {
+  await assert.rejects(daemon.blitzMain(['blitz', '--live', '--amount', '1', '--max-loss', '3', '--take-profit', '10'],
+    { account: bawAccount(), ctx: readCtx() }), /needs the PIN|no signer/);
+});
+
+test('blitzMain: --live with 0 BNB stops (no gas)', async () => {
+  await assert.rejects(daemon.blitzMain(['blitz', '--live', '--amount', '1', '--max-loss', '3', '--take-profit', '10'],
+    { account: mnemonicAccount(), ctx: readCtx({ bnb: 0n }), ensure42: async () => ({ referral: 'already' }) }), /0 BNB/);
+});
+
+test('main routes "blitz" to blitzMain (dry, no round -> start + plan)', async () => {
+  const events = [];
+  await daemon.main(['blitz', '--amount', '1', '--max-loss', '5', '--take-profit', '10'], {
+    account: bawAccount(), ctx: readCtx(), now: () => BLITZ_NOON, listRaces: async () => [], log: (e) => events.push(e),
+  });
+  assert.equal(events[0].event, 'start');
+  assert.equal(events.at(-1).event, 'plan');
+});
+
 // ------------------------------------------------------------------------------ safety (static)
 test('static scan: daemon.mjs cannot sign or send by itself - its only road to the chain is trade.runRoundtrip, and "live" comes from the literal --live flag alone', () => {
   const src = readFileSync(new URL('./daemon.mjs', import.meta.url), 'utf8');
@@ -830,7 +916,7 @@ test('static scan: daemon.mjs cannot sign or send by itself - its only road to t
   // never broadcast or sign on-chain by itself (no sendTransaction/sendStep/signMessage/JsonRpcProvider/raw sends).
   assert.doesNotMatch(code, /sendTransaction|signTransaction|signMessage|\.send\(|eth_send|sendStep|\bWallet\b|\.mnemonic\b|privateKey|apiKey|JsonRpcProvider/);
   const imports = [...src.matchAll(/^import .* from '([^']+)';$/gm)].map((m) => m[1]);
-  assert.deepEqual(imports, ['ethers', './lib.mjs', './vault.mjs', './scan.mjs', './trade.mjs', './positions.mjs', './invite.mjs']);
+  assert.deepEqual(imports, ['ethers', './lib.mjs', './vault.mjs', './scan.mjs', './trade.mjs', './positions.mjs', './invite.mjs', './blitz.mjs']);
   // invite.mjs is allowed ONLY as the pre-trade referral backstop: it does an off-chain SIWE personal_sign + a 42 REST
   // call, never an on-chain broadcast — the daemon's only road to the chain is still trade.runRoundtrip (asserted above).
   assert.match(code, /ensureReferralBeforeTrade/);

@@ -24,10 +24,11 @@
 import { formatUnits } from 'ethers';
 import { parseVolume, bnbStatus, readState, writeState } from './lib.mjs';
 import { guardedUnlock } from './vault.mjs';
-import { scanMarkets } from './scan.mjs';
-import { runRoundtrip as tradeRunRoundtrip, runSell as tradeRunSell, readPositionValue, makeContext, loadAccount, readPinJson, assertChain, parseAmount, parseMarket, parseTokenId, slippageBips, explainError, isMain } from './trade.mjs';
+import { scanMarkets, listTokenRaces, marketSnapshot } from './scan.mjs';
+import { runRoundtrip as tradeRunRoundtrip, runSell as tradeRunSell, readPositionValue, makeContext, loadAccount, readPinJson, assertChain, parseAmount, parseMarket, parseTokenId, slippageBips, explainError, runBlitzBet as tradeRunBlitzBet, runBlitzClaim as tradeRunBlitzClaim, ensureUsdtApproval, isMain } from './trade.mjs';
 import { listPositions, removePosition } from './positions.mjs';
 import { ensureReferralBeforeTrade } from './invite.mjs';
+import { playRound as blitzPlayRound, runBlitzLoop, chooseRound, pickAsset, blitzWindow, assetName } from './blitz.mjs';
 
 export const DEFAULT_THRESHOLD_PCT = 3;      // a market is tradable only when its round trip costs strictly LESS than this (percent)
 export const DEFAULT_SLIPPAGE_PCT = '3';     // fast mode's slippage (trade.mjs's own default is 2)
@@ -391,8 +392,125 @@ export async function takeProfitMain(argv, deps = {}) {
   }
 }
 
-// Dispatch the two daemon modes. `fast` keeps buying+selling to a volume target; `take-profit` watches held positions
-// and sells each at a target gain. Both are DRY unless --live and broadcast only through trade.mjs.
+// ------------------------------------------------------------------------------------ BLITZ MODE (Token Race)
+// A looping daemon that bets a fixed USDT stake on a RANDOM one of BTC/ETH/SOL each ~37s round and stops on cumulative
+// stop-loss / take-profit. Like the other modes: DRY unless --live, broadcasts only through trade.mjs (runBlitzBet /
+// runBlitzClaim / ensureUsdtApproval), the authoritative trading window + result read on chain (scan.marketSnapshot).
+// Token Race trades only 04:00-18:00 UTC daily; outside it the loop stops "closed" and reports the next open time.
+//   node daemon.mjs blitz --amount <usdt> --max-loss <usdt> --take-profit <usdt> [--slippage <pct=10>] [--max-rounds <n=500>] [--interval <sec=4>] [--idle-timeout <sec=600>] [--live]
+const BLITZ_USAGE = 'usage: node daemon.mjs blitz --amount <usdt> --max-loss <usdt> --take-profit <usdt> [--slippage <pct=10>] [--max-rounds <n=500>] [--interval <sec=4>] [--idle-timeout <sec=600>] [--live]';
+const BLITZ_VALUE_FLAGS = { '--amount': 'amount', '--max-loss': 'maxLoss', '--take-profit': 'takeProfit', '--slippage': 'slippage', '--max-rounds': 'maxRounds', '--interval': 'interval', '--idle-timeout': 'idleTimeout' };
+const BLITZ_BOOL_FLAGS = { '--live': 'live' };
+
+// -> { amount, maxLoss, takeProfit (strings), amountWei, maxLossWei, takeProfitWei (bigint), slippage, maxRounds, interval, idleTimeout, live }.
+// Throws on anything unknown/invalid so a typo can never silently change what runs.
+export function parseBlitzArgs(argv) {
+  const [cmd, ...rest] = argv;
+  if (cmd !== 'blitz') throw new Error(`unknown command "${cmd ?? '(none)'}" - ${BLITZ_USAGE}`);
+  const o = { amount: null, maxLoss: null, takeProfit: null, slippage: '10', maxRounds: '500', interval: '4', idleTimeout: '600', live: false };
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (!a.startsWith('--')) throw new Error(`unexpected argument: ${a}`);
+    const eq = a.indexOf('=');
+    const name = eq === -1 ? a : a.slice(0, eq);
+    if (Object.hasOwn(BLITZ_BOOL_FLAGS, name)) {
+      if (eq !== -1) throw new Error(`${name} takes no value`);
+      o[BLITZ_BOOL_FLAGS[name]] = true;
+      continue;
+    }
+    if (!Object.hasOwn(BLITZ_VALUE_FLAGS, name)) throw new Error(`unknown option: ${name}`);
+    const val = eq === -1 ? rest[++i] : a.slice(eq + 1);
+    if (val === undefined || val.startsWith('--')) throw new Error(`${name} needs a value`);
+    o[BLITZ_VALUE_FLAGS[name]] = val;
+  }
+  if (o.amount === null) throw new Error(`--amount <usdt> is required (USDT staked per round) - ${BLITZ_USAGE}`);
+  if (o.maxLoss === null) throw new Error('--max-loss <usdt> is required (stop at this cumulative loss)');
+  if (o.takeProfit === null) throw new Error('--take-profit <usdt> is required (stop at this cumulative profit)');
+  const amountWei = parseAmount(o.amount, '--amount');
+  const maxLossWei = parseAmount(o.maxLoss, '--max-loss');
+  const takeProfitWei = parseAmount(o.takeProfit, '--take-profit');
+  slippageBips(o.slippage);
+  const maxRounds = Number(o.maxRounds);
+  if (!(Number.isInteger(maxRounds) && maxRounds >= 1)) throw new Error('--max-rounds must be a positive integer');
+  const interval = Number(o.interval);
+  if (!(Number.isFinite(interval) && interval >= 1)) throw new Error('--interval must be at least 1 second');
+  const idleTimeout = Number(o.idleTimeout);
+  if (!(Number.isFinite(idleTimeout) && idleTimeout >= 1)) throw new Error('--idle-timeout must be at least 1 second');
+  return { amount: o.amount, maxLoss: o.maxLoss, takeProfit: o.takeProfit, amountWei, maxLossWei, takeProfitWei, slippage: o.slippage, maxRounds, interval, idleTimeout, live: o.live };
+}
+
+// blitz CLI. deps (all optional, for tests): account, ctx (read-only chain context for assertChain / BNB / snapshot reads),
+// now, sleep, listRaces, snapshot, bet, claim, playRound, ensure42, ensureApproval, log, fetchImpl, state.
+export async function blitzMain(argv, deps = {}) {
+  const o = parseBlitzArgs(argv);
+  const live = o.live;
+  const log = deps.log ?? defaultLog;
+  const account = deps.account ?? loadAccount();
+  if (live && !account.canSign) {
+    throw new Error('--live needs the PIN to unlock the embedded key (pipe {"pin":"..."} on stdin); this run has no signer');
+  }
+  const rc = deps.ctx ?? makeContext({ live: false, account });   // read-only: discovery + snapshot reads are eth_calls
+  const now = deps.now ?? (() => Math.floor(Date.now() / 1000));
+  try {
+    await assertChain(rc);
+    if (live) {
+      const bnb = formatUnits(await rc.provider.getBalance(account.address), 18);
+      const status = bnbStatus(bnb);
+      if (status === 'none') throw new Error(`wallet ${account.address} has 0 BNB, so there is no gas to trade with - fund it with BNB first (bnb_status none)`);
+      if (status === 'low') log({ event: 'warn', message: `low BNB (${bnb}): each round costs gas, top up soon` });
+    }
+    let referralStatus = null;
+    let referralWarnings = [];
+    if (live) {
+      const ref = await (deps.ensure42 ?? ensureReferralBeforeTrade)({ state: deps.state ?? readState(), wallet: account.signer, env: deps.env, fetchImpl: deps.fetchImpl });
+      referralStatus = ref.referral;
+      referralWarnings = ref.warnings ?? [];
+    }
+    const listRaces = deps.listRaces ?? (() => listTokenRaces(deps.fetchImpl));
+    const snapshot = deps.snapshot ?? ((m) => marketSnapshot(rc.lens, m, now()));
+    const bet = deps.bet ?? ((a) => narrationToStderr(() => tradeRunBlitzBet({ ...a, account, live, approveMax: true })));
+    const claim = deps.claim ?? ((a) => narrationToStderr(() => tradeRunBlitzClaim({ ...a, account, live })));
+    const play = deps.playRound ?? ((opts) => blitzPlayRound({ now, sleep, snapshot, bet, claim }, opts));
+
+    log({
+      event: 'start', mode: live ? 'live' : 'dry-run', address: account.address,
+      amount: o.amount, max_loss: o.maxLoss, take_profit: o.takeProfit, slippage: o.slippage,
+      max_rounds: o.maxRounds, interval_s: o.interval, idle_timeout_s: o.idleTimeout,
+      ...(referralStatus ? { referral: referralStatus } : {}), ...(referralWarnings.length ? { referral_warnings: referralWarnings } : {}),
+    });
+
+    if (!live) {
+      const w = blitzWindow(now());
+      const round = chooseRound(await listRaces(), { now: now() });
+      if (!round) {
+        log({ event: 'plan', mode: 'dry-run', open: w.open, next_open: w.nextOpen, note: w.open
+          ? 'Token Race is open but no round is in range this instant - a live run would wait and retry'
+          : 'Token Race is CLOSED now (it trades daily 04:00-18:00 UTC); a live run would stop until the next open' });
+        return { stopped: 'dry-run' };
+      }
+      const snap = await snapshot(round.address);
+      const tokenId = pickAsset(snap.tokenIds, Math.random);
+      log({
+        event: 'plan', mode: 'dry-run', market: round.address, would_pick: assetName(tokenId), token_id: String(tokenId),
+        trading_start: Number(snap.timestampStart), amount: o.amount, max_loss: o.maxLoss, take_profit: o.takeProfit,
+        note: 'DRY RUN: nothing was sent. Re-run with --live to play for real. Pure random pick (~1/3), minus fees = negative expected value; --max-loss / --take-profit are the only control.',
+      });
+      return { stopped: 'dry-run' };
+    }
+
+    await (deps.ensureApproval ?? ((a) => narrationToStderr(() => ensureUsdtApproval({ ...a, account, live }))))({});
+    const summary = await runBlitzLoop(
+      { listRaces, playRound: play, now, sleep: deps.sleep ?? sleep, onEvent: (e) => log(e) },
+      { amount: o.amount, slippage: o.slippage, maxLossWei: o.maxLossWei, takeProfitWei: o.takeProfitWei, maxRounds: o.maxRounds, idleTimeoutSec: o.idleTimeout, pollMs: o.interval * 1000 },
+    );
+    return summary;
+  } finally {
+    rc.provider.destroy();
+  }
+}
+
+// Dispatch the daemon modes. `fast` farms volume; `take-profit` sells held positions at a target gain; `blitz` plays the
+// 30s Token Race. All are DRY unless --live and broadcast only through trade.mjs.
 export async function main(argv, deps = {}) {
   // A live run needs the PIN (stdin) to unlock the embedded signer; inject the unlocked account so fastMain/takeProfitMain
   // can sign. Dry runs (no --live) read nothing and stay read-only. deps.account (tests) short-circuits this.
@@ -404,6 +522,7 @@ export async function main(argv, deps = {}) {
       deps = { ...deps, account: guardedUnlock(state, pin, (s, p) => loadAccount(s, { pin: p }), { write: writeState }) };
     }
   }
+  if (argv[0] === 'blitz') return blitzMain(argv, deps);
   if (argv[0] === 'take-profit') return takeProfitMain(argv, deps);
   return fastMain(argv, deps);
 }

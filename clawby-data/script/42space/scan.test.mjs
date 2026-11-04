@@ -76,11 +76,11 @@ const MKT = addr(0x1001);
 
 // outcomes: [{ tokenId, price, supply }] (18-dec wei). pointCap = what each POINT.totalMarketCap reports: a bigint for all
 // outcomes, or (o, i) => bigint per outcome (default: the pool, i.e. the market-wide figure, identical for every outcome).
-function snapshotOf({ outcomes, pool = 0n, start = 1_000, end = 2_000, isFinalised = false, pointCap = pool }) {
+function snapshotOf({ outcomes, pool = 0n, start = 1_000, end = 2_000, isFinalised = false, answer = 0n, pointCap = pool }) {
   return {
     ots: outcomes.map((o, i) => point(o.tokenId, o.price, o.supply, typeof pointCap === 'function' ? pointCap(o, i) : pointCap, 0n)),
     deploy: { collateral: ZeroAddress, parentTokenId: 0n, questionId: ZeroHash, curve: ZeroAddress, timestampStart: start },
-    state: { market: ZeroAddress, curve: ZeroAddress, timestampStart: start, totalMarketCap: pool, treasury: ZeroAddress, numOutcomes: outcomes.length, timestampEnd: end, answer: 0n, isFinalised },
+    state: { market: ZeroAddress, curve: ZeroAddress, timestampStart: start, totalMarketCap: pool, treasury: ZeroAddress, numOutcomes: outcomes.length, timestampEnd: end, answer, isFinalised },
   };
 }
 const mintResult = (otToUser, cost = 0n) => decoded('simulateMint', [point(1n, 15n), point(1n, 16n),
@@ -289,6 +289,45 @@ test('listLiveMarkets uses the injected fetch only: with none given it would hit
   await assert.rejects(scan.listLiveMarkets(), /offline tests: real fetch attempted for https:\/\/rest\.ft\.42\.space\/api\/v1\/markets\?status=live&limit=500/);
 });
 
+// ------------------------------------------------------------------------------ listTokenRaces
+const RACES_URL = 'https://rest.ft.42.space/api/v1/token-races?limit=100';
+
+test('listTokenRaces: one GET of /token-races; returns [{address (checksummed), roundId, tradingStart, tradingEnd}] as Numbers; rows without a valid marketAddress are dropped', async () => {
+  const A = getAddress('0x' + 'ab'.repeat(20));
+  const f = restStub(res(200, {
+    data: [
+      { marketAddress: A.toLowerCase(), roundId: 5, tradingStart: 1000, tradingEnd: 1010, raceStart: 1010, raceEnd: 1030, symbols: ['BTC Win', 'ETH Win', 'SOL Win'], status: 'not_started' },
+      { marketAddress: 'bad', roundId: 6 },
+      { roundId: 7 },
+    ],
+    pagination: { hasMore: true },
+  }));
+  const out = await scan.listTokenRaces(f);
+  assert.deepEqual(out, [{ address: A, roundId: 5, tradingStart: 1000, tradingEnd: 1010 }]);
+  assert.notEqual(out[0].address, A.toLowerCase(), 'the lowercase REST address comes back checksummed');
+  for (const r of out) assert.deepEqual(Object.keys(r), ['address', 'roundId', 'tradingStart', 'tradingEnd']);
+  assert.equal(typeof out[0].tradingStart, 'number');
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].url, RACES_URL);
+  assert.equal(f.calls[0].init.method, 'GET');
+  assert.ok(f.calls[0].init.signal instanceof AbortSignal, 'a hung REST must time out, not hang the daemon');
+  assert.equal(scan.TOKEN_RACES_URL, RACES_URL);
+});
+
+test('listTokenRaces: string epoch fields are coerced to Number; an empty list is []; a bare-array body is accepted', async () => {
+  assert.deepEqual(await scan.listTokenRaces(restStub(res(200, { data: [] }))), []);
+  const A = addr(0x7001);
+  const out = await scan.listTokenRaces(restStub(res(200, [{ marketAddress: A, roundId: '1', tradingStart: '1700000000', tradingEnd: '1700000010' }])));
+  assert.deepEqual(out, [{ address: A, roundId: 1, tradingStart: 1700000000, tradingEnd: 1700000010 }]);
+});
+
+test('listTokenRaces: an HTTP error or a body without a races list is an error (never a silent "none scheduled"); no injected fetch hits the tripwire', async () => {
+  await assert.rejects(scan.listTokenRaces(restStub(res(503, {}))), /42 REST token-races HTTP 503/);
+  await assert.rejects(scan.listTokenRaces(restStub(res(200, { error: 'nope' }))), /unexpected response/);
+  await assert.rejects(scan.listTokenRaces(restStub(res(200, null))), /unexpected response/);
+  await assert.rejects(scan.listTokenRaces(), /offline tests: real fetch attempted for https:\/\/rest\.ft\.42\.space\/api\/v1\/token-races\?limit=100/);
+});
+
 // ------------------------------------------------------------------------------ marketSnapshot
 const cents = (n) => BigInt(n) * 10n ** 16n;       // 0.01 units in 18-dec wei
 
@@ -332,8 +371,12 @@ test('marketSnapshot: one snapshotMarket.staticCall; ots -> outcomes {tokenId, p
     pool: 200n * WAD,
     elapsedPct: 50,                                                               // a mid-life market
     isFinalised: false,
+    timestampStart: 1_000,
+    timestampEnd: 2_000,
+    answer: 0n,
+    tokenIds: [1n, 2n, 4n],
   });
-  assert.deepEqual(Object.keys(snap), ['outcomes', 'pool', 'elapsedPct', 'isFinalised']);
+  assert.deepEqual(Object.keys(snap), ['outcomes', 'pool', 'elapsedPct', 'isFinalised', 'timestampStart', 'timestampEnd', 'answer', 'tokenIds']);
   for (const o of snap.outcomes) assert.deepEqual(Object.keys(o), ['tokenId', 'price', 'marketCap']);
   assert.deepEqual(lens.calls.snapshot, [MKT], 'exactly one snapshotMarket.staticCall, with the market address');
   assert.deepEqual([lens.calls.mint.length, lens.calls.redeem.length], [0, 0]);
@@ -397,6 +440,23 @@ test('marketSnapshot: an outcome\'s marketCap is ITS OWN price x supply - never 
 test('marketSnapshot propagates a Lens failure (the caller decides to skip that market)', async () => {
   const lens = fakeLens({ [MKT]: { snapshot: new Error('boom: RouterInvalidMarket()') } });
   await assert.rejects(scan.marketSnapshot(lens, MKT, 1_500), /boom: RouterInvalidMarket\(\)/);
+});
+
+test('marketSnapshot also exposes the on-chain race window + result (additive): timestampStart, timestampEnd, answer, tokenIds - existing fields untouched', async () => {
+  const outcomes = [{ tokenId: 1n, price: cents(1), supply: WAD }, { tokenId: 2n, price: cents(2), supply: WAD }, { tokenId: 4n, price: cents(1), supply: WAD }];
+  const lens = fakeLens({ [MKT]: { snapshot: snapshotOf({ outcomes, pool: 3n * WAD, start: 1_700, end: 1_710, answer: 2n, isFinalised: true }) } });
+  const snap = await scan.marketSnapshot(lens, MKT, 1_705);
+  assert.equal(snap.timestampStart, 1_700);
+  assert.equal(snap.timestampEnd, 1_710);
+  assert.equal(snap.answer, 2n);
+  assert.equal(typeof snap.answer, 'bigint');
+  assert.deepEqual(snap.tokenIds, [1n, 2n, 4n]);
+  assert.equal(typeof snap.timestampStart, 'number');
+  // additive only: the fields the scan/daemon already rely on are unchanged
+  assert.equal(snap.isFinalised, true);
+  assert.equal(snap.pool, 3n * WAD);
+  assert.equal(snap.outcomes.length, 3);
+  assert.equal(snap.elapsedPct, 50);
 });
 
 // ------------------------------------------------------------------------------ scanMarkets

@@ -33,6 +33,27 @@ export async function listLiveMarkets(fetchImpl = fetch) {
   return out;
 }
 
+// Blitz / Token Race rounds, for DISCOVERY only (which per-round market contracts exist + the rough schedule). Mirrors
+// listLiveMarkets: no key, no on-chain numbers. REST `status`/timestamps can lag — the authoritative window / result are read
+// on chain (marketSnapshot). `tradingStart`/`tradingEnd` are a cheap hint used to pick the next candidate round to confirm on chain.
+export const TOKEN_RACES_URL = 'https://rest.ft.42.space/api/v1/token-races?limit=100';
+export async function listTokenRaces(fetchImpl = fetch) {
+  const res = await fetchImpl(TOKEN_RACES_URL, {
+    method: 'GET', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(REST_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error('42 REST token-races HTTP ' + res.status);
+  const body = await res.json();
+  const items = Array.isArray(body) ? body : body?.data;
+  if (!Array.isArray(items)) throw new Error('42 REST token-races: unexpected response (no data array)');
+  const out = [];
+  for (const m of items) {
+    const a = m?.marketAddress;                      // token-races keys the round market as `marketAddress` (markets uses `address`)
+    if (typeof a !== 'string' || !ADDRESS_RE.test(a) || !isAddress(a)) continue;
+    out.push({ address: getAddress(a.toLowerCase()), roundId: Number(m.roundId), tradingStart: Number(m.tradingStart), tradingEnd: Number(m.tradingEnd) });
+  }
+  return out;
+}
+
 // ------------------------------------------------------------------------------------ on-chain market state (Lens)
 const WAD = 10n ** 18n;
 
@@ -55,7 +76,12 @@ export async function marketSnapshot(lens, address, now = Math.floor(Date.now() 
   const end = Number(snap.state.timestampEnd);
   // a window with end <= start can never be live (trade.mjs isLive is false for it): report it as fully elapsed
   const elapsed = end > start ? Math.min(1, Math.max(0, (now - start) / (end - start))) : 1;
-  return { outcomes, pool: snap.state.totalMarketCap, elapsedPct: elapsed * 100, isFinalised: snap.state.isFinalised };
+  // timestampStart/timestampEnd/answer are additive for Blitz (the on-chain trading window + the resolved winning tokenId);
+  // tokenIds is every outcome's id. Existing consumers (scanMarkets / fast) read only outcomes/pool/elapsedPct/isFinalised.
+  return {
+    outcomes, pool: snap.state.totalMarketCap, elapsedPct: elapsed * 100, isFinalised: snap.state.isFinalised,
+    timestampStart: start, timestampEnd: end, answer: snap.state.answer, tokenIds: snap.ots.map((o) => o.tokenId),
+  };
 }
 
 // The outcome with the highest marketCap. Compared as BigInt (caps are 18-dec wei, far past 2^53), the FIRST of equal caps wins

@@ -169,7 +169,7 @@ Everything above is **read-only data**. To **place trades**, use the connectors 
 
 ## 42.space automated trading (script/42space/)
 
-When the user says **"42space"**, read `script/42space/README.md` — the full host-agent playbook — and follow it. It automates prediction-market trading on 42.space (BNB Smart Chain): wallet-only login (import mnemonic · create a wallet · BN AI wallet/baw) → balance check → silent Clawby identity (API key + free Identity SBT) → one of three trading modes. Runs **locally** (needs Node ≥18 + ethers — `cd script/42space && npm install`; run the commands from that folder); wallet secrets stay in `local/42space.json` (chmod 600), never routed through Clawby.
+When the user says **"42space"**, read `script/42space/README.md` — the full host-agent playbook — and follow it. It automates prediction-market trading on 42.space (BNB Smart Chain): wallet-only login (import mnemonic · create a wallet · BN AI wallet/baw) → balance check → silent Clawby identity (API key + free Identity SBT) → one of three trade modes (fast 刷量 · AI one-shot · **Blitz** 30s BTC/ETH/SOL race; claiming settled wins is a separate step). Runs **locally** (needs Node ≥18 + ethers — `cd script/42space && npm install`; run the commands from that folder); wallet secrets stay in `local/42space.json` (chmod 600), never routed through Clawby.
 
 | Step | Commands |
 |---|---|
@@ -177,11 +177,12 @@ When the user says **"42space"**, read `script/42space/README.md` — the full h
 | Balance | `node 42space.mjs balance` → `{address, usdt, bnb, needs_funding, bnb_status}` — USDT ≤ 10 → deposit USDT (BSC only); **`bnb_status` `none` = 0 BNB → stop and wait for BNB, never trade** |
 | Identity (silent) | `{"pin"}`\|`node 42space.mjs identity --pin-stdin` (or `--dry-run` to preview, no PIN) — Clawby key (`CLAWBY_API_KEY` env wins, else fetched with the embedded wallet, needs the PIN) + **auto-mints** the free Identity SBT when missing (needs the PIN to sign + BNB, else skipped) + **re-checks the 42 invite bind** (idempotent backstop); `key_ok: false` blocks the AI modes |
 | Points / stats / daily / report | `points` → `{rank, points, total_traders}` · `stats` → `{pnl, winRate, totalVolume, tradeCount, buyVolume, sellVolume, …}` · `daily [--days N]` → per-day `{date, pnl, volume}` · **`report`** → composed numbers **+ a `card`** (ready-to-show text). **用户说「查看我的 42 交易报告」→ 跑 `report`、把 `card` 原样展示给他**(积分/总盈亏/今日/近7日,方便截图)。全部公开只读,无 key/PIN,`--address 0x…` 可查任意地址 |
-| **Every `--live` run** | pipe the PIN: `{"pin"}`\|`node daemon.mjs fast … --live` (and `take-profit --live`, `claim-settled --live --pin-stdin`, `trade.mjs … --live`). Gas is **Setup A** (embedded wallet pays its own BNB; 42's USDT-paymaster/gas-sponsor path is not wired here) |
+| **Every `--live` run** | pipe the PIN: `{"pin"}`\|`node daemon.mjs fast … --live` (and `take-profit --live`, `blitz --live`, `claim-settled --live --pin-stdin`, `trade.mjs … --live`). Gas is **Setup A** (embedded wallet pays its own BNB; 42's USDT-paymaster/gas-sponsor path is not wired here) |
 | **Fast mode** — volume farming, no LLM | `node daemon.mjs fast --amount 1 --target <volume> [--slippage 3] [--approve-max] [--live]` — cheapest market under 3% round-trip cost, atomic buy+sell, until the target volume |
 | **AI one-shot** — you do the reasoning | `node 42space.mjs ai-data --market <42.space link or 0x address>` (or `--all [--fields a,b]`) → pick with the README's win-rate rubric → `node trade.mjs buy <market> <tokenId> 5` (dry first, then add `--live`) → `node trade.mjs set-operator <market> --live` → hold |
 | **Take-profit** — auto-exit at +X% | `node daemon.mjs take-profit [--pct 50] [--interval 30] [--live]` — watch the positions a live `buy` recorded and sell each once it is up ≥ X% (default 50) instead of holding to settlement; DRY without `--live` |
-| **Claim** settled wins | `node 42space.mjs claim-settled [--live]` |
+| **Blitz** — 30s Token Race, random BTC/ETH/SOL | `node daemon.mjs blitz --amount <usdt> --max-loss <usdt> --take-profit <usdt> [--slippage 10] [--max-rounds 500] [--interval 4] [--idle-timeout 600] [--live]` — each round bets a **random** one of BTC/ETH/SOL; stops on cumulative stop-loss / take-profit. Pure random = negative EV, the gates are the only control. Trades daily 04:00–18:00 UTC |
+| **Claim** settled wins (not a trade mode) | `node 42space.mjs claim-settled [--live]` |
 | Manual on-chain | `node trade.mjs` `quote` / `buy` / `sell` / `roundtrip` / `set-operator` / `claim` / `status` |
 
 Everything is **DRY unless `--live`**: run the dry command first, show the user the quoted numbers, and get their go-ahead before any `--live`. AI picks put real money at risk, and a market's price is **not** a probability.

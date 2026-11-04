@@ -143,6 +143,9 @@ export const MARKET_ABI = [
   'function approve(address spender, uint256 id, uint256 amount) returns (bool)',
   'function isOperator(address owner, address spender) view returns (bool)',
   'function setOperator(address spender, bool approved) returns (bool)',
+  // FTMarketV2 direct claim (references/market-v2-abi.json, selector 0x63d05442): pays the held winning OT out as USDT, called
+  // straight on the market - needs NO operator grant (unlike Router.claimAllSimple). Used by the Blitz mode's per-round claim.
+  'function claim(address receiver, uint256[] tokenIds, uint256[] otToBurn) returns (uint256 payout)',
 ];
 const CURVE_ABI = ['function tick() view returns (uint256)'];
 // Custom errors that can surface from Router / Market / Lens / Curve, so reverts print by name.
@@ -688,6 +691,15 @@ export function buildSetOperatorStep(market) {
     note: 'grants the router operator rights over ALL tokenIds of this market - needed before claim (or sell) can pull your OT; revoke with setOperator(router, false)' };
 }
 
+// Pure (no network): a Blitz claim step. FTMarketV2.claim(receiver, tokenIds[], otToBurn[]) pays the winning OT out as USDT,
+// called DIRECTLY on the market contract (selector 0x63d05442) - unlike Router.claimAllSimple it needs NO operator grant, which
+// is what makes it right for Blitz's one-off per-round markets. No integrator, no fee.
+export function buildBlitzClaimStep(market, receiver, tokenId, otAmount) {
+  return { kind: 'claim', label: 'Market.claim  (BLITZ claim winnings)', to: market, value: 0n, gasMulPct: 150n, gasFloor: SWAP_GAS_FLOOR,
+    data: marketIface.encodeFunctionData('claim', [receiver, [tokenId], [otAmount]]),
+    note: 'direct market.claim(receiver, [tokenId], [otToBurn]) - pays the winning OT out as USDT to the wallet; no router, no operator needed' };
+}
+
 // ------------------------------------------------------------------------------------ printing
 function printBuyQuote(p, bips, usdtStr) {
   const { q, minOut } = p;
@@ -1140,6 +1152,77 @@ export async function readPositionValue(c, market, tokenId) {
   if (bal <= 0n) return { finalised: false, bal: 0n, usdtOut: 0n };
   const q = await quoteSell(c, market, tokenId, bal);
   return { finalised: false, bal, usdtOut: q.usdtToUser };
+}
+
+// ------------------------------------------------------------------------------- blitz primitives (bet / claim / approve)
+// Approve USDT to the Router for the max ONCE at the start of a blitz session, so every round's mint is a single tx and no
+// approval is ever needed inside the 10s window. A no-op when the allowance is already (near-)max. Builds its own context
+// (released in finally). `makeCtx` is the test seam. -> { approved, allowance, txs } (+ would_approve on a dry run).
+export async function ensureUsdtApproval({ live = false, rpcUrl, account } = {}, { makeCtx = makeContext } = {}) {
+  const isLive = live === true;
+  const c = makeCtx({ live: isLive, account, rpcUrl });
+  const alreadySent = c.sent.length;
+  try {
+    const allowance = await c.usdt.allowance(c.address, ROUTER);
+    if (allowance >= MaxUint256 / 2n) return { approved: false, allowance, txs: [] };
+    const step = { kind: 'approve', to: USDT, value: 0n, gasMulPct: 120n, ...usdtApprove(allowance, 0n, true) };
+    if (!c.live) return { approved: false, allowance, would_approve: true, txs: [] };
+    await sendStep(c, step, new Set([USDT]));
+    return { approved: true, allowance, txs: c.sent.slice(alreadySent) };
+  } catch (e) { noteSent(c, e); throw e; } finally { c.provider.destroy(); }
+}
+
+// One Blitz bet for the daemon (not the CLI): a Router.swap mint of `usdt` USDT on `market`'s outcome `tokenId`, the SAME
+// primitive planBuy builds. Builds its own context (released in finally), quotes + builds the swap, and - only when live -
+// broadcasts it (USDT must already be approved; blitz pre-approves once, so this is a single tx). The 10s trading window is the
+// ORCHESTRATOR's job (blitz.mjs waits for it); if it closed mid-send, sendStep's pre-send estimate reverts (MarketEnded) and
+// nothing is broadcast. No readMarket / curve read (a mint needs neither), to stay fast inside the window. `makeCtx` is the test
+// seam. -> { market, tokenId, otToUser, costFromUser, minOut, traded, txs, steps }.
+export async function runBlitzBet(
+  { market, tokenId, usdt, slippage = DEFAULT_SLIPPAGE_PCT, approveMax = false, live = false, rpcUrl, account } = {},
+  { makeCtx = makeContext } = {},
+) {
+  const m = parseMarket(market);
+  const tid = parseTokenId(tokenId);
+  const bips = slippageBips(slippage);
+  if (usdt == null) throw new Error('runBlitzBet needs an explicit usdt amount (there is no default spend)');
+  const usdtStr = String(usdt);
+  const isLive = live === true;
+  const c = makeCtx({ live: isLive, account, rpcUrl });
+  const alreadySent = c.sent.length;
+  try {
+    const p = await planBuy(c, { market: m, tokenId: tid, usdtStr, bips, approveMax });
+    if (c.live) {
+      const allowed = new Set([USDT, ROUTER]);
+      for (const s of p.steps) await sendStep(c, s, allowed);
+    }
+    return { market: m, tokenId: tid, otToUser: p.q.otToUser, costFromUser: p.q.costFromUser, minOut: p.minOut, traded: c.live, txs: c.sent.slice(alreadySent), steps: p.steps.map((s) => s.label) };
+  } catch (e) { noteSent(c, e); throw e; } finally { c.provider.destroy(); }
+}
+
+// Collect a won Blitz position: reads the wallet's OT balance of (market, tokenId); nothing held -> nothing to claim. When live,
+// broadcasts the direct Market.claim and measures the USDT payout as the wallet's balance delta across it (claim's return value
+// is not readable from a sent tx without log decoding; the delta is exact and simpler). Builds its own context. `makeCtx` is the
+// test seam. -> { claimed, payout, txs } (+ would_claim:true on a dry run with a held balance).
+export async function runBlitzClaim(
+  { market, tokenId, live = false, rpcUrl, account } = {},
+  { makeCtx = makeContext } = {},
+) {
+  const m = parseMarket(market);
+  const tid = parseTokenId(tokenId);
+  const isLive = live === true;
+  const c = makeCtx({ live: isLive, account, rpcUrl });
+  const alreadySent = c.sent.length;
+  try {
+    const bal = await c.marketAt(m).balanceOf(c.address, tid);
+    if (bal <= 0n) return { claimed: false, payout: 0n, txs: [] };
+    const step = buildBlitzClaimStep(m, c.address, tid, bal);
+    if (!c.live) return { claimed: false, payout: 0n, txs: [], would_claim: true };
+    const before = await c.usdt.balanceOf(c.address);
+    await sendStep(c, step, new Set([m]));
+    const after = await c.usdt.balanceOf(c.address);
+    return { claimed: true, payout: after - before, txs: c.sent.slice(alreadySent) };
+  } catch (e) { noteSent(c, e); throw e; } finally { c.provider.destroy(); }
 }
 
 async function cmdClaim(c, opts, rest) {

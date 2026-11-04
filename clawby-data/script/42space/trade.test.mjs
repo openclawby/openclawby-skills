@@ -13,6 +13,7 @@ import {
   parseAmount, parseTokenId, parseMarket, explainError, parseArgs, resolveClaimTarget,
   loadAccount, makeContext, buildClaimStep, planClaim, claimRevertHint, sendStep, wantsLive, main,
   buildRoundtripMulticall, planRoundtrip, roundtripOutlook, printRoundtripQuote, planBuy, planSell, decodeForDisplay, gasUnitsFor,
+  runBlitzBet, runBlitzClaim, buildBlitzClaimStep, ensureUsdtApproval,
 } from './trade.mjs';
 import { writeState, DEFAULT_RPC } from './lib.mjs';
 import { encryptKey } from './vault.mjs';
@@ -814,6 +815,84 @@ test('sendStep on the roundtrip step: allow-listed targets only, value 0, gas li
   assert.deepEqual(c2.sent, ['0xfeed']);
 });
 
+// ------------------------------------------------------------------------------ blitz primitives (bet / claim / approve)
+const mktIface = new Interface(MARKET_ABI);
+// A fuller offline ctx than stubCtx: adds a fake signer + sent[] so the live broadcast path of the blitz primitives runs with no
+// network. usdt.balanceOf returns usdtBefore until the first tx is sent, then usdtAfter (so a claim's payout = the delta).
+function blitzCtx({ allowance = 0n, otToUser = OT_QUOTE, costFromUser = 10n ** 18n, bal = 0n, usdtBefore = 0n, usdtAfter = 0n, live = true } = {}) {
+  const sent = [];
+  const sendArgs = [];
+  const q = (price) => ({ price });
+  const c = {
+    live, address: ADDR, sent, sendArgs,
+    provider: { destroy() {} },
+    signer: { estimateGas: async () => 500_000n,
+      sendTransaction: async (tx) => { sendArgs.push(tx); const h = '0x' + (sent.length + 1).toString(16).padStart(4, '0'); sent.push(h); return { hash: h, wait: async () => ({ status: 1, blockNumber: 1, gasUsed: 1n }) }; } },
+    lens: {
+      simulateMint: { staticCall: async () => ({ pre: q(1n), post: q(1n), quote: { collateralFromUser: costFromUser, collateralToTreasury: 0n, collateralToIntegrator: 0n, otToUser } }) },
+      simulateRedeem: { staticCall: async () => ({ pre: q(1n), post: q(1n), quote: { collateralToUser: 0n, collateralToTreasury: 0n, collateralToIntegrator: 0n, otFromUser: 0n, collateralMintValue: 0n } }) },
+    },
+    usdt: { allowance: async () => allowance, balanceOf: async () => (sent.length === 0 ? usdtBefore : usdtAfter) },
+    marketAt: () => ({ balanceOf: async () => bal, isOperator: async () => false, allowance: async () => 0n }),
+  };
+  return { c, makeCtx: (o = {}) => ({ ...c, live: o.live === true }), sendArgs, sent };
+}
+
+test('buildBlitzClaimStep: direct Market.claim(receiver, [tokenId], [otToBurn]) to the MARKET (no router, no operator), selector 0x63d05442, value 0', () => {
+  const step = buildBlitzClaimStep(MKT, ADDR, 2n, 99n * 10n ** 17n);
+  assert.equal(step.kind, 'claim');
+  assert.equal(step.to, MKT);
+  assert.equal(step.value, 0n);
+  assert.equal(step.data.slice(0, 10), '0x63d05442');
+  assert.equal(step.data.slice(0, 10), id('claim(address,uint256[],uint256[])').slice(0, 10));
+  const d = mktIface.decodeFunctionData('claim', step.data);
+  assert.equal(d.receiver, ADDR);
+  assert.deepEqual([...d.tokenIds], [2n]);
+  assert.deepEqual([...d.otToBurn], [99n * 10n ** 17n]);
+});
+
+test('runBlitzBet: live sends exactly the Router.swap mint (pre-approved -> one step) and returns the quoted otToUser; dry sends nothing', async () => {
+  const live = blitzCtx({ allowance: MaxUint256, otToUser: 50n * 10n ** 18n });
+  const r = await runBlitzBet({ market: MKT, tokenId: 2n, usdt: '1', slippage: '10', account: {}, live: true }, { makeCtx: live.makeCtx });
+  assert.equal(r.traded, true);
+  assert.equal(r.otToUser, 50n * 10n ** 18n);
+  assert.equal(live.sendArgs.length, 1);
+  assert.equal(live.sendArgs[0].to, ROUTER);
+  const swap = routerI.decodeFunctionData('swap', live.sendArgs[0].data);
+  assert.deepEqual([swap.market, swap.tokenId, swap.params.isMint, swap.params.isExactIn], [MKT, 2n, true, true]);
+  assert.equal(swap.params.minOutOrMaxIn, applySlippage(50n * 10n ** 18n, slippageBips('10')));   // 10% slippage off the quote
+  const dry = blitzCtx({ allowance: MaxUint256 });
+  const rd = await runBlitzBet({ market: MKT, tokenId: 2n, usdt: '1', slippage: '10', account: {}, live: false }, { makeCtx: dry.makeCtx });
+  assert.equal(rd.traded, false);
+  assert.equal(dry.sendArgs.length, 0);
+});
+
+test('runBlitzClaim: bal 0 -> {claimed:false, payout:0}, sends nothing; bal>0 live -> one Market.claim tx, payout = USDT balance delta', async () => {
+  const none = blitzCtx({ bal: 0n });
+  assert.deepEqual(await runBlitzClaim({ market: MKT, tokenId: 2n, account: {}, live: true }, { makeCtx: none.makeCtx }), { claimed: false, payout: 0n, txs: [] });
+  assert.equal(none.sendArgs.length, 0);
+  const win = blitzCtx({ bal: 99n * 10n ** 17n, usdtBefore: 10n ** 19n, usdtAfter: 1242n * 10n ** 16n });   // +2.42 USDT
+  const r = await runBlitzClaim({ market: MKT, tokenId: 2n, account: {}, live: true }, { makeCtx: win.makeCtx });
+  assert.equal(r.claimed, true);
+  assert.equal(r.payout, 242n * 10n ** 16n);
+  assert.equal(win.sendArgs.length, 1);
+  assert.equal(win.sendArgs[0].to, MKT);
+  assert.equal(win.sendArgs[0].data.slice(0, 10), '0x63d05442');
+});
+
+test('ensureUsdtApproval: short allowance -> one MaxUint256 approve to USDT; already (near-)max -> no-op', async () => {
+  const lo = blitzCtx({ allowance: 0n });
+  const r = await ensureUsdtApproval({ account: {}, live: true }, { makeCtx: lo.makeCtx });
+  assert.equal(r.approved, true);
+  assert.equal(lo.sendArgs.length, 1);
+  assert.equal(lo.sendArgs[0].to, USDT);
+  assert.equal(erc20I.decodeFunctionData('approve', lo.sendArgs[0].data).amount, MaxUint256);
+  const hi = blitzCtx({ allowance: MaxUint256 });
+  const r2 = await ensureUsdtApproval({ account: {}, live: true }, { makeCtx: hi.makeCtx });
+  assert.equal(r2.approved, false);
+  assert.equal(hi.sendArgs.length, 0);
+});
+
 test('gasUnitsFor: the BNB budget reserves two swaps for a roundtrip (it must not fall into the cheap approve bucket)', () => {
   assert.equal(gasUnitsFor({ kind: 'approve' }), 120_000n);
   assert.equal(gasUnitsFor({ kind: 'swap' }), 1_500_000n);
@@ -1303,7 +1382,7 @@ test('static scan: cmdRoundtrip and runRoundtrip share ONE execution path (execu
     assert.ok(from > 0 && to > from, `${a} .. ${b}`);
     return src.slice(from, to);
   };
-  const section = slice('async function cmdRoundtrip', 'async function cmdClaim');
+  const section = slice('async function cmdRoundtrip', 'export async function runSell');
   assert.equal([...section.matchAll(/await sendStep\(/g)].length, 1, 'one send site for the whole roundtrip section');
   const exec = slice('async function executeRoundtrip', 'export async function runRoundtrip');
   assert.match(exec, /await sendStep\(c, s, allowed\)/);
@@ -1311,7 +1390,7 @@ test('static scan: cmdRoundtrip and runRoundtrip share ONE execution path (execu
   const cmd = slice('async function cmdRoundtrip', 'async function executeRoundtrip');
   assert.match(cmd, /await executeRoundtrip\(c, t, p, before\)/);
   assert.ok(cmd.indexOf('if (!c.live) {') > 0 && cmd.indexOf('if (!c.live) {') < cmd.indexOf('await executeRoundtrip('), 'cmdRoundtrip returns from the dry run before it executes anything');
-  const run = slice('export async function runRoundtrip', 'async function cmdClaim');
+  const run = slice('export async function runRoundtrip', 'export async function runSell');
   assert.match(run, /if \(c\.live\) await executeRoundtrip\(c, t, p, before\)/);
   assert.match(run, /const isLive = live === true;/);
   assert.match(run, /makeCtx\(\{ live: isLive, account, rpcUrl \}\)/);
