@@ -815,6 +815,43 @@ test('sendStep on the roundtrip step: allow-listed targets only, value 0, gas li
   assert.deepEqual(c2.sent, ['0xfeed']);
 });
 
+// ------------------------------------------------------------------------------ baw execution backend (dispatch)
+test('loadAccount: a baw login is isBaw (no local signer; a normal login is not baw)', () => {
+  const a = loadAccount({ method: 'baw', address: ADDR });
+  assert.equal(a.isBaw, true);
+  assert.equal(a.canSign, false);
+  assert.equal(a.signer, null);
+  assert.equal(a.address, ADDR);
+  assert.equal(loadAccount({ method: 'email', address: ADDR }).isBaw, false);
+});
+
+test('makeContext: a baw account gives a baw ctx (exec:"baw", bawExec wired) and a --live run is NOT refused for having no signer', () => {
+  const account = { address: ADDR, signer: null, canSign: false, isBaw: true, method: 'baw', rpc: DEFAULT_RPC };
+  const fake = async () => ({ hash: '0x', status: 'BROADCASTED' });
+  const c = makeContext({ live: true, account, bawExec: fake });
+  try {
+    assert.equal(c.exec, 'baw');
+    assert.equal(c.bawExec, fake);
+    assert.equal(c.signer, null);
+  } finally { c.provider.destroy(); }
+  assert.throws(() => makeContext({ live: true, account: { address: ADDR, signer: null, canSign: false, isBaw: false, method: 'email', rpc: DEFAULT_RPC } }), /no signer|PIN/);
+});
+
+test('sendStep: a baw ctx routes to bawExec (from/to/value/data), records the hash, and still enforces live + value-0 + allow-list', async () => {
+  let got = null;
+  const bawExec = async (x) => { got = x; return { hash: '0xbaw1', status: 'BROADCASTED' }; };
+  const ctx = (over = {}) => ({ live: true, exec: 'baw', address: ADDR, sent: [], bawExec, ...over });
+  const step = { kind: 'swap', to: ROUTER, value: 0n, data: '0xfeed' };
+  const c = ctx();
+  const r = await sendStep(c, step, new Set([ROUTER]));
+  assert.deepEqual(got, { from: ADDR, to: ROUTER, value: 0n, data: '0xfeed' });
+  assert.deepEqual(c.sent, ['0xbaw1']);
+  assert.equal(r.hash, '0xbaw1');
+  await assert.rejects(sendStep(ctx(), step, new Set([USDT])), /unexpected target/);
+  await assert.rejects(sendStep(ctx(), { ...step, value: 1n }, new Set([ROUTER])), /non-zero value/);
+  await assert.rejects(sendStep(ctx({ live: false }), step, new Set([ROUTER])), /without --live/);
+});
+
 // ------------------------------------------------------------------------------ blitz primitives (bet / claim / approve)
 const mktIface = new Interface(MARKET_ABI);
 // A fuller offline ctx than stubCtx: adds a fake signer + sent[] so the live broadcast path of the blitz primitives runs with no
@@ -1120,6 +1157,19 @@ test('main: claim and roundtrip are known commands; with no login they stop at "
   await assert.rejects(main(['roundtrip']), /not logged in/);
   await assert.rejects(main(['roundtrip', '--live']), /not logged in/);   // --live cannot get past the missing login either
   await assert.rejects(main(['bogus']), /unknown command "bogus"/);
+});
+
+test('main --live with a baw login in STATE reads NO PIN from stdin (a baw login signs in the Binance App, not via a vault PIN)', async () => {
+  withTempState();
+  writeState({ method: 'baw', address: ADDR });
+  const prevRpc = process.env.BSC_RPC;
+  process.env.BSC_RPC = 'http://127.0.0.1:1';   // dead RPC: assertChain fails fast, BEFORE any baw contract-call (never spawns baw)
+  let err;
+  try {
+    await main(['claim', MKT, '1', '--live'], { stdin: '' });   // stdin:'' would throw /stdin/ if a PIN were read
+  } catch (e) { err = e; } finally { process.env.BSC_RPC = prevRpc; }
+  assert.ok(err, 'a baw --live claim still fails here (no live RPC), but...');
+  assert.doesNotMatch(err.message, /pin|stdin/i, '...NOT with a PIN/stdin prompt — a baw login reads no PIN');
 });
 
 test('main --help documents --approve-max: opt-in MaxUint256 USDT approval for buy / roundtrip, default exact-amount', async () => {

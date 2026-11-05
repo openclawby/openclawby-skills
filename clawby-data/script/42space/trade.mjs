@@ -90,6 +90,7 @@ import {
 import { readState, writeState, DEFAULT_RPC } from './lib.mjs';
 import { decryptKey, hasVault, guardedUnlock } from './vault.mjs';
 import { recordPosition } from './positions.mjs';
+import { bawSend } from './bawexec.mjs';
 
 // ------------------------------------------------------------------------------------ constants
 export const CHAIN_ID = 56;
@@ -326,7 +327,7 @@ export function loadAccount(state = readState(), { pin } = {}) {
     if (w.address !== address) throw new Error('vault address does not match the logged-in account - refusing to continue');
     signer = w;
   }
-  return { address, signer, canSign: signer !== null, method: state.method ?? null, rpc: state.rpc || DEFAULT_RPC };
+  return { address, signer, canSign: signer !== null, isBaw: state.method === 'baw', method: state.method ?? null, rpc: state.rpc || DEFAULT_RPC };
 }
 
 // Read {"pin":"..."} from stdin (for a --live run). `raw` is a test seam; without it a pipe is required (a TTY would hang).
@@ -343,9 +344,10 @@ export async function readPinJson(raw) {
 
 // -------------------------------------------------------------------------------------- context
 // rpc precedence: explicit rpcUrl > BSC_RPC env > the account's state "rpc" (> the public default).
-export function makeContext({ live = false, account = loadAccount(), rpcUrl } = {}) {
-  // Checked before anything is built: a live run needs a local key (baw logins are read-only here).
-  if (live && !account.canSign) {
+export function makeContext({ live = false, account = loadAccount(), rpcUrl, bawExec } = {}) {
+  // Checked before anything is built: a live run needs either a PIN-unlocked local key OR a baw login (which signs in the
+  // Binance App through `baw contract-call`). A baw ctx has no local signer; it broadcasts through c.bawExec instead.
+  if (live && !(account.canSign || account.isBaw)) {
     throw new Error('a --live run needs the PIN to unlock the embedded key (pipe {"pin":"..."} on stdin); this run has no signer');
   }
   const url = rpcUrl || process.env.BSC_RPC || account.rpc || DEFAULT_RPC;
@@ -362,6 +364,8 @@ export function makeContext({ live = false, account = loadAccount(), rpcUrl } = 
   return {
     live, provider, signer, address: account.address, method: account.method, rpcHost,
     sent: [],                                   // hashes broadcast during this run (for failure reporting)
+    exec: account.isBaw ? 'baw' : undefined,    // a baw ctx broadcasts via bawExec (Binance App) instead of a local signer
+    bawExec: account.isBaw ? (bawExec ?? bawSend) : undefined,
     router: new Contract(ROUTER, ROUTER_ABI, provider),
     lens: new Contract(LENS, LENS_ABI, provider),
     usdt: new Contract(USDT, ERC20_ABI, provider),
@@ -826,9 +830,17 @@ async function printSteps(c, steps, { preflight }) {
 // The ONLY place in this file that broadcasts a transaction. Requires --live (and therefore a connected signer).
 // Exported so the unit tests can assert that it refuses (before any RPC call) when not live / wrong target / value.
 export async function sendStep(c, step, allowedTargets) {
-  if (!c.live || !c.signer) throw new Error('internal safety stop: broadcast attempted without --live');
+  if (!c.live || (!c.signer && c.exec !== 'baw')) throw new Error('internal safety stop: broadcast attempted without --live');
   if (step.value !== 0n) throw new Error('internal safety stop: unexpected non-zero value');
   if (!allowedTargets.has(step.to)) throw new Error(`internal safety stop: unexpected target ${step.to}`);
+  // baw backend: the same gated step, broadcast through `baw contract-call` (preview+execute in bawSend) instead of a local
+  // signer. The gates above (live / value-0 / allow-list) have already run, so a baw send obeys the identical safety envelope.
+  if (c.exec === 'baw') {
+    const r = await c.bawExec({ from: c.address, to: step.to, value: step.value, data: step.data });
+    c.sent.push(r.hash);
+    console.log(`  SENT (baw) tx ${r.hash}`);
+    return r;
+  }
   let est;
   try {
     est = await c.signer.estimateGas({ to: step.to, data: step.data, value: 0n });
@@ -1366,7 +1378,10 @@ export async function main(argv, { stdin } = {}) {
   // never waits on stdin. Dry runs read nothing and build a read-only account.
   const state = readState();
   let account;
-  if (live && state?.address) {
+  if (live && state?.method === 'baw') {
+    // A baw login has no PIN / vault — it signs in the Binance App through baw contract-call; NEVER read stdin for a PIN.
+    account = loadAccount(state);
+  } else if (live && state?.address) {
     const { pin } = await readPinJson(stdin);
     // guardedUnlock enforces the brute-force lock and records/clears wrong-PIN failures (shared with the other CLIs).
     account = guardedUnlock(state, pin, (s, p) => loadAccount(s, { pin: p }), { write: writeState });

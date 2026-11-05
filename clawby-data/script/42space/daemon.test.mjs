@@ -325,6 +325,8 @@ const mnemonicAccount = () => loadAccount(
 );
 // A read-only account (no vault / no pin) — it cannot sign.
 const bawAccount = () => loadAccount({ method: 'email', address: ADDR });
+// A baw login: no local signer (canSign false), but isBaw true — it trades by broadcasting through the Binance App.
+const realBawAccount = () => loadAccount({ method: 'baw', address: ADDR });
 // A stand-in for the read-only trade context main scans with: a lens marker and the three provider calls main makes.
 function readCtx({ chain = '0x38', bnb = 5n * 10n ** 18n } = {}) {
   const log = [];
@@ -908,15 +910,77 @@ test('main routes "blitz" to blitzMain (dry, no round -> start + plan)', async (
   assert.equal(events.at(-1).event, 'plan');
 });
 
+// ------------------------------------------------------------------------------ baw login as a trading backend
+test('fastMain --live: a baw login (Developer Mode on) is NOT refused at the --live gate and trades; the SIWE referral backstop is skipped for baw', async () => {
+  const B = addr(0xb2);
+  const markets = { [B]: { costBps: 150, pool: 1n * WAD, outcomes: [{ tokenId: 1n, supply: 2n * WAD }, { tokenId: 2n, supply: 5n * WAD }] } };
+  const { ctx } = fakeChain(markets, { live: true });
+  const events = [];
+  let ensure42Called = 0;
+  const origErr = console.error; console.error = () => {};
+  try {
+    await daemon.main(['fast', '--live', '--amount', '1', '--target', '1.5'], {
+      account: realBawAccount(), ctx, log: (e) => events.push(e), sleep: stubSleep(),
+      bawReady: async () => ({ connected: true, devModeOn: true }),
+      ensure42: async () => { ensure42Called += 1; return { referral: 'bound', warnings: [] }; },
+      fetchImpl: restFetch([[B, 'b?']]),
+      runRoundtrip: (args) => tradeRunRoundtrip(args, { makeCtx: () => ctx }),
+    });
+  } finally { console.error = origErr; }
+  assert.ok(events.some((e) => e.event === 'start'), 'a baw login reaches start (not refused for having no local signer)');
+  assert.equal(ensure42Called, 0, 'baw cannot SIWE personal_sign, so the referral backstop is skipped');
+});
+
+test('takeProfitMain --live: a baw login is allowed past the --live gate, then gated on Developer Mode (off -> enable-it message, no network)', async () => {
+  await assert.rejects(
+    daemon.takeProfitMain(['take-profit', '--live', '--pct', '10'],
+      { account: realBawAccount(), ctx: readCtx(), bawReady: async () => ({ connected: true, devModeOn: false }) }),
+    /Developer Mode/,
+  );
+});
+
+test('blitzMain --live: a baw login with Developer Mode off stops with an enable-it message, before any network use', async () => {
+  await assert.rejects(
+    daemon.blitzMain(['blitz', '--live', '--amount', '1', '--max-loss', '3', '--take-profit', '10'],
+      { account: realBawAccount(), ctx: readCtx(), bawReady: async () => ({ connected: true, devModeOn: false }) }),
+    /Developer Mode/,
+  );
+});
+
+test('blitzMain --live: a not-connected baw login stops and points to login-baw', async () => {
+  await assert.rejects(
+    daemon.blitzMain(['blitz', '--live', '--amount', '1', '--max-loss', '3', '--take-profit', '10'],
+      { account: realBawAccount(), ctx: readCtx(), bawReady: async () => ({ connected: false, devModeOn: false }) }),
+    /login-baw/,
+  );
+});
+
+test('main --live with a baw login in STATE reads NO PIN from stdin — it reaches the baw readiness gate, not a PIN prompt', async () => {
+  // The real main() (no injected deps.account) must branch on method:'baw' and skip the stdin PIN read a baw login cannot
+  // satisfy. stdin:'' would throw /stdin/ if a PIN were read; a not-connected bawReady proves we got PAST that to the gate.
+  const prev = process.env.CLAWBY_42SPACE_STATE;
+  const f = join(mkdtempSync(join(tmpdir(), '42d-baw-')), '42space.json');
+  writeFileSync(f, JSON.stringify({ method: 'baw', address: ADDR }));
+  process.env.CLAWBY_42SPACE_STATE = f;
+  try {
+    await assert.rejects(
+      daemon.main(['fast', '--live', '--amount', '1', '--target', '5'], { stdin: '', bawReady: async () => ({ connected: false, devModeOn: false }) }),
+      /login-baw/,
+    );
+  } finally {
+    process.env.CLAWBY_42SPACE_STATE = prev;
+  }
+});
+
 // ------------------------------------------------------------------------------ safety (static)
 test('static scan: daemon.mjs cannot sign or send by itself - its only road to the chain is trade.runRoundtrip, and "live" comes from the literal --live flag alone', () => {
   const src = readFileSync(new URL('./daemon.mjs', import.meta.url), 'utf8');
   const code = src.split('\n').filter((l) => !/^\s*\/\//.test(l)).map((l) => l.replace(/\s\/\/.*$/, '')).join('\n');
   // daemon may HOLD account.signer to hand to trade.runRoundtrip and to the off-chain referral backstop, but it must
   // never broadcast or sign on-chain by itself (no sendTransaction/sendStep/signMessage/JsonRpcProvider/raw sends).
-  assert.doesNotMatch(code, /sendTransaction|signTransaction|signMessage|\.send\(|eth_send|sendStep|\bWallet\b|\.mnemonic\b|privateKey|apiKey|JsonRpcProvider/);
+  assert.doesNotMatch(code, /sendTransaction|signTransaction|signMessage|\.send\(|eth_send|sendStep|\bWallet\b|\.mnemonic\b|privateKey|apiKey|JsonRpcProvider|bawSend|runBaw|execFile/);
   const imports = [...src.matchAll(/^import .* from '([^']+)';$/gm)].map((m) => m[1]);
-  assert.deepEqual(imports, ['ethers', './lib.mjs', './vault.mjs', './scan.mjs', './trade.mjs', './positions.mjs', './invite.mjs', './blitz.mjs']);
+  assert.deepEqual(imports, ['ethers', './lib.mjs', './vault.mjs', './scan.mjs', './trade.mjs', './positions.mjs', './invite.mjs', './blitz.mjs', './bawexec.mjs']);
   // invite.mjs is allowed ONLY as the pre-trade referral backstop: it does an off-chain SIWE personal_sign + a 42 REST
   // call, never an on-chain broadcast — the daemon's only road to the chain is still trade.runRoundtrip (asserted above).
   assert.match(code, /ensureReferralBeforeTrade/);

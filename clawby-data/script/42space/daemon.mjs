@@ -29,6 +29,7 @@ import { runRoundtrip as tradeRunRoundtrip, runSell as tradeRunSell, readPositio
 import { listPositions, removePosition } from './positions.mjs';
 import { ensureReferralBeforeTrade } from './invite.mjs';
 import { playRound as blitzPlayRound, runBlitzLoop, chooseRound, pickAsset, blitzWindow, assetName } from './blitz.mjs';
+import { bawReady } from './bawexec.mjs';
 
 export const DEFAULT_THRESHOLD_PCT = 3;      // a market is tradable only when its round trip costs strictly LESS than this (percent)
 export const DEFAULT_SLIPPAGE_PCT = '3';     // fast mode's slippage (trade.mjs's own default is 2)
@@ -140,6 +141,16 @@ async function narrationToStderr(fn) {
   try { return await fn(); } finally { console.log = orig; }
 }
 
+// A baw login trades by broadcasting through the Binance App, which requires the QR session to be connected AND Developer
+// Mode on (baw's `contract-call` is gated on devMode). Checked once, before any trading, for a baw account only — a local-key
+// account never calls this. Fails with a clear re-run action and touches no chain/network (the read is baw's own CLI).
+async function assertBawReady(account, deps) {
+  if (!account.isBaw) return;
+  const r = await (deps.bawReady ?? bawReady)();
+  if (!r.connected) throw new Error('baw wallet is not connected - run `42space login-baw` and scan the QR in the Binance App, then re-run');
+  if (!r.devModeOn) throw new Error('baw Developer Mode is off - enable Developer Mode in the Binance App (Settings), then re-run');
+}
+
 // The CLI. deps (all optional, for tests): account (default: the logged-in state), ctx (the read-only chain context the scan reads
 // through; default makeContext without a key), scan, runRoundtrip (trade.mjs's unbound one - this function binds the flags),
 // sleep, log, fetchImpl, now.
@@ -150,9 +161,10 @@ export async function fastMain(argv, deps = {}) {
   const log = deps.log ?? defaultLog;
   const account = deps.account ?? loadAccount();
   // Up front, before any chain or network use: a login with no local key can scan but cannot trade.
-  if (live && !account.canSign) {
+  if (live && !(account.canSign || account.isBaw)) {
     throw new Error('--live needs the PIN to unlock the embedded key (pipe {"pin":"..."} on stdin); this run has no signer');
   }
+  if (live) await assertBawReady(account, deps);                     // baw login: require the Binance App connected + devMode on
   const rc = deps.ctx ?? makeContext({ live: false, account });      // read-only: the scan only ever eth_calls
   try {
     await assertChain(rc);                                           // a wrong-chain RPC would make the scan see "no markets" forever
@@ -168,7 +180,7 @@ export async function fastMain(argv, deps = {}) {
     // outage must not stop trading. Folded into the 'start' event, so the machine-readable event stream is unchanged.
     let referralStatus = null;
     let referralWarnings = [];
-    if (live) {
+    if (live && !account.isBaw) {    // baw cannot SIWE personal_sign, so there is no 42 account to register/bind — skip the backstop
       const ref = await (deps.ensure42 ?? ensureReferralBeforeTrade)({ state: deps.state ?? readState(), wallet: account.signer, env: deps.env, fetchImpl: deps.fetchImpl });
       referralStatus = ref.referral;
       referralWarnings = ref.warnings ?? [];
@@ -351,9 +363,10 @@ export async function takeProfitMain(argv, deps = {}) {
   const live = o.live;
   const log = deps.log ?? defaultLog;
   const account = deps.account ?? loadAccount();
-  if (live && !account.canSign) {
+  if (live && !(account.canSign || account.isBaw)) {
     throw new Error('--live needs the PIN to unlock the embedded key (pipe {"pin":"..."} on stdin); this run has no signer');
   }
+  if (live) await assertBawReady(account, deps);                     // baw login: require the Binance App connected + devMode on
   const stored = Number(readState().take_profit_pct);
   const pct = o.pct ?? (positive(stored) ? stored : DEFAULT_TAKE_PROFIT_PCT);
   const rc = deps.ctx ?? makeContext({ live: false, account });      // read-only: values are read with eth_call; sells go through runSell's own context
@@ -369,7 +382,7 @@ export async function takeProfitMain(argv, deps = {}) {
     // into the 'start' event, non-fatal.
     let referralStatus = null;
     let referralWarnings = [];
-    if (live) {
+    if (live && !account.isBaw) {    // baw cannot SIWE personal_sign, so there is no 42 account to register/bind — skip the backstop
       const ref = await (deps.ensure42 ?? ensureReferralBeforeTrade)({ state: deps.state ?? readState(), wallet: account.signer, env: deps.env, fetchImpl: deps.fetchImpl });
       referralStatus = ref.referral;
       referralWarnings = ref.warnings ?? [];
@@ -446,9 +459,10 @@ export async function blitzMain(argv, deps = {}) {
   const live = o.live;
   const log = deps.log ?? defaultLog;
   const account = deps.account ?? loadAccount();
-  if (live && !account.canSign) {
+  if (live && !(account.canSign || account.isBaw)) {
     throw new Error('--live needs the PIN to unlock the embedded key (pipe {"pin":"..."} on stdin); this run has no signer');
   }
+  if (live) await assertBawReady(account, deps);                     // baw login: require the Binance App connected + devMode on
   const rc = deps.ctx ?? makeContext({ live: false, account });   // read-only: discovery + snapshot reads are eth_calls
   const now = deps.now ?? (() => Math.floor(Date.now() / 1000));
   try {
@@ -461,7 +475,7 @@ export async function blitzMain(argv, deps = {}) {
     }
     let referralStatus = null;
     let referralWarnings = [];
-    if (live) {
+    if (live && !account.isBaw) {    // baw cannot SIWE personal_sign, so there is no 42 account to register/bind — skip the backstop
       const ref = await (deps.ensure42 ?? ensureReferralBeforeTrade)({ state: deps.state ?? readState(), wallet: account.signer, env: deps.env, fetchImpl: deps.fetchImpl });
       referralStatus = ref.referral;
       referralWarnings = ref.warnings ?? [];
@@ -516,7 +530,11 @@ export async function main(argv, deps = {}) {
   // can sign. Dry runs (no --live) read nothing and stay read-only. deps.account (tests) short-circuits this.
   if (!deps.account && argv.includes('--live')) {
     const state = readState();
-    if (state?.address) {
+    if (state?.method === 'baw') {
+      // A baw login has no PIN / vault — it signs in the Binance App. Load it directly; NEVER read stdin for a PIN
+      // (there is none, and readPinJson on an empty/absent stdin would hang or throw a misleading PIN error).
+      deps = { ...deps, account: loadAccount(state) };
+    } else if (state?.address) {
       const { pin } = await readPinJson(deps.stdin);
       // guardedUnlock enforces the brute-force lock + records/clears wrong-PIN failures (shared with the other CLIs).
       deps = { ...deps, account: guardedUnlock(state, pin, (s, p) => loadAccount(s, { pin: p }), { write: writeState }) };

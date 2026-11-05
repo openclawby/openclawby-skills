@@ -410,6 +410,78 @@ test('use-baw is removed — it is now an unknown subcommand', async () => {
   process.exitCode = 0; // captureRun error-path sets exitCode; reset so the suite exit stays clean
 });
 
+// ---- login-baw: Binance Agentic Wallet login (QR), no 42/Clawby registration, SBT via baw ----
+const BAW_ADDR = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
+function bawStubs({ verify = { success: true, status: 'SUCCESS' }, connected = true, devModeOn = true, address = BAW_ADDR } = {}) {
+  const calls = [];
+  return {
+    bawSignin: async () => { calls.push('signin'); return { qrCodeId: 'Q1', pairingCode: '112233', urlForWeb: 'https://app/qr', expireAt: 9 }; },
+    bawVerify: async (id) => { calls.push('verify:' + id); return verify; },
+    bawReady: async () => { calls.push('ready'); return { connected, devModeOn }; },
+    bawBscAddress: async () => { calls.push('addr'); return address; },
+    sleep: async () => {},
+    _calls: calls,
+  };
+}
+const okAccount = async () => ({ address: BAW_ADDR });
+
+test('login-baw: a QR sign-in saves a baw login (no vault), mints the Clawby SBT through baw, validates the session key, and registers NO 42/Clawby account', async () => {
+  withTempState();
+  const sbt = idSbt({ bal: 0n });
+  const out = await captureRun(['login-baw'], { ...bawStubs(), sbt, getAccount: okAccount, env: { CLAWBY_API_KEY: 'ck_session' } });
+  const { readState } = await import('./lib.mjs');
+  const { hasVault } = await import('./vault.mjs');
+  const s = readState();
+  assert.equal(s.method, 'baw');
+  assert.equal(s.address, BAW_ADDR);
+  assert.equal(hasVault(s), false, 'a baw login has no local key / vault');
+  assert.equal(s.referral_bound_for, undefined, 'no 42 referral account is bound');
+  assert.equal(s.clawby_registered_for, undefined, 'no Clawby account is registered');
+  assert.equal(out.logged_in, true);
+  assert.equal(out.method, 'baw');
+  assert.equal(out.dev_mode, true);
+  assert.equal(out.sbt.minted, true, 'the SBT is minted through baw at login');
+  assert.equal(sentMint(sbt), 1);
+  assert.equal(out.key_ok, true);
+  assert.match(out.registration, /skipped/);
+  assert.equal(out.action_required, undefined, 'devMode on + key present -> nothing the user must do');
+});
+
+test('login-baw: Developer Mode off -> the SBT is NOT minted and the result guides the user to enable Developer Mode', async () => {
+  withTempState();
+  const sbt = idSbt({ bal: 0n });
+  const out = await captureRun(['login-baw'], { ...bawStubs({ devModeOn: false }), sbt, getAccount: okAccount, env: { CLAWBY_API_KEY: 'ck_session' } });
+  assert.equal(out.dev_mode, false);
+  assert.equal(sentMint(sbt), 0, 'no mint without Developer Mode (baw contract-call needs it)');
+  assert.notEqual(out.sbt.minted, true);
+  assert.ok(Array.isArray(out.action_required) && out.action_required.some((a) => /Developer Mode/i.test(a)));
+});
+
+test('login-baw: no session Clawby key -> key_ok:false and the result points to openclawby.com (Fast/Blitz still work without a key)', async () => {
+  withTempState();
+  const out = await captureRun(['login-baw'], { ...bawStubs(), sbt: idSbt({ bal: 1n }), getAccount: okAccount, env: {} });
+  assert.equal(out.key_ok, false);
+  assert.ok(out.action_required.some((a) => /openclawby\.com/i.test(a)));
+});
+
+test('login-baw: a rejected QR approval is a clear, re-runnable error and writes no state', async () => {
+  withTempState();
+  const out = await captureRun(['login-baw'], { ...bawStubs({ verify: { success: false, status: 'AUTH_REJECTED' } }), getAccount: okAccount });
+  assert.match(out.error || '', /not approved|re-run|rejected/i);
+  const { readState } = await import('./lib.mjs');
+  assert.equal(readState().method, undefined, 'a rejected sign-in writes no state');
+  process.exitCode = 0;
+});
+
+test('login-baw then status: the baw login is reported (method baw, no vault)', async () => {
+  withTempState();
+  await captureRun(['login-baw'], { ...bawStubs(), sbt: idSbt({ bal: 1n }), getAccount: okAccount, env: { CLAWBY_API_KEY: 'ck_session' } });
+  const out = await captureRun(['status']);
+  assert.equal(out.method, 'baw');
+  assert.equal(out.address, BAW_ADDR);
+  assert.equal(out.has_vault, false);
+});
+
 // ---- set-volume ----
 
 test('isValidAddress accepts a real address and rejects junk', async () => {

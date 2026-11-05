@@ -95,7 +95,7 @@ export function rpcFor(state, env = process.env) {
 // the void). Reads need only the RPC. sendMint() additionally needs `signer`, an UNCONNECTED wallet that the caller hands
 // in only for a live run (a dry run passes none, so the port physically cannot send) — it is attached to the provider
 // only inside sendMint, and the broadcast goes through trade.mjs's sendStep, the module's single broadcast point.
-export function makeSbt({ rpc = DEFAULT_RPC, signer = null, address = null } = {}) {
+export function makeSbt({ rpc = DEFAULT_RPC, signer = null, address = null, bawExec = null } = {}) {
   let provider = null;
   let chainOk = false;
 
@@ -113,7 +113,7 @@ export function makeSbt({ rpc = DEFAULT_RPC, signer = null, address = null } = {
   const contract = async () => new Contract(SBT_ADDRESS, SBT_ABI, await ready());
 
   return {
-    canSign: signer !== null,                              // read-only introspection: can this port ever send?
+    canSign: signer !== null || bawExec !== null,          // read-only introspection: a local key OR a baw login can send
     balanceOf: async (address) => (await contract()).balanceOf(address),
     mintingPaused: async () => (await contract()).mintingPaused(),
     // native BNB balance (18-dec string) of the logged-in wallet, read on the SBT port's OWN rpc so the identity
@@ -125,11 +125,21 @@ export function makeSbt({ rpc = DEFAULT_RPC, signer = null, address = null } = {
       return formatUnits(await (await ready()).getBalance(who), 18);
     },
     async sendMint() {
-      if (!signer) throw new Error('no local key to sign the mint with (a baw / address-only login, or a dry run)');
-      const ctx = { live: true, signer: signer.connect(await ready()), sent: [] };
-      // sendStep narrates on console.log; muted so the CLI's stdout stays one JSON line (the tx hash is in the result)
-      const rcpt = await muted(() => sendStep(ctx, buildMintStep(), new Set([SBT_ADDRESS])));
-      return rcpt?.hash ?? ctx.sent[0];
+      // sendStep narrates on console.log; muted so the CLI's stdout stays one JSON line (the tx hash is in the result).
+      // Two backends, one broadcast point (sendStep): a local key signs against the port's RPC; a baw login broadcasts the
+      // SAME mint step through `baw contract-call` (chain 56 is pinned inside baw), so the local RPC is never dialed.
+      if (signer) {
+        const ctx = { live: true, signer: signer.connect(await ready()), sent: [] };
+        const rcpt = await muted(() => sendStep(ctx, buildMintStep(), new Set([SBT_ADDRESS])));
+        return rcpt?.hash ?? ctx.sent[0];
+      }
+      if (bawExec) {
+        if (!address) throw new Error('baw mint needs the wallet address');
+        const ctx = { live: true, exec: 'baw', address, bawExec, sent: [] };
+        const r = await muted(() => sendStep(ctx, buildMintStep(), new Set([SBT_ADDRESS])));
+        return r?.hash ?? ctx.sent[0];
+      }
+      throw new Error('no local key to sign the mint with (a baw / address-only login, or a dry run)');
     },
     close() {
       provider?.destroy();
@@ -148,8 +158,13 @@ async function muted(fn) {
 // The port the CLI uses for the logged-in account: reads on rpcFor(state, env), and a signer ONLY for a live run
 // (live === true) with an injected signer (the embedded wallet the command built via walletFromVault). A dry run,
 // or a run with no signer (no pin / no vault), gets a read-only port that cannot send even by mistake.
-export function makeSbtForState(state, { env = process.env, live = false, signer = null } = {}) {
-  return makeSbt({ rpc: rpcFor(state, env), signer: live === true ? signer : null, address: state?.address ?? null });
+export function makeSbtForState(state, { env = process.env, live = false, signer = null, bawExec = null } = {}) {
+  return makeSbt({
+    rpc: rpcFor(state, env),
+    signer: live === true ? signer : null,
+    bawExec: live === true ? bawExec : null,               // a baw login mints only on a live run, same as a local signer
+    address: state?.address ?? null,
+  });
 }
 
 // ------------------------------------------------------------------------------------ resolveKey

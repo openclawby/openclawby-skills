@@ -29,7 +29,7 @@ node 42space.mjs status                # {logged_in, method, address, has_vault,
 ```
 If `logged_in` is already true, skip to **Step 3** (if `has_vault` is false, it is an old-skill state — log in again, Step 2). Otherwise offer the logins below.
 
-## Step 2 — log in (pick ONE; all go through Privy and end at the user's **embedded** wallet)
+## Step 2 — log in (pick ONE; A–C go through Privy and end at the user's **embedded** wallet, D is the Binance Agentic Wallet)
 
 Every login goes through **Privy**, and the identity is always the account's **embedded wallet** (42 trades only from the embedded wallet; an external wallet is login only). A brand-new Privy user has no embedded wallet yet — the module auto-creates one at login (`POST /api/v1/wallets`). The moment it is reached the module **exports the embedded private key**, binds the 42 invite + registers the Clawby account with it, then **seals the key in an encrypted PIN vault** (`local/42space.json`) and wipes the plaintext. **Secrets go in on stdin as one JSON object — never as arguments.** **You collect the PIN — and the email code / mnemonic — from the user in the chat, and you run every command yourself (pipe the JSON on stdin); never ask the user to open a terminal or run a command by hand.** Ask the user for a **6–12 character PIN** (digits or letters; 6 digits is the floor — longer is stronger). **Ask once, then hold the PIN in session memory and reuse it for every later command this session — don't re-prompt each run. The PIN stays in the session only: never write it to disk, and never upload it to the Clawby Key Vault or send it anywhere — it only ever rides stdin into the local node process.** Tell them plainly: the PIN encrypts the key at rest; it does **not** make an exfiltrated vault uncrackable (a 6-digit PIN is ~10⁶ guesses). If they forget the PIN, they simply log in again to re-back-up with a new one.
 
@@ -54,7 +54,18 @@ printf '%s' '{"mnemonic":"<12/24 words>","pin":"<6-12>"}' | node 42space.mjs imp
 ```
 If the mnemonic is one the user already uses on 42.space, Privy returns their **existing** embedded wallet — this is the path that fixes "I registered in the agent but the web still asks for an invite code". The user's own mnemonic is never echoed back.
 
-**What a login does, silently, with the embedded key** (all **no USDT, no BNB, no gas**):
+**D. Binance Agentic Wallet (baw)** — a different kind of login: it does **NOT** go through Privy, creates **no** embedded wallet and **no** PIN vault, and registers **no** 42.space / Clawby account (baw can only sign ordinary contract calls, not the SIWE / EIP-191 `personal_sign` a 42 or Clawby account needs). The Binance App's **Developer Mode** must be ON — it gates baw's `contract-call`, which is how every SBT mint and trade is broadcast. You run the command and show the user the QR; they scan it in the Binance App and approve.
+```bash
+node 42space.mjs login-baw
+# first emits  {event:"scan_qr", qr_url, pairing_code, expires_at}   ← show the QR / URL to the user to scan + approve in the Binance App
+# then (after approval) → {logged_in:true, method:"baw", address, connected, dev_mode, sbt, key_ok, registration:"skipped…", action_required?, note}
+```
+- **Developer Mode off** → the login still saves, but the SBT is **not** minted; `action_required` tells the user to turn it on (Binance App → Settings → Developer Mode) and re-run `login-baw`. Trading is likewise blocked until it is on.
+- **SBT** — `login-baw` mints the free **Clawby Identity SBT** through baw when Developer Mode is on (needs a little BNB for gas; an already-minted wallet reports `had:true` and sends nothing). **This is the baw login's mint path — use `login-baw`, not `identity`** (`identity` is the local-key path).
+- **Clawby key** — Fast and Blitz trade through baw and need **no** key. The **AI** and **claim** modes read 42 data through the Clawby relay and **do** need one: when the session has no `CLAWBY_API_KEY`, `key_ok:false` and `action_required` tells the user to register free at **https://www.openclawby.com/**, copy their `pk_` key, and give it to you — **hold it in session memory only; never write it to disk or the Key Vault.**
+- **Trading** — Fast / Blitz / the manual `trade.mjs` buy·sell·claim all broadcast through baw's `contract-call` (each tx is previewed, and if the Binance App asks, approved there). No PIN, no vault. The baw session idle-expires after ~48 h — re-run `login-baw` to refresh. baw reaches Binance through whatever proxy the user's own environment already provides (set `HTTPS_PROXY` / `CLAWBY_BAW_PROXY` if the region needs one); the skill forces none.
+
+**What an A–C login does, silently, with the embedded key** (all **no USDT, no BNB, no gas**):
 - `referral` — SIWE to 42, binds the **embedded** wallet's 42.space referral (`clawby` by default): `bound` · `already` (never overwritten) · `error`.
 - `clawby` — registers the embedded wallet's Clawby account with invite code **`7rt6jo`**: `registered` · `existing` · `env` (a valid `CLAWBY_API_KEY` was used) · `error`.
 
@@ -66,7 +77,7 @@ node 42space.mjs status            # {logged_in, method, address, has_vault, ref
 printf '%s' '{"pin":"<pin>"}' | node 42space.mjs export-key   # {address, private_key} — for the user to back up manually
 node 42space.mjs logout            # clears the vault + address (keeps rpc / daily_volume)
 ```
-`export-key` prints the embedded private key under the PIN — the only place it is ever shown; never repeat it in chat. **Migration:** a state from the old skill (a plaintext `mnemonic`, or a `baw` login) has `has_vault:false` — the user logs in once (A/B/C) to create the vault. `use-baw` is gone (baw's CLI can't make the EIP-191 signature 42/Clawby need).
+`export-key` prints the embedded private key under the PIN — the only place it is ever shown; never repeat it in chat (a baw login has no embedded key, so `export-key` does not apply to it). **Migration:** a state from the old skill (a plaintext `mnemonic`) has `has_vault:false` — the user logs in once (A/B/C) to create the vault. The old read-only `use-baw` command is gone; the new **`login-baw`** (option D) is a full trading login that drives baw's `contract-call` instead of an EIP-191 signature.
 
 ## Step 3 — balance and the BNB rules
 
@@ -130,7 +141,7 @@ printf '%s' '{"pin":"<pin>"}' | node daemon.mjs fast --amount 1 --target 100 --a
 - **No market below 3% is not an error.** The daemon logs a `wait` event, sleeps `--interval` seconds and scans again. It never exits for that and never trades a market at or above 3%.
 - **Extra transactions at first.** The first round on each market also sends a one-time `setOperator`, and the exact-amount USDT approval is consumed by every buy, so without `--approve-max` each round is 2 transactions. `--approve-max` approves USDT for the maximum once, so later rounds are the lone multicall (cheaper in gas) — at the price of an unlimited USDT allowance for 42's router until it is revoked (`approve(router, 0)`). Tell the user.
 - **Cost.** A round trip pays the spread plus fees both ways (the scan only picks markets where that estimate is under 3% of `--amount`) plus gas, and adds about 2 × `--amount` of volume, so a target T needs roughly T / (2 × amount) rounds. It is volume farming, not profit. Each round also leaves a little OT "dust" (up to about the slippage % of the position) in the wallet — not lost; sweep it later with `node trade.mjs sell <market> <tokenId> all --live`.
-- **Guards.** `--live` refuses to start for a login with no local key (baw), on a wrong-chain RPC, or with 0 BNB; low BNB logs a `warn`. Any real error (a failed scan, a reverted or unconfirmed transaction, too little USDT or BNB) **ends the run** — nothing is retried blindly. Read the last `error` event, fix the cause, then decide whether to restart.
+- **Guards.** `--live` refuses to start for a read-only login (no local key **and** not a baw login), for a baw login whose Binance App session is disconnected or whose Developer Mode is off (run `login-baw` / enable Developer Mode first), on a wrong-chain RPC, or with 0 BNB; low BNB logs a `warn`. Any real error (a failed scan, a reverted or unconfirmed transaction, too little USDT or BNB) **ends the run** — nothing is retried blindly. Read the last `error` event, fix the cause, then decide whether to restart.
 - **42 invite backstop.** Before the first live trade (fast and take-profit both), the daemon ensures the 42 referral is bound — registering + binding now if login never did (a 42 outage then, or a wallet from an older skill). Non-fatal and cached, so it is one network round at most; the result rides on the `start` event's `referral` field.
 - **Output.** One JSON event per line on stdout: `start`, `plan` (dry run only), `trade` (`volume` against `target`), `wait`, `warn`, `done`, `error`. Run it in the background and report progress from the events. Stop it any time with Ctrl-C / kill: a round trip is one atomic transaction, so there is never a half-done trade (one that was already broadcast may still confirm).
 
@@ -301,12 +312,13 @@ Options: `--slippage <pct>` (default 2) · `--approve-mode token|operator` (sell
 
 | File | Role |
 |---|---|
-| `42space.mjs` | entry CLI: `status` · `login-email-init`/`login-email-verify` · `create-wallet` · `import-mnemonic` · `export-key` · `logout` · `balance` · `identity` · `points` · `stats` · `daily` · `report` · `set-volume` · `ai-data` · `claim-settled` |
+| `42space.mjs` | entry CLI: `status` · `login-email-init`/`login-email-verify` · `create-wallet` · `import-mnemonic` · `login-baw` · `export-key` · `logout` · `balance` · `identity` · `points` · `stats` · `daily` · `report` · `set-volume` · `ai-data` · `claim-settled` |
 | `privy.mjs` | Privy client: email/wallet login + headless export of the embedded private key (HPKE + authorization-signature) |
 | `vault.mjs` | PIN-encrypted key vault (scrypt + AES-256-GCM) + brute-force throttle |
 | `trade.mjs` | on-chain primitives: `quote` · `buy` · `sell` · `roundtrip` · `set-operator` · `claim` · `status` (signer from the PIN vault) |
 | `daemon.mjs` | the daemon modes: `fast` (volume farming) + `take-profit` + `blitz` (Token Race) |
 | `blitz.mjs` | Blitz (Token Race) orchestration: random asset pick, round discovery + 10s-window timing, the stop-loss/take-profit loop (broadcasts only via trade.mjs) |
+| `bawexec.mjs` | Binance Agentic Wallet backend: shells out to the `baw` CLI to preview+execute a `contract-call` (every baw trade/mint), read readiness (connected + Developer Mode), the BSC address, and the QR sign-in — the one place that spawns `baw` |
 | `scan.mjs` | discount scan + `listTokenRaces` discovery + `marketSnapshot` (on-chain window/result), used by the daemon (a library, not a command) |
 | `identity.mjs`, `clawby.mjs` | the silent Clawby identity (key + SBT) and the Clawby API client |
 | `lib.mjs` | local state, wallet derivation, balance reads |

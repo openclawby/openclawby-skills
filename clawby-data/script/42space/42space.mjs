@@ -11,10 +11,11 @@ import {
   fetchBalances, needsFunding, bnbStatus, DEFAULT_RPC,
   parseVolume, carryOver, requirePipedStdin,
 } from './lib.mjs';
-import { ft42, clawbyInviteFromEnv } from './clawby.mjs';
-import { ensureIdentity, makeSbtForState, resolveKey, walletFromVault, ensureClawbyAccount } from './identity.mjs';
+import { ft42, clawbyInviteFromEnv, getAccount as getAccountApi, clawbyKeyFromEnv } from './clawby.mjs';
+import { ensureIdentity, ensureSbt, makeSbtForState, resolveKey, walletFromVault, ensureClawbyAccount } from './identity.mjs';
 import { ensureReferral } from './invite.mjs';
 import { encryptKey, validatePin, hasVault, clearPinFailures, guardedUnlock } from './vault.mjs';
+import { bawSignin as bawSigninCli, bawVerify as bawVerifyCli, bawReady as bawReadyCli, bawBscAddress as bawBscAddressCli, bawSend } from './bawexec.mjs';
 import * as privyModule from './privy.mjs';
 
 function out(obj) {
@@ -519,9 +520,86 @@ export async function report(args, { state, env = process.env, fetchImpl = fetch
   return { ...composed, card: reportCard({ ...composed, last7 }), ...(warnings.length ? { warnings } : {}) };
 }
 
+// ------------------------------------------------------------------------------------ login-baw (Binance Agentic Wallet)
+const BAW_SIGNIN_WAIT_MS = 3 * 60 * 1000;    // how long login-baw waits for the user to approve the QR in the Binance App
+const BAW_POLL_MS = 2500;                      // between verify polls
+const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// login-baw: sign in with the Binance Agentic Wallet by QR, with NO 42.space / Clawby account registration — baw can only
+// sign ordinary EVM calls (contract-call), never the SIWE / EIP-191 personal_sign those accounts need. The flow: show the
+// QR, wait for in-App approval, save a baw login (no vault / no local key), MINT the Clawby Identity SBT through baw when
+// Developer Mode is on (contract-call is gated on it — off is guided, not fatal), and check the session Clawby key (needed
+// only for the AI / claim modes; Fast / Blitz trade through baw and need none). Trading itself is the daemon's job.
+// All I/O is injectable (deps) so tests never spawn baw or touch the network. Returns a machine-readable summary.
+export async function loginBaw(rest, {
+  state, env = process.env, fetchImpl = fetch, sbt,
+  bawSignin = bawSigninCli, bawVerify = bawVerifyCli, bawReady = bawReadyCli, bawBscAddress = bawBscAddressCli,
+  bawExec = bawSend, getAccount = getAccountApi, sleep = defaultSleep, log = out,
+} = {}) {
+  // 1. QR sign-in: emit the code/URL for the host to show, then poll verify until the user approves (or it is rejected).
+  const si = await bawSignin();
+  if (!si || !si.qrCodeId) throw new Error('baw sign-in did not return a QR code - is the baw CLI installed and signed-in-able? (install @binance/agentic-wallet)');
+  log({ event: 'scan_qr', qr_url: si.urlForWeb ?? null, pairing_code: si.pairingCode ?? null, expires_at: si.expireAt ?? null,
+    note: 'scan this in the Binance App (or open the URL) and approve - waiting for approval…' });
+  const deadline = Date.now() + BAW_SIGNIN_WAIT_MS;
+  let verified = false;
+  for (;;) {
+    const v = await bawVerify(si.qrCodeId);
+    const st = String(v?.status ?? '').toUpperCase();
+    if (v?.success && (st === 'SUCCESS' || st === 'CONNECTED' || st === '')) { verified = true; break; }
+    if (/REJECT|EXPIRE|CANCEL|FAIL/.test(st)) {
+      throw new Error(`baw sign-in was not approved (${st || 'rejected'}) - re-run login-baw and approve the request in the Binance App`);
+    }
+    if (Date.now() >= deadline) throw new Error('baw sign-in timed out waiting for approval - re-run login-baw and approve in the Binance App');
+    await sleep(BAW_POLL_MS);
+  }
+
+  // 2. Save the baw login. No vault (no local key); no 42/Clawby registration. carryOver keeps rpc / daily_volume.
+  const address = await bawBscAddress();
+  const prev = state ?? readState();
+  const next = { ...carryOver(prev, address), method: 'baw', address, has_vault: false, referral_bound: 'skipped', clawby_registered: 'skipped' };
+  writeState(next);
+
+  // 3. Developer Mode: baw contract-call (the SBT mint AND every trade) is gated on it. Off -> guide, do not fail.
+  const ready = await bawReady();
+  const action = [];
+  if (!ready.devModeOn) action.push('enable Developer Mode in the Binance App (Settings -> Developer Mode), then re-run `login-baw` to mint your Clawby identity and trade');
+
+  // 4. Mint the Clawby Identity SBT through baw - only when Developer Mode is on (otherwise the contract-call cannot run).
+  let sbtOut = { had: false, minted: false, skipped: ready.devModeOn ? 'none' : 'dev_mode_off' };
+  if (ready.devModeOn) {
+    const port = sbt ?? makeSbtForState(next, { env, live: true, bawExec });
+    const hasGas = async () => { try { return bnbStatus(await port.getBnb()) !== 'none'; } catch { return false; } };
+    try {
+      sbtOut = await ensureSbt({ address, sbt: port, live: true, hasGas });
+    } catch (e) {
+      sbtOut = { had: null, minted: false, skipped: 'error', error: firstLine(e.message) };
+    } finally {
+      if (!sbt && typeof port.close === 'function') port.close();
+    }
+  }
+
+  // 5. Clawby key (AI / claim only): validate the session key if the agent stored one; otherwise guide the user to get a
+  //    free key at openclawby.com and hand it to the agent (held in this session only). No account is ever created here.
+  const envKey = clawbyKeyFromEnv(env);
+  let keyOk = false;
+  if (envKey) { try { keyOk = !!(await getAccount(envKey, fetchImpl)); } catch { keyOk = false; } }
+  if (!keyOk) action.push('for the AI and claim modes, register a free account at https://www.openclawby.com/ , copy your pk_ API key, and give it to the agent (kept in this session only) - Fast and Blitz trading need no key');
+
+  return {
+    logged_in: true, method: 'baw', address,
+    connected: ready.connected, dev_mode: ready.devModeOn,
+    sbt: sbtOut, key_ok: keyOk,
+    registration: 'skipped (baw cannot SIWE/personal_sign; no 42 or Clawby account is created)',
+    ...(action.length ? { action_required: action } : {}),
+    note: 'baw login ready. Pick a trade mode: Fast (volume), Blitz (30s BTC/ETH/SOL race), AI (needs key), claim (needs key).',
+  };
+}
+
 // Injectable seams (tests): fetchImpl for the clawby API, sbt for the SBT port, env for CLAWBY_API_KEY / BSC_RPC,
-// claim for the claim-settled runner (default: trade.mjs claim --live in a child process).
-export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, claim, referral = ensureReferral, clawbyReg = ensureClawbyAccount, privy = privyModule, stdin } = {}) {
+// claim for the claim-settled runner (default: trade.mjs claim --live in a child process). baw* seams for login-baw.
+export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, claim, referral = ensureReferral, clawbyReg = ensureClawbyAccount, privy = privyModule, stdin,
+  bawSignin = bawSigninCli, bawVerify = bawVerifyCli, bawReady = bawReadyCli, bawBscAddress = bawBscAddressCli, bawExec = bawSend, getAccount = getAccountApi, sleep } = {}) {
   const [cmd, ...rest] = argv;
   try {
     switch (cmd) {
@@ -576,6 +654,13 @@ export async function run(argv, { fetchImpl = fetch, sbt, env = process.env, cla
         const auth = await privy.loginWallet(ext, { fetchImpl });
         const res = await completeLogin(readState(), auth, { pin, method: 'imported', env, fetchImpl, privy, referral, clawbyReg });
         out(res);                                               // the user's own mnemonic is never echoed back
+        break;
+      }
+      case 'login-baw': {
+        // Binance Agentic Wallet login by QR: no 42/Clawby registration, mints the Clawby SBT through baw, checks
+        // Developer Mode + the session Clawby key. All baw I/O is injectable (defaults shell out to the `baw` CLI).
+        const res = await loginBaw(rest, { state: readState(), env, fetchImpl, sbt, bawSignin, bawVerify, bawReady, bawBscAddress, bawExec, getAccount, sleep });
+        out(res);
         break;
       }
       case 'export-key': {

@@ -350,6 +350,31 @@ test('makeSbtForState: canSign is true only for a live run with an injected sign
   }
 });
 
+// ---- baw login: the SBT mint broadcasts through baw contract-call instead of a local signer ----
+test('makeSbt with a bawExec is a signing port (baw login): sendMint routes mint() to bawExec — to the SBT, value 0, calldata 0x1249c58b, from the wallet — with no local signer and no RPC I/O', async () => {
+  const { makeSbt, SBT_ADDRESS } = await import('./identity.mjs');
+  let got = null;
+  const bawExec = async (x) => { got = x; return { hash: '0xbawmint', status: 'BROADCASTED' }; };
+  const sbt = makeSbt({ rpc: 'http://127.0.0.1:1', address: ADDR, bawExec });   // rpc is never dialed on the baw path
+  try {
+    assert.equal(sbt.canSign, true, 'a baw port can mint');
+    assert.equal(await sbt.sendMint(), '0xbawmint');
+    assert.deepEqual(got, { from: ADDR, to: SBT_ADDRESS, value: 0n, data: '0x1249c58b' });
+  } finally { sbt.close(); }
+});
+
+test('makeSbtForState: a baw login (live + bawExec) is a signing port; a dry run (not live) is read-only', async () => {
+  const { makeSbtForState } = await import('./identity.mjs');
+  const bawExec = async () => ({ hash: '0x', status: 'BROADCASTED' });
+  const bawState = { method: 'baw', address: ADDR };
+  const live = makeSbtForState(bawState, { env: {}, live: true, bawExec });
+  const dry = makeSbtForState(bawState, { env: {}, live: false, bawExec });
+  try {
+    assert.equal(live.canSign, true);
+    assert.equal(dry.canSign, false, 'dry by default: no bawExec attached, cannot mint');
+  } finally { live.close(); dry.close(); }
+});
+
 // ---- makeSbt: the real, ethers-backed port (reads against a loopback JSON-RPC stub; sends only via a fake signer) ----
 
 test('makeSbt reads balanceOf / mintingPaused from the SBT contract, after checking the RPC is chainId 56', NODE_TEST, async () => {
