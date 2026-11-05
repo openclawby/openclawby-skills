@@ -963,7 +963,7 @@ test('runBlitzBet: live sends exactly the Router.swap mint (pre-approved -> one 
 });
 
 test('runBlitzClaim: bal 0 -> {claimed:false, held:false, payout:0}, sends nothing; held + a positive claim preview -> one Market.claim tx, payout = the previewed claim return (not a stale balanceOf delta); held but the preview will not pay -> no send', async () => {
-  // Losing OT is burned to 0 on finalisation, so bal 0 means we lost: nothing held, nothing to claim.
+  // bal 0 means nothing is held for this tokenId -> nothing to claim (returned as a clean zero; the caller books it a loss).
   const none = blitzCtx({ bal: 0n });
   assert.deepEqual(await runBlitzClaim({ market: MKT, tokenId: 2n, account: {}, live: true }, { makeCtx: none.makeCtx }), { claimed: false, held: false, payout: 0n, txs: [] });
   assert.equal(none.sendArgs.length, 0);
@@ -978,8 +978,9 @@ test('runBlitzClaim: bal 0 -> {claimed:false, held:false, payout:0}, sends nothi
   assert.equal(win.sendArgs.length, 1);
   assert.equal(win.sendArgs[0].to, MKT);
   assert.equal(win.sendArgs[0].data.slice(0, 10), '0x63d05442');
-  // held but the preview will NOT pay out (an anomaly: we hold winning OT the claim won't honour) -> never broadcast; surfaced
-  // as held with a zero payout so the caller flags it for manual recovery rather than booking a silent loss.
+  // held but the preview will NOT pay out -> never broadcast; returned as a clean zero payout (no previewError). A finalised
+  // Token Race does NOT burn the losing OT, so a held 0-payout is normally just a LOSS; the caller (blitz.playRound) books it as
+  // one, cross-checking the public winner only to flag the rare real-win-the-chain-won't-honour case.
   const dud = blitzCtx({ bal: 99n * 10n ** 17n, previewPayout: 0n });
   const rd = await runBlitzClaim({ market: MKT, tokenId: 2n, account: {}, live: true }, { makeCtx: dud.makeCtx });
   assert.equal(rd.claimed, false);

@@ -24,7 +24,7 @@
 import { formatUnits } from 'ethers';
 import { parseVolume, bnbStatus, readState, writeState } from './lib.mjs';
 import { guardedUnlock } from './vault.mjs';
-import { scanMarkets, listTokenRaces, marketSnapshot } from './scan.mjs';
+import { scanMarkets, listTokenRaces, marketSnapshot, resolveTokenRaceWinner } from './scan.mjs';
 import { runRoundtrip as tradeRunRoundtrip, runSell as tradeRunSell, readPositionValue, makeContext, loadAccount, readPinJson, assertChain, parseAmount, parseMarket, parseTokenId, slippageBips, explainError, runBlitzBet as tradeRunBlitzBet, runBlitzClaim as tradeRunBlitzClaim, ensureUsdtApproval, isMain, isBenignProviderCancellation } from './trade.mjs';
 import { listPositions, removePosition } from './positions.mjs';
 import { ensureReferralBeforeTrade } from './invite.mjs';
@@ -502,7 +502,8 @@ export async function blitzMain(argv, deps = {}) {
     const snapshot = deps.snapshot ?? ((m) => marketSnapshot(rc.lens, m, now()));
     const bet = deps.bet ?? ((a) => narrationToStderr(() => tradeRunBlitzBet({ ...a, account, live, approveMax: true })));
     const claim = deps.claim ?? ((a) => narrationToStderr(() => tradeRunBlitzClaim({ ...a, account, live })));
-    const play = deps.playRound ?? ((opts) => blitzPlayRound({ now, sleep, snapshot, bet, claim }, opts));
+    const resolvedWinner = deps.resolvedWinner ?? ((m) => resolveTokenRaceWinner(m, deps.fetchImpl));
+    const play = deps.playRound ?? ((opts) => blitzPlayRound({ now, sleep, snapshot, bet, claim, resolvedWinner }, opts));
 
     log({
       event: 'start', mode: live ? 'live' : 'dry-run', address: account.address,

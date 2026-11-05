@@ -46,13 +46,16 @@ export function blitzWindow(nowSec, { openHourUtc = BLITZ_OPEN_HOUR_UTC, closeHo
 
 // Play ONE round: read the on-chain window + outcomes, pick a random asset, wait for the 10s trading window, bet, then settle
 // from chain (poll until finalised — a finalised Token Race REVERTS the Lens snapshot with Panic(0x32), and that revert is the
-// settlement signal) and claim on a win (win = a held balance, since losers' OT is burned to 0). deps: { now()(sec), sleep(ms),
-// snapshot(market), bet(args), claim(args) }.
+// settlement signal) and claim on a win. WIN/LOSS is read from the claim's own computed payout, NOT from balanceOf: a finalised
+// Token Race does NOT burn the losing outcome's OT (a loser keeps the full minted quantity, worth 0), so only the claim's payout
+// (> 0 won, a clean 0 lost) tells them apart. deps: { now()(sec), sleep(ms), snapshot(market), bet(args), claim(args),
+// resolvedWinner(market)? (public-result cross-check, used ONLY to flag a 0-payout the public result says actually won) }.
 //   -> { result:'bet', asset, tokenId, stake, realized, won, payout?, txs? }   (realized/stake/payout are BigInt USDT wei)
 //      { result:'skip', reason, market, tokenId? }                             (benign: no stake lost)
-// A win whose claim fails THROWS (with a manual-recovery hint) — an unrealized win must never be silently counted.
+// A claim that fails or cannot be read, or a 0-payout the public result says won, THROWS (manual-recovery hint): a real win is
+// never silently counted as a loss.
 export async function playRound(deps, { market, amount, slippage, rng = Math.random, pollMs = 4_000, settleGraceSec = 300, leadPadSec = 1 } = {}) {
-  const { now, sleep: wait = sleep, snapshot, bet, claim } = deps;
+  const { now, sleep: wait = sleep, snapshot, bet, claim, resolvedWinner } = deps;
   const stakeWei = parseAmount(String(amount), 'amount');
   const s0 = await snapshot(market);                              // authoritative on-chain window + outcome ids
   const tokenId = pickAsset(s0.tokenIds, rng);
@@ -87,17 +90,26 @@ export async function playRound(deps, { market, amount, slippage, rng = Math.ran
   // P&L gate (otherwise --max-loss would not bound the real USDT at risk), booked conservatively as a loss. `settled:false`
   // flags it so the loop can tell the user to claim it by hand if it actually won.
   if (!finalised) return { result: 'bet', asset: assetName(tokenId), tokenId, stake: stakeWei, realized: -stakeWei, won: false, settled: false, market, txs: betRes?.txs ?? [] };
-  // The win is read Lens-free through the claim: a finalised Token Race burns the LOSING outcome's OT to 0, so a held balance
-  // (claim.held) means this tokenId won. runBlitzClaim previews the claim and only broadcasts when it will pay.
+  // WIN/LOSS is read from the claim's own computed payout, NOT from balanceOf: a finalised Token Race does NOT burn the losing
+  // outcome's OT (the loser keeps the full minted quantity, worth 0 - verified on chain), so a held balance cannot tell a win
+  // from a loss. runBlitzClaim previews the direct Market.claim and only broadcasts when it pays.
   let c;
   try { c = await claim({ market, tokenId }); }
-  catch (e) { throw new Error(`won round on ${market} (tokenId ${tokenId}) but the claim failed: ${explainError(e)} - collect it by hand: node trade.mjs claim ${market} --live`); }
-  if (!c?.held) return { result: 'bet', asset: assetName(tokenId), tokenId, stake: stakeWei, realized: -stakeWei, won: false, market, txs: betRes?.txs ?? [] };   // nothing held -> this outcome lost
+  catch (e) { throw new Error(`round on ${market} (tokenId ${tokenId}): the claim failed: ${explainError(e)} - if it actually won, collect it by hand: node trade.mjs claim ${market} --live`); }
   const payout = BigInt(c?.payout ?? 0n);
-  // Held means we won, so a claim that did not actually pay out (no-op, a preview that would not pay, or an under-read delta)
-  // must NEVER be silently booked as a loss - surface it so the user claims by hand (the spec's core guarantee: no silent win).
-  if (!c?.claimed || payout <= 0n) throw new Error(`won round on ${market} (tokenId ${tokenId}) but the claim did not pay out (claimed=${!!c?.claimed}, payout=${payout}) - collect it by hand: node trade.mjs claim ${market} --live`);
-  return { result: 'bet', asset: assetName(tokenId), tokenId, stake: stakeWei, realized: payout - stakeWei, won: true, payout, market, txs: [...(betRes?.txs ?? []), ...(c?.txs ?? [])] };
+  // WON: a positive, broadcast claim. The previewed payout is the realized amount (deterministic once finalised).
+  if (c?.claimed && payout > 0n) return { result: 'bet', asset: assetName(tokenId), tokenId, stake: stakeWei, realized: payout - stakeWei, won: true, payout, market, txs: [...(betRes?.txs ?? []), ...(c?.txs ?? [])] };
+  // UNDETERMINED: the claim preview reverted, so whether it would pay could not be read. Never book a blind loss - surface it.
+  if (c?.previewError) throw new Error(`round on ${market} (tokenId ${tokenId}): the claim preview could not be read (${c.previewError}) - check by hand: node trade.mjs claim ${market}`);
+  // CLEAN 0 payout: a losing outcome pays nothing -> a LOSS. Safety net (the spec's no-silent-lost-win guarantee): if the public
+  // result says THIS tokenId actually won yet the chain pays 0, surface it as an anomaly instead of silently booking a loss. A
+  // 0-payout claim has nothing to collect, so if the cross-check is unavailable the loss still stands (never hang on it).
+  if (resolvedWinner) {
+    let winner = null;
+    try { winner = await resolvedWinner(market); } catch { /* public result unavailable: a 0-payout claim has nothing to collect -> book the loss */ }
+    if (winner != null && String(winner) === String(tokenId)) throw new Error(`round on ${market}: the public result shows tokenId ${tokenId} won but the on-chain claim pays 0 - check by hand: node trade.mjs claim ${market}`);
+  }
+  return { result: 'bet', asset: assetName(tokenId), tokenId, stake: stakeWei, realized: -stakeWei, won: false, market, txs: betRes?.txs ?? [] };
 }
 
 // The gated loop. deps: { listRaces(), playRound(opts), now()(sec), sleep(ms), onEvent(e), window?(nowSec) }. Each pass discovers

@@ -65,7 +65,7 @@ test('blitzWindow: open only within 04:00-18:00 UTC; nextOpen = today before ope
 });
 
 // ------------------------------------------------------------------------------ playRound
-const baseRound = (over = {}) => ({ now: () => 1_001, sleep: async () => {}, bet: async () => ({ traded: true, otToUser: 10n * WAD, txs: ['0xbet'] }), claim: async () => ({ claimed: true, payout: 0n, txs: ['0xclaim'] }), ...over });
+const baseRound = (over = {}) => ({ now: () => 1_001, sleep: async () => {}, bet: async () => ({ traded: true, otToUser: 10n * WAD, txs: ['0xbet'] }), claim: async () => ({ claimed: false, held: true, payout: 0n, txs: [] }), resolvedWinner: async () => null, ...over });
 const roundOpts = (over = {}) => ({ market: '0xM', amount: '1', slippage: '10', rng: () => 0.34, pollMs: 1, ...over });
 
 test('playRound: once finalised (the snapshotMarket array-panic IS the settlement signal), a held + paying claim is a WIN realizing payout - stake; the bet uses the randomly-picked tokenId; no answer is read', async () => {
@@ -93,17 +93,19 @@ test('playRound: a CLEAN isFinalised:true snapshot also settles the round, and t
   assert.equal(r.realized, 3n * WAD - WAD);
 });
 
-test('playRound: a loss (losing OT burned to 0 -> the claim reports not held) realizes -stake; the claim is PROBED (that is how win/loss is read now) but sends nothing', async () => {
-  let claimCalls = 0;
+test('playRound: a LOSER still HOLDS its un-burned OT (balanceOf stays > 0) and the claim previews a CLEAN 0 -> a LOSS realizing -stake, NEVER an anomaly (a finalised Token Race does NOT burn the losing outcome to 0 - the premise the live test disproved)', async () => {
+  let claimCalls = 0; let winnerQueried = 0;
   const r = await playRound(baseRound({
     snapshot: snapThenThrow(1),
-    claim: async () => { claimCalls += 1; return { claimed: false, held: false, payout: 0n, txs: [] }; },
-  }), roundOpts({ rng: () => 0 }));   // 0 -> tokenId 1
+    claim: async () => { claimCalls += 1; return { claimed: false, held: true, payout: 0n, txs: [] }; },   // held loser (OT not burned), clean 0 preview
+    resolvedWinner: async () => { winnerQueried += 1; return 2n; },   // public result: ETH (tokenId 2) won - NOT our tokenId 1
+  }), roundOpts({ rng: () => 0 }));   // 0 -> tokenId 1 (BTC), which lost
   assert.equal(r.result, 'bet');
   assert.equal(r.won, false);
   assert.equal(r.tokenId, 1n);
   assert.equal(r.realized, -WAD);
-  assert.equal(claimCalls, 1, 'win/loss is now read Lens-free via the claim probe, so claim IS called on every finalised round');
+  assert.equal(claimCalls, 1, 'the claim is still probed to read the on-chain payout');
+  assert.ok(winnerQueried >= 1, 'on a 0 payout it cross-checks the public winner before booking the loss');
 });
 
 test('playRound: a TRANSIENT snapshot error during settlement (a flaky public RPC) is NOT fatal and NOT mistaken for settlement — it keeps polling to the deadline, then books the committed bet settled:false (never abandons the stake or kills the daemon)', async () => {
@@ -150,13 +152,32 @@ test('playRound: a finalised round whose claim THROWS surfaces a manual-recovery
   }), roundOpts({ rng: () => 0.34 })), /claim failed[\s\S]*node trade\.mjs claim 0xM --live/);
 });
 
-test('playRound: a HELD winner whose claim will not pay (claimed:false, or a zero/under-read payout, while held:true) throws recovery - it is NEVER booked as a loss', async () => {
-  const onHeld = (claimRet) => playRound(baseRound({
+test('playRound: a CLEAN 0 payout but the public result says THIS tokenId won is the real anomaly -> throws for manual recovery (never silently books a real win as a loss)', async () => {
+  await assert.rejects(playRound(baseRound({
     snapshot: snapThenThrow(1),
-    claim: async () => claimRet,
-  }), roundOpts({ rng: () => 0.34 }));
-  await assert.rejects(onHeld({ claimed: false, held: true, payout: 0n }), /node trade\.mjs claim 0xM --live/);
-  await assert.rejects(onHeld({ claimed: true, held: true, payout: 0n }), /node trade\.mjs claim 0xM --live/);
+    claim: async () => ({ claimed: false, held: true, payout: 0n, txs: [] }),
+    resolvedWinner: async () => 1n,   // public result: tokenId 1 WON, yet the chain pays 0 -> anomaly
+  }), roundOpts({ rng: () => 0 })),   // 0 -> tokenId 1
+  /tokenId 1 won but the on-chain claim pays 0[\s\S]*node trade\.mjs claim 0xM/);
+});
+
+test('playRound: a claim PREVIEW that reverts (payout unreadable) is undetermined -> throws for manual recovery, never a blind loss (regardless of the public winner)', async () => {
+  await assert.rejects(playRound(baseRound({
+    snapshot: snapThenThrow(1),
+    claim: async () => ({ claimed: false, held: true, payout: 0n, previewError: 'execution reverted: MarketNotFinalised()', txs: [] }),
+    resolvedWinner: async () => null,
+  }), roundOpts({ rng: () => 0.34 })),
+  /claim preview could not be read[\s\S]*node trade\.mjs claim 0xM/);
+});
+
+test('playRound: on a 0 payout, an unavailable public-winner cross-check still books a LOSS (a 0-payout claim has nothing to collect) - never a hang or throw', async () => {
+  const r = await playRound(baseRound({
+    snapshot: snapThenThrow(1),
+    claim: async () => ({ claimed: false, held: true, payout: 0n, txs: [] }),
+    resolvedWinner: async () => { throw new Error('42 REST down'); },
+  }), roundOpts({ rng: () => 0 }));
+  assert.equal(r.won, false);
+  assert.equal(r.realized, -WAD);
 });
 
 // ------------------------------------------------------------------------------ runBlitzLoop

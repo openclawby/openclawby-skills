@@ -328,6 +328,20 @@ test('listTokenRaces: an HTTP error or a body without a races list is an error (
   await assert.rejects(scan.listTokenRaces(), /offline tests: real fetch attempted for https:\/\/rest\.ft\.42\.space\/api\/v1\/token-races\?limit=100/);
 });
 
+// ------------------------------------------------------------------------------ resolveTokenRaceWinner (REST cross-check)
+test('resolveTokenRaceWinner: a finalised round\'s winning tokenId (resolvedAnswer), market match is case-insensitive; null when not finalised / not found / unset', async () => {
+  const row = { marketAddress: '0x0399b1672b85794A113DB3a01141CbdC27c56958', finalised: true, status: 'finalised', resolvedAnswer: '2' };
+  assert.equal(await scan.resolveTokenRaceWinner('0x0399B1672B85794A113DB3A01141CBDC27C56958', restStub(res(200, { data: [row] }))), 2);  // match ignores case; resolvedAnswer -> Number
+  assert.equal(await scan.resolveTokenRaceWinner(row.marketAddress, restStub(res(200, [row]))), 2);                                          // bare-array body accepted
+  assert.equal(await scan.resolveTokenRaceWinner(row.marketAddress, restStub(res(200, { data: [{ ...row, finalised: false }] }))), null);   // not finalised -> no authoritative winner yet
+  assert.equal(await scan.resolveTokenRaceWinner('0xabsenT000000000000000000000000000000beef', restStub(res(200, { data: [row] }))), null); // round not in the list
+  assert.equal(await scan.resolveTokenRaceWinner(row.marketAddress, restStub(res(200, { data: [{ ...row, resolvedAnswer: '0' }] }))), null); // 0 / unset answer -> null
+});
+
+test('resolveTokenRaceWinner: an HTTP error throws (the caller then treats it as "no cross-check", never inventing a winner)', async () => {
+  await assert.rejects(scan.resolveTokenRaceWinner('0x0399b1672b85794A113DB3a01141CbdC27c56958', restStub(res(503, {}))), /42 REST token-races HTTP 503/);
+});
+
 // ------------------------------------------------------------------------------ marketSnapshot
 const cents = (n) => BigInt(n) * 10n ** 16n;       // 0.01 units in 18-dec wei
 

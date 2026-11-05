@@ -1286,15 +1286,14 @@ async function previewBlitzClaim(c, step) {
   }
 }
 
-// Collect a won Blitz position, Lens-free. Reads the wallet's OT balance of (market, tokenId): a finalised Token Race burns the
-// LOSING outcome's OT to 0, so a held balance means this outcome WON (`held:true`), and nothing held means we lost. Before
-// broadcasting, the direct Market.claim is PREVIEWED with an eth_call that returns the exact USDT `payout`; it is sent only when
+// Attempt to collect a Blitz position's winnings, Lens-free. Reads the wallet's OT balance of (market, tokenId) ONLY to size the
+// burn — it does NOT decide win/loss: a finalised Token Race does NOT burn the losing OT, so a held balance means nothing by
+// itself. The direct Market.claim is PREVIEWED with an eth_call that returns the exact USDT `payout`; it is broadcast only when
 // that preview is positive, and that SAME previewed figure is the realized payout. A finalised Token Race claim is deterministic
 // (the win is frozen at finalisation), so the amount the eth_call computes is what the tx pays — and unlike a post-tx balanceOf
-// delta it can never read a stale 0 on a load-balanced RPC right after the claim (which would wrongly look like a 0 payout and
-// abort a real win). A held position whose preview will NOT pay is an anomaly (`held:true, claimed:false, payout:0`) — never
-// broadcast, surfaced for the caller to flag for manual recovery, never a silent loss. Builds its own context. `makeCtx` is the
-// test seam. -> { claimed, held, payout, txs } (+ would_claim on a dry run).
+// delta it can never read a stale 0 on a load-balanced RPC right after the claim. The CALLER reads win/loss from the result:
+// `claimed:true` with payout>0 is a win; a clean `payout:0` and no `previewError` is a loss; a `previewError` (the preview
+// reverted) is undetermined. Builds its own context. `makeCtx` is the test seam. -> { claimed, held, payout, txs, would_claim?, previewError? }.
 export async function runBlitzClaim(
   { market, tokenId, live = false, rpcUrl, account } = {},
   { makeCtx = makeContext } = {},
@@ -1306,7 +1305,7 @@ export async function runBlitzClaim(
   const alreadySent = c.sent.length;
   try {
     const bal = await c.marketAt(m).balanceOf(c.address, tid);
-    if (bal <= 0n) return { claimed: false, held: false, payout: 0n, txs: [] };   // losing OT burned to 0 -> nothing held -> lost
+    if (bal <= 0n) return { claimed: false, held: false, payout: 0n, txs: [] };   // nothing held for this tokenId -> nothing to claim (a clean zero; the caller books it a loss)
     const step = buildBlitzClaimStep(m, c.address, tid, bal);
     const preview = await previewBlitzClaim(c, step);
     const willPay = typeof preview.payout === 'bigint' && preview.payout > 0n;

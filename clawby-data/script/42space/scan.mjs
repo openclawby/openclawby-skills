@@ -54,6 +54,26 @@ export async function listTokenRaces(fetchImpl = fetch) {
   return out;
 }
 
+// The resolved winning tokenId of a finalised Token Race round, from the 42 REST — used ONLY as a cross-check when the on-chain
+// claim previews 0 (a loser pays 0, but so would a winner the chain cannot honour, and the two must not be confused). Returns
+// the winning tokenId as a Number when the round is finalised and the REST reports it, else null (not finalised / unknown round
+// / unset answer -> "no cross-check" to the caller). An HTTP error throws, so the caller treats an unreachable REST as no
+// cross-check rather than a false winner. REST fields: `marketAddress`, `finalised` (bool), `resolvedAnswer` (winning tokenId).
+export async function resolveTokenRaceWinner(market, fetchImpl = fetch) {
+  const res = await fetchImpl(TOKEN_RACES_URL, {
+    method: 'GET', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(REST_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error('42 REST token-races HTTP ' + res.status);
+  const body = await res.json();
+  const items = Array.isArray(body) ? body : body?.data;
+  if (!Array.isArray(items)) return null;
+  const want = String(market).toLowerCase();
+  const row = items.find((m) => String(m?.marketAddress ?? '').toLowerCase() === want);
+  if (!row || row.finalised !== true) return null;     // only a finalised round has an authoritative winner
+  const ans = Number(row.resolvedAnswer);
+  return Number.isInteger(ans) && ans > 0 ? ans : null;
+}
+
 // ------------------------------------------------------------------------------------ on-chain market state (Lens)
 const WAD = 10n ** 18n;
 
