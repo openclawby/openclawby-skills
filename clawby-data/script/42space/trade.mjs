@@ -83,14 +83,16 @@
 
 import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { dirname } from 'node:path';
 import {
   AbiCoder, Contract, Interface, JsonRpcProvider, MaxUint256, Network, Wallet,
   ZeroAddress, formatUnits, getAddress, isAddress, parseUnits,
 } from 'ethers';
-import { readState, writeState, DEFAULT_RPC } from './lib.mjs';
+import { readState, writeState, statePath, DEFAULT_RPC } from './lib.mjs';
 import { decryptKey, hasVault, guardedUnlock } from './vault.mjs';
 import { recordPosition } from './positions.mjs';
 import { bawSend } from './bawexec.mjs';
+import { makeNonceLock } from './noncelock.mjs';
 
 // ------------------------------------------------------------------------------------ constants
 export const CHAIN_ID = 56;
@@ -257,6 +259,21 @@ export function explainError(e) {
   return redactUrls(String(e?.message ?? e).split('\n')[0]).slice(0, 300);
 }
 
+// True ONLY for the array-out-of-bounds Panic (0x32) that 42's Lens snapshotMarket throws once a Token Race market finalises
+// (the Lens indexes an outcome array that finalisation has emptied). A thrown snapshot that matches this IS the settlement
+// signal — read "finalised" from it instead of a snapshot that can no longer return. Fail-closed: a different Panic (0x11
+// overflow, 0x01 assert), any custom revert, and every RPC/network error return false and stay fatal to the caller.
+export function isFinalisedSnapshotRevert(e) {
+  let data = e?.data;
+  if (typeof data !== 'string') data = e?.info?.error?.data ?? e?.error?.data;
+  if (data && typeof data === 'object' && typeof data.data === 'string') data = data.data;
+  if (typeof data === 'string' && /^0x4e487b71/i.test(data) && data.length >= 74) {
+    try { return BigInt('0x' + data.slice(10, 74)) === 0x32n; } catch { return false; }   // Panic(uint256) selector + code 0x32
+  }
+  if (e?.revert?.name === 'Panic') { try { return BigInt(e.revert.args?.[0]) === 0x32n; } catch { return false; } }   // ethers may surface the decoded panic
+  return false;
+}
+
 // --------------------------------------------------------------------------------- CLI parsing
 const VALUE_FLAGS = {
   '--slippage': 'slippage', '--approve-mode': 'approveMode',
@@ -366,6 +383,10 @@ export function makeContext({ live = false, account = loadAccount(), rpcUrl, baw
     sent: [],                                   // hashes broadcast during this run (for failure reporting)
     exec: account.isBaw ? 'baw' : undefined,    // a baw ctx broadcasts via bawExec (Binance App) instead of a local signer
     bawExec: account.isBaw ? (bawExec ?? bawSend) : undefined,
+    // Per-wallet cross-process lock so concurrent 42space modes (fast / blitz / take-profit) on this wallet serialize their
+    // nonce read + submit in sendStep and never clash. Only a live LOCAL-signer run broadcasts a nonce'd tx: a dry run sends
+    // nothing and a baw run signs in the Binance App (which manages its own nonce), so both carry no lock.
+    nonceLock: signer ? makeNonceLock(account.address, { dir: dirname(statePath()) }) : null,
     router: new Contract(ROUTER, ROUTER_ABI, provider),
     lens: new Contract(LENS, LENS_ABI, provider),
     usdt: new Contract(USDT, ERC20_ABI, provider),
@@ -851,7 +872,16 @@ export async function sendStep(c, step, allowedTargets) {
   let gasLimit = (est * step.gasMulPct) / 100n;
   if (step.gasFloor && gasLimit < step.gasFloor) gasLimit = step.gasFloor;
   console.log(`  gas estimate ${est} -> limit ${gasLimit}`);
-  const resp = await c.signer.sendTransaction({ to: step.to, data: step.data, value: 0n, gasLimit });
+  // Broadcast under the per-wallet cross-process nonce lock when the ctx carries one: read the pending nonce and submit INSIDE
+  // the lock, so two 42space processes (fast / blitz / take-profit) on the same wallet can never pick the same nonce and clash.
+  // The lock holds only for this read+submit (sub-second), not the confirmation wait below. A ctx without a lock (dry runs,
+  // the baw path handled above, unit tests) sends exactly as before and lets ethers assign the nonce.
+  const submit = async () => {
+    const tx = { to: step.to, data: step.data, value: 0n, gasLimit };
+    if (c.nonceLock) tx.nonce = await c.provider.getTransactionCount(c.address, 'pending');
+    return c.signer.sendTransaction(tx);
+  };
+  const resp = c.nonceLock ? await c.nonceLock(submit) : await submit();
   c.sent.push(resp.hash);
   console.log(`  SENT      tx ${resp.hash}`);
   let rcpt;
@@ -1159,7 +1189,12 @@ export async function runSell(
 export async function readPositionValue(c, market, tokenId) {
   // A finalised market can no longer be redeemed on the curve (its sell would revert) — it is CLAIMED, not sold. Report
   // it so the take-profit daemon drops it from monitoring and leaves it for `claim`, instead of retrying a reverting sell.
-  if ((await c.lens.snapshotMarket(market)).state.isFinalised) return { finalised: true, bal: 0n, usdtOut: 0n };
+  // A Token Race market REVERTS snapshotMarket (array-OOB Panic 0x32) once finalised instead of returning: that revert means
+  // finalised. Any OTHER snapshot error (RPC down, etc.) stays fatal — it must not be mistaken for finalisation.
+  let finalised;
+  try { finalised = (await c.lens.snapshotMarket(market)).state.isFinalised; }
+  catch (e) { if (!isFinalisedSnapshotRevert(e)) throw e; finalised = true; }
+  if (finalised) return { finalised: true, bal: 0n, usdtOut: 0n };
   const bal = await c.marketAt(market).balanceOf(c.address, tokenId);
   if (bal <= 0n) return { finalised: false, bal: 0n, usdtOut: 0n };
   const q = await quoteSell(c, market, tokenId, bal);
@@ -1212,10 +1247,25 @@ export async function runBlitzBet(
   } catch (e) { noteSent(c, e); throw e; } finally { c.provider.destroy(); }
 }
 
-// Collect a won Blitz position: reads the wallet's OT balance of (market, tokenId); nothing held -> nothing to claim. When live,
-// broadcasts the direct Market.claim and measures the USDT payout as the wallet's balance delta across it (claim's return value
-// is not readable from a sent tx without log decoding; the delta is exact and simpler). Builds its own context. `makeCtx` is the
-// test seam. -> { claimed, payout, txs } (+ would_claim:true on a dry run with a held balance).
+// eth_call of the direct Market.claim as the wallet (no signature, nothing sent): the USDT payout it WOULD pay right now (the
+// function's declared uint256 return), or { error } if it reverts. A finalised Token Race winner previews a positive payout; a
+// losing / already-claimed / unclaimable position previews 0 or reverts.
+async function previewBlitzClaim(c, step) {
+  try {
+    const out = await c.provider.call({ from: c.address, to: step.to, data: step.data });
+    return { payout: marketIface.decodeFunctionResult('claim', out)[0] };
+  } catch (e) {
+    return { error: explainError(e) };
+  }
+}
+
+// Collect a won Blitz position, Lens-free. Reads the wallet's OT balance of (market, tokenId): a finalised Token Race burns the
+// LOSING outcome's OT to 0, so a held balance means this outcome WON (`held:true`), and nothing held means we lost. Before
+// broadcasting, the direct Market.claim is PREVIEWED with an eth_call; it is sent only when the preview shows a positive payout,
+// and the realized payout is measured as the wallet's USDT balance delta across the tx (claim's return value is not readable
+// from a sent tx without log decoding; the delta is exact and simpler). A held position whose preview will NOT pay is an anomaly
+// (`held:true, claimed:false, payout:0`) — never broadcast, surfaced for the caller to flag for manual recovery, never a silent
+// loss. Builds its own context. `makeCtx` is the test seam. -> { claimed, held, payout, txs } (+ would_claim on a dry run).
 export async function runBlitzClaim(
   { market, tokenId, live = false, rpcUrl, account } = {},
   { makeCtx = makeContext } = {},
@@ -1227,13 +1277,16 @@ export async function runBlitzClaim(
   const alreadySent = c.sent.length;
   try {
     const bal = await c.marketAt(m).balanceOf(c.address, tid);
-    if (bal <= 0n) return { claimed: false, payout: 0n, txs: [] };
+    if (bal <= 0n) return { claimed: false, held: false, payout: 0n, txs: [] };   // losing OT burned to 0 -> nothing held -> lost
     const step = buildBlitzClaimStep(m, c.address, tid, bal);
-    if (!c.live) return { claimed: false, payout: 0n, txs: [], would_claim: true };
+    const preview = await previewBlitzClaim(c, step);
+    const willPay = typeof preview.payout === 'bigint' && preview.payout > 0n;
+    if (!c.live) return { claimed: false, held: true, payout: willPay ? preview.payout : 0n, would_claim: willPay, txs: [], ...(preview.error ? { previewError: preview.error } : {}) };
+    if (!willPay) return { claimed: false, held: true, payout: 0n, txs: [], ...(preview.error ? { previewError: preview.error } : {}) };   // held winner the claim won't honour -> anomaly, no broadcast
     const before = await c.usdt.balanceOf(c.address);
     await sendStep(c, step, new Set([m]));
     const after = await c.usdt.balanceOf(c.address);
-    return { claimed: true, payout: after - before, txs: c.sent.slice(alreadySent) };
+    return { claimed: true, held: true, payout: after - before, txs: c.sent.slice(alreadySent) };
   } catch (e) { noteSent(c, e); throw e; } finally { c.provider.destroy(); }
 }
 

@@ -118,6 +118,8 @@ Read the result:
 
 Ask which one the user wants (A fast · B AI one-shot · C Blitz). Before starting any mode check: `bnb_status` is **not** `none` · the USDT balance covers the planned spend · **every `--live` run needs the PIN piped on stdin as `{"pin":"…"}`** (it unlocks the embedded signer — pipe the **session PIN** you are already holding; only ask the user if you don't have it yet this session, and run the command yourself — never send them to a terminal) · for B and C `key_ok` is true.
 
+**Running several modes at once (same wallet).** Each mode is its own process. A live run serializes its broadcasts behind a per-wallet lock (a dir in `local/`), so fast + Blitz + take-profit can run together on one wallet without racing for the nonce. Two things make that hold: the processes must share the same `CLAWBY_42SPACE_STATE` (the default, unless you override it), and `BSC_RPC` should point at a **single dedicated node** — the lock reads the pending nonce from the RPC, and the default `bsc-dataseed` is load-balanced, so under heavy concurrency a stale pending read can still cause an occasional clash. Any clash **fails safe**: the affected send is skipped or reported (no funds move, nothing is auto-resent), so just let the loop continue. (A local key signs this way; a baw login signs in the Binance App, which sequences its own nonces, so this does not apply to it.)
+
 ### Mode A — Fast mode (volume farming)
 
 Buys and sells straight back, again and again, on the cheapest market until a target **trading volume** (buys + sells, in USDT) is reached. Ask the user for the target (for example 100 / 200 / 1000 USDT). You may record it with `node 42space.mjs set-volume <n>`, but fast mode reads `--target`, not the recorded number.

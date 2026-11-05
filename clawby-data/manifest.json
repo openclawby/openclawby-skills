@@ -1,5 +1,5 @@
 {
-  "version": "1.0.73",
+  "version": "1.0.74",
   "base_url": "https://www.openclawby.com/clawby-skill/",
   "managed": [
     "SKILL.md",
@@ -143,6 +143,8 @@
     "script/42space/blitz.test.mjs",
     "script/42space/bawexec.mjs",
     "script/42space/bawexec.test.mjs",
+    "script/42space/noncelock.mjs",
+    "script/42space/noncelock.test.mjs",
     "script/42space/invite.mjs",
     "script/42space/invite.test.mjs",
     "script/42space/positions.mjs",

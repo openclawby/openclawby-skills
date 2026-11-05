@@ -11,6 +11,11 @@ const snap = (isFinalised, answer = 0n, { start = 1_000, end = 1_010, tokenIds =
   ({ tokenIds, timestampStart: start, timestampEnd: end, isFinalised, answer });
 // a snapshot function that returns each element of `seq` in turn, repeating the last
 const snapSeq = (seq) => { const q = [...seq]; return async () => (q.length > 1 ? q.shift() : q[0]); };
+// The array-out-of-bounds Panic(0x32) 42's Lens snapshotMarket throws once a Token Race market finalises (the `.revert` form
+// ethers surfaces; isFinalisedSnapshotRevert in trade.mjs treats it as the settlement signal).
+const finalisedPanic = () => { const e = new Error('execution reverted'); e.revert = { name: 'Panic', args: [0x32n] }; return e; };
+// n live snapshot reads, then every later read throws `err()` (default: the finalised-market panic).
+const snapThenThrow = (n, err = finalisedPanic) => { let i = 0; return async () => { if (i++ < n) return snap(false); throw err(); }; };
 
 // ------------------------------------------------------------------------------ pickAsset
 test('pickAsset: returns only a tokenId from the set and honours a seeded rng (incl. the rng()===1 guard)', () => {
@@ -63,13 +68,13 @@ test('blitzWindow: open only within 04:00-18:00 UTC; nextOpen = today before ope
 const baseRound = (over = {}) => ({ now: () => 1_001, sleep: async () => {}, bet: async () => ({ traded: true, otToUser: 10n * WAD, txs: ['0xbet'] }), claim: async () => ({ claimed: true, payout: 0n, txs: ['0xclaim'] }), ...over });
 const roundOpts = (over = {}) => ({ market: '0xM', amount: '1', slippage: '10', rng: () => 0.34, pollMs: 1, ...over });
 
-test('playRound: a win reads the on-chain answer, claims, and realizes payout - stake; the bet uses the randomly-picked tokenId', async () => {
+test('playRound: once finalised (the snapshotMarket array-panic IS the settlement signal), a held + paying claim is a WIN realizing payout - stake; the bet uses the randomly-picked tokenId; no answer is read', async () => {
   let betArgs; let claimArgs;
   const r = await playRound(baseRound({
-    snapshot: snapSeq([snap(false), snap(false), snap(true, 2n)]),
+    snapshot: snapThenThrow(1),   // one live read (window/outcomes), then the finalised-market Panic(0x32)
     bet: async (a) => { betArgs = a; return { traded: true, otToUser: 10n * WAD, txs: ['0xbet'] }; },
-    claim: async (a) => { claimArgs = a; return { claimed: true, payout: 242n * 10n ** 16n, txs: ['0xclaim'] }; },
-  }), roundOpts({ rng: () => 0.34 }));   // 0.34 -> tokenId 2 == answer -> win
+    claim: async (a) => { claimArgs = a; return { claimed: true, held: true, payout: 242n * 10n ** 16n, txs: ['0xclaim'] }; },
+  }), roundOpts({ rng: () => 0.34 }));   // 0.34 -> tokenId 2
   assert.equal(r.result, 'bet');
   assert.equal(r.won, true);
   assert.equal(r.tokenId, 2n);
@@ -79,17 +84,34 @@ test('playRound: a win reads the on-chain answer, claims, and realizes payout - 
   assert.equal(claimArgs.tokenId, 2n);
 });
 
-test('playRound: a loss realizes -stake and never claims', async () => {
-  let claimed = false;
+test('playRound: a CLEAN isFinalised:true snapshot also settles the round, and the win is still decided Lens-free by the claim (not by answer)', async () => {
   const r = await playRound(baseRound({
-    snapshot: snapSeq([snap(false), snap(true, 2n)]),
-    claim: async () => { claimed = true; return { claimed: true, payout: 0n }; },
-  }), roundOpts({ rng: () => 0 }));   // 0 -> tokenId 1 != answer 2 -> loss
+    snapshot: snapSeq([snap(false), snap(true)]),   // finalised with answer deliberately left 0 -> proves won is NOT read from answer
+    claim: async () => ({ claimed: true, held: true, payout: 3n * WAD, txs: ['0xclaim'] }),
+  }), roundOpts({ rng: () => 0.34 }));
+  assert.equal(r.won, true);
+  assert.equal(r.realized, 3n * WAD - WAD);
+});
+
+test('playRound: a loss (losing OT burned to 0 -> the claim reports not held) realizes -stake; the claim is PROBED (that is how win/loss is read now) but sends nothing', async () => {
+  let claimCalls = 0;
+  const r = await playRound(baseRound({
+    snapshot: snapThenThrow(1),
+    claim: async () => { claimCalls += 1; return { claimed: false, held: false, payout: 0n, txs: [] }; },
+  }), roundOpts({ rng: () => 0 }));   // 0 -> tokenId 1
   assert.equal(r.result, 'bet');
   assert.equal(r.won, false);
   assert.equal(r.tokenId, 1n);
   assert.equal(r.realized, -WAD);
-  assert.equal(claimed, false);
+  assert.equal(claimCalls, 1, 'win/loss is now read Lens-free via the claim probe, so claim IS called on every finalised round');
+});
+
+test('playRound: a snapshot error that is NOT the finalised-market panic (e.g. the RPC is down) stays FATAL - it is never mistaken for settlement', async () => {
+  const rpcDown = () => new Error('could not detect network');   // no .revert, not a Panic
+  await assert.rejects(playRound(baseRound({
+    snapshot: snapThenThrow(1, rpcDown),
+    claim: async () => ({ claimed: true, held: true, payout: WAD }),
+  }), roundOpts()), /could not detect network/);
 });
 
 test('playRound: the trading window is already closed (now >= end-1) -> skip, nothing is bet', async () => {
@@ -115,20 +137,20 @@ test('playRound: a bet that never settles by the deadline is booked as a LOSS (c
   assert.equal(r.realized, -WAD);
 });
 
-test('playRound: a win whose claim fails throws with a manual-recovery hint (never a silent unrealized win)', async () => {
+test('playRound: a finalised round whose claim THROWS surfaces a manual-recovery hint (never a silent unrealized win)', async () => {
   await assert.rejects(playRound(baseRound({
-    snapshot: snapSeq([snap(false), snap(true, 2n)]),
+    snapshot: snapThenThrow(1),
     claim: async () => { throw new Error('boom: ERC6909InsufficientBalance'); },
   }), roundOpts({ rng: () => 0.34 })), /claim failed[\s\S]*node trade\.mjs claim 0xM --live/);
 });
 
-test('playRound: a win whose claim no-ops (claimed:false, or a zero/under-read payout) throws recovery - it is NEVER booked as a loss', async () => {
-  const onWin = (claimRet) => playRound(baseRound({
-    snapshot: snapSeq([snap(false), snap(true, 2n)]),
+test('playRound: a HELD winner whose claim will not pay (claimed:false, or a zero/under-read payout, while held:true) throws recovery - it is NEVER booked as a loss', async () => {
+  const onHeld = (claimRet) => playRound(baseRound({
+    snapshot: snapThenThrow(1),
     claim: async () => claimRet,
-  }), roundOpts({ rng: () => 0.34 }));    // 0.34 -> tokenId 2 == answer -> win
-  await assert.rejects(onWin({ claimed: false, payout: 0n }), /node trade\.mjs claim 0xM --live/);
-  await assert.rejects(onWin({ claimed: true, payout: 0n }), /node trade\.mjs claim 0xM --live/);
+  }), roundOpts({ rng: () => 0.34 }));
+  await assert.rejects(onHeld({ claimed: false, held: true, payout: 0n }), /node trade\.mjs claim 0xM --live/);
+  await assert.rejects(onHeld({ claimed: true, held: true, payout: 0n }), /node trade\.mjs claim 0xM --live/);
 });
 
 // ------------------------------------------------------------------------------ runBlitzLoop

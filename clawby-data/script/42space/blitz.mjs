@@ -4,7 +4,7 @@
 // chain write goes through injected `bet`/`claim` (trade.runBlitzBet / trade.runBlitzClaim). Pure random: ~1/3 hit rate minus
 // fees = negative expected value; the two gates are the only risk control.
 import { formatUnits } from 'ethers';
-import { parseAmount, explainError } from './trade.mjs';
+import { parseAmount, explainError, isFinalisedSnapshotRevert } from './trade.mjs';
 
 // Token Race's fixed daily hours (UTC), as named constants — update if 42 changes them. REST/on-chain stays authoritative for
 // whether a given round is actually open; these are used only to message "closed, opens at <ts>" and to avoid pointless waits.
@@ -45,7 +45,9 @@ export function blitzWindow(nowSec, { openHourUtc = BLITZ_OPEN_HOUR_UTC, closeHo
 }
 
 // Play ONE round: read the on-chain window + outcomes, pick a random asset, wait for the 10s trading window, bet, then settle
-// from chain (poll until finalised) and claim on a win. deps: { now()(sec), sleep(ms), snapshot(market), bet(args), claim(args) }.
+// from chain (poll until finalised — a finalised Token Race REVERTS the Lens snapshot with Panic(0x32), and that revert is the
+// settlement signal) and claim on a win (win = a held balance, since losers' OT is burned to 0). deps: { now()(sec), sleep(ms),
+// snapshot(market), bet(args), claim(args) }.
 //   -> { result:'bet', asset, tokenId, stake, realized, won, payout?, txs? }   (realized/stake/payout are BigInt USDT wei)
 //      { result:'skip', reason, market, tokenId? }                             (benign: no stake lost)
 // A win whose claim fails THROWS (with a manual-recovery hint) — an unrealized win must never be silently counted.
@@ -62,23 +64,38 @@ export async function playRound(deps, { market, amount, slippage, rng = Math.ran
   let betRes;
   try { betRes = await bet({ market, tokenId, usdt: String(amount), slippage }); }
   catch (e) { return { result: 'skip', reason: explainError(e), market, tokenId }; }   // MarketEnded etc. -> atomic, no stake spent
+  // Settle from chain. 42's Lens snapshotMarket REVERTS with an array-out-of-bounds Panic(0x32) the moment a Token Race market
+  // finalises (it indexes an outcome array finalisation has emptied), so a thrown finalised-snapshot IS the settlement signal,
+  // not a fatal error. Any OTHER throw (RPC down, a different revert) stays fatal. `answer` is never read — the whole snapshot
+  // reverts once finalised, so the winning outcome is read Lens-free below, through the claim.
   const deadline = end + settleGraceSec;
-  let sN = await snapshot(market);
-  while (!sN.isFinalised && now() < deadline) { await wait(pollMs); sN = await snapshot(market); }
+  let finalised = false;
+  for (;;) {
+    try {
+      const sN = await snapshot(market);
+      if (sN.isFinalised) { finalised = true; break; }
+    } catch (e) {
+      if (isFinalisedSnapshotRevert(e)) { finalised = true; break; }
+      throw e;
+    }
+    if (now() >= deadline) break;
+    await wait(pollMs);
+  }
   // The bet WAS broadcast, so the stake is committed on chain. A settlement that never arrives must still enter the cumulative
   // P&L gate (otherwise --max-loss would not bound the real USDT at risk), booked conservatively as a loss. `settled:false`
   // flags it so the loop can tell the user to claim it by hand if it actually won.
-  if (!sN.isFinalised) return { result: 'bet', asset: assetName(tokenId), tokenId, stake: stakeWei, realized: -stakeWei, won: false, settled: false, market, txs: betRes?.txs ?? [] };
-  const won = BigInt(sN.answer) === BigInt(tokenId);
-  if (!won) return { result: 'bet', asset: assetName(tokenId), tokenId, stake: stakeWei, realized: -stakeWei, won: false, txs: betRes?.txs ?? [] };
+  if (!finalised) return { result: 'bet', asset: assetName(tokenId), tokenId, stake: stakeWei, realized: -stakeWei, won: false, settled: false, market, txs: betRes?.txs ?? [] };
+  // The win is read Lens-free through the claim: a finalised Token Race burns the LOSING outcome's OT to 0, so a held balance
+  // (claim.held) means this tokenId won. runBlitzClaim previews the claim and only broadcasts when it will pay.
   let c;
   try { c = await claim({ market, tokenId }); }
   catch (e) { throw new Error(`won round on ${market} (tokenId ${tokenId}) but the claim failed: ${explainError(e)} - collect it by hand: node trade.mjs claim ${market} --live`); }
+  if (!c?.held) return { result: 'bet', asset: assetName(tokenId), tokenId, stake: stakeWei, realized: -stakeWei, won: false, market, txs: betRes?.txs ?? [] };   // nothing held -> this outcome lost
   const payout = BigInt(c?.payout ?? 0n);
-  // A win that did not actually pay out (claim no-op'd, or an anomalous/under-read balance delta) must NEVER be silently booked
-  // as a loss - surface it so the user claims by hand (the spec's core guarantee: no silent unrealized win).
+  // Held means we won, so a claim that did not actually pay out (no-op, a preview that would not pay, or an under-read delta)
+  // must NEVER be silently booked as a loss - surface it so the user claims by hand (the spec's core guarantee: no silent win).
   if (!c?.claimed || payout <= 0n) throw new Error(`won round on ${market} (tokenId ${tokenId}) but the claim did not pay out (claimed=${!!c?.claimed}, payout=${payout}) - collect it by hand: node trade.mjs claim ${market} --live`);
-  return { result: 'bet', asset: assetName(tokenId), tokenId, stake: stakeWei, realized: payout - stakeWei, won: true, payout, txs: [...(betRes?.txs ?? []), ...(c?.txs ?? [])] };
+  return { result: 'bet', asset: assetName(tokenId), tokenId, stake: stakeWei, realized: payout - stakeWei, won: true, payout, market, txs: [...(betRes?.txs ?? []), ...(c?.txs ?? [])] };
 }
 
 // The gated loop. deps: { listRaces(), playRound(opts), now()(sec), sleep(ms), onEvent(e), window?(nowSec) }. Each pass discovers

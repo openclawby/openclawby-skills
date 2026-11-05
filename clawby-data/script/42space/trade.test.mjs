@@ -10,7 +10,7 @@ import { AbiCoder, Interface, MaxUint256, id, ZeroAddress, getAddress } from 'et
 import {
   ROUTER, ROUTER_ABI, ERROR_ABI, ERC20_ABI, MARKET_ABI, DEFAULT_MARKET, USDT,
   smartEps, encodeDataGuess, slippageBips, applySlippage, floorToTick,
-  parseAmount, parseTokenId, parseMarket, explainError, parseArgs, resolveClaimTarget,
+  parseAmount, parseTokenId, parseMarket, explainError, isFinalisedSnapshotRevert, parseArgs, resolveClaimTarget,
   loadAccount, makeContext, buildClaimStep, planClaim, claimRevertHint, sendStep, wantsLive, main,
   buildRoundtripMulticall, planRoundtrip, roundtripOutlook, printRoundtripQuote, planBuy, planSell, decodeForDisplay, gasUnitsFor,
   runBlitzBet, runBlitzClaim, buildBlitzClaimStep, ensureUsdtApproval,
@@ -166,6 +166,21 @@ test('explainError decodes custom errors by name (incl. MarketNoClaim) and falls
   assert.equal(explainError({ reason: 'because' }), 'because');
   assert.equal(explainError(new Error('first line\nsecond line')), 'first line');
   assert.equal(explainError('plain'), 'plain');
+});
+
+test('isFinalisedSnapshotRevert: true ONLY for the array-out-of-bounds Panic(0x32) a finalised Token Race market throws; fail-closed on everything else', () => {
+  const panic = (code) => '0x4e487b71' + coder.encode(['uint256'], [code]).slice(2);
+  assert.equal(isFinalisedSnapshotRevert({ data: panic(0x32n) }), true);
+  assert.equal(isFinalisedSnapshotRevert({ info: { error: { data: panic(0x32n) } } }), true);   // ethers nests the revert data
+  assert.equal(isFinalisedSnapshotRevert({ error: { data: { data: panic(0x32n) } } }), true);
+  assert.equal(isFinalisedSnapshotRevert({ revert: { name: 'Panic', args: [0x32n] } }), true);   // or surfaces the decoded panic
+  assert.equal(isFinalisedSnapshotRevert({ data: panic(0x11n) }), false);   // arithmetic overflow Panic — NOT a finalisation signal
+  assert.equal(isFinalisedSnapshotRevert({ data: panic(0x01n) }), false);   // assert()/require Panic — NOT finalisation
+  assert.equal(isFinalisedSnapshotRevert({ data: id('MarketNoClaim()').slice(0, 10) }), false);   // a custom revert, not a Panic
+  assert.equal(isFinalisedSnapshotRevert(new Error('could not detect network')), false);   // an RPC/network error stays fatal
+  assert.equal(isFinalisedSnapshotRevert({ shortMessage: 'execution reverted' }), false);
+  assert.equal(isFinalisedSnapshotRevert(null), false);
+  assert.equal(isFinalisedSnapshotRevert(undefined), false);
 });
 
 // ------------------------------------------------------------------------------ CLI parsing
@@ -815,6 +830,25 @@ test('sendStep on the roundtrip step: allow-listed targets only, value 0, gas li
   assert.deepEqual(c2.sent, ['0xfeed']);
 });
 
+test('sendStep: with a nonceLock (a live local-signer ctx), the pending nonce is READ and the tx SUBMITTED inside the lock, so concurrent same-wallet processes cannot pick the same nonce', async () => {
+  const events = [];
+  const sendArgs = [];
+  const c = {
+    live: true, address: ADDR, sent: [],
+    provider: { getTransactionCount: async (addr, tag) => { events.push(`getNonce:${tag}`); assert.equal(addr, ADDR); return 42; } },
+    signer: {
+      estimateGas: async () => 100_000n,
+      sendTransaction: async (tx) => { events.push('send'); sendArgs.push(tx); return { hash: '0xabc', wait: async () => ({ status: 1, blockNumber: 1, gasUsed: 1n }) }; },
+    },
+    nonceLock: async (fn) => { events.push('lock'); try { return await fn(); } finally { events.push('unlock'); } },
+  };
+  const step = { kind: 'swap', to: ROUTER, value: 0n, data: '0xfeed', gasMulPct: 150n, gasFloor: 800_000n };
+  await quietly(() => sendStep(c, step, new Set([ROUTER])));
+  assert.equal(sendArgs[0].nonce, 42, 'the explicit pending nonce read under the lock is attached to the tx');
+  assert.deepEqual(events, ['lock', 'getNonce:pending', 'send', 'unlock'], 'nonce read AND submit are both inside the lock');
+  assert.deepEqual(c.sent, ['0xabc']);
+});
+
 // ------------------------------------------------------------------------------ baw execution backend (dispatch)
 test('loadAccount: a baw login is isBaw (no local signer; a normal login is not baw)', () => {
   const a = loadAccount({ method: 'baw', address: ADDR });
@@ -837,6 +871,16 @@ test('makeContext: a baw account gives a baw ctx (exec:"baw", bawExec wired) and
   assert.throws(() => makeContext({ live: true, account: { address: ADDR, signer: null, canSign: false, isBaw: false, method: 'email', rpc: DEFAULT_RPC } }), /no signer|PIN/);
 });
 
+test('makeContext: a live local-signer ctx carries a per-wallet nonceLock (cross-process nonce serialization); a dry run and a baw ctx carry none', () => {
+  const liveAcct = { address: ADDR, signer: Wallet.fromPhrase(PHRASE), canSign: true, isBaw: false, method: 'email', rpc: DEFAULT_RPC };
+  const live = makeContext({ live: true, account: liveAcct });
+  try { assert.equal(typeof live.nonceLock, 'function', 'a live local-signer ctx locks the nonce'); } finally { live.provider.destroy(); }
+  const dry = makeContext({ live: false, account: liveAcct });
+  try { assert.equal(dry.nonceLock ?? null, null, 'a dry run never broadcasts, so no lock'); } finally { dry.provider.destroy(); }
+  const baw = makeContext({ live: true, account: { address: ADDR, signer: null, canSign: false, isBaw: true, method: 'baw', rpc: DEFAULT_RPC }, bawExec: async () => ({ hash: '0x', status: 'BROADCASTED' }) });
+  try { assert.equal(baw.nonceLock ?? null, null, 'baw signs in the Binance App, which manages its own nonce'); } finally { baw.provider.destroy(); }
+});
+
 test('sendStep: a baw ctx routes to bawExec (from/to/value/data), records the hash, and still enforces live + value-0 + allow-list', async () => {
   let got = null;
   const bawExec = async (x) => { got = x; return { hash: '0xbaw1', status: 'BROADCASTED' }; };
@@ -856,13 +900,14 @@ test('sendStep: a baw ctx routes to bawExec (from/to/value/data), records the ha
 const mktIface = new Interface(MARKET_ABI);
 // A fuller offline ctx than stubCtx: adds a fake signer + sent[] so the live broadcast path of the blitz primitives runs with no
 // network. usdt.balanceOf returns usdtBefore until the first tx is sent, then usdtAfter (so a claim's payout = the delta).
-function blitzCtx({ allowance = 0n, otToUser = OT_QUOTE, costFromUser = 10n ** 18n, bal = 0n, usdtBefore = 0n, usdtAfter = 0n, live = true } = {}) {
+function blitzCtx({ allowance = 0n, otToUser = OT_QUOTE, costFromUser = 10n ** 18n, bal = 0n, usdtBefore = 0n, usdtAfter = 0n, previewPayout = 0n, previewThrows = false, live = true } = {}) {
   const sent = [];
   const sendArgs = [];
   const q = (price) => ({ price });
   const c = {
     live, address: ADDR, sent, sendArgs,
-    provider: { destroy() {} },
+    // provider.call backs the Blitz claim's eth_call preview (previewBlitzClaim): it returns an encoded claim(uint256 payout).
+    provider: { destroy() {}, call: async () => { if (previewThrows) throw new Error('execution reverted: MarketNoClaim()'); return mktIface.encodeFunctionResult('claim', [previewPayout]); } },
     signer: { estimateGas: async () => 500_000n,
       sendTransaction: async (tx) => { sendArgs.push(tx); const h = '0x' + (sent.length + 1).toString(16).padStart(4, '0'); sent.push(h); return { hash: h, wait: async () => ({ status: 1, blockNumber: 1, gasUsed: 1n }) }; } },
     lens: {
@@ -904,17 +949,28 @@ test('runBlitzBet: live sends exactly the Router.swap mint (pre-approved -> one 
   assert.equal(dry.sendArgs.length, 0);
 });
 
-test('runBlitzClaim: bal 0 -> {claimed:false, payout:0}, sends nothing; bal>0 live -> one Market.claim tx, payout = USDT balance delta', async () => {
+test('runBlitzClaim: bal 0 -> {claimed:false, held:false, payout:0}, sends nothing; held + a positive claim preview -> one Market.claim tx, payout = USDT balance delta; held but the preview will not pay -> no send', async () => {
+  // Losing OT is burned to 0 on finalisation, so bal 0 means we lost: nothing held, nothing to claim.
   const none = blitzCtx({ bal: 0n });
-  assert.deepEqual(await runBlitzClaim({ market: MKT, tokenId: 2n, account: {}, live: true }, { makeCtx: none.makeCtx }), { claimed: false, payout: 0n, txs: [] });
+  assert.deepEqual(await runBlitzClaim({ market: MKT, tokenId: 2n, account: {}, live: true }, { makeCtx: none.makeCtx }), { claimed: false, held: false, payout: 0n, txs: [] });
   assert.equal(none.sendArgs.length, 0);
-  const win = blitzCtx({ bal: 99n * 10n ** 17n, usdtBefore: 10n ** 19n, usdtAfter: 1242n * 10n ** 16n });   // +2.42 USDT
+  // held + the eth_call preview shows a payout -> broadcast; the reported payout is the real USDT balance delta, not the preview.
+  const win = blitzCtx({ bal: 99n * 10n ** 17n, previewPayout: 1n, usdtBefore: 10n ** 19n, usdtAfter: 1242n * 10n ** 16n });   // +2.42 USDT
   const r = await runBlitzClaim({ market: MKT, tokenId: 2n, account: {}, live: true }, { makeCtx: win.makeCtx });
   assert.equal(r.claimed, true);
+  assert.equal(r.held, true);
   assert.equal(r.payout, 242n * 10n ** 16n);
   assert.equal(win.sendArgs.length, 1);
   assert.equal(win.sendArgs[0].to, MKT);
   assert.equal(win.sendArgs[0].data.slice(0, 10), '0x63d05442');
+  // held but the preview will NOT pay out (an anomaly: we hold winning OT the claim won't honour) -> never broadcast; surfaced
+  // as held with a zero payout so the caller flags it for manual recovery rather than booking a silent loss.
+  const dud = blitzCtx({ bal: 99n * 10n ** 17n, previewPayout: 0n });
+  const rd = await runBlitzClaim({ market: MKT, tokenId: 2n, account: {}, live: true }, { makeCtx: dud.makeCtx });
+  assert.equal(rd.claimed, false);
+  assert.equal(rd.held, true);
+  assert.equal(rd.payout, 0n);
+  assert.equal(dud.sendArgs.length, 0, 'a preview that will not pay is NOT broadcast');
 });
 
 test('ensureUsdtApproval: short allowance -> one MaxUint256 approve to USDT; already (near-)max -> no-op', async () => {
@@ -1036,6 +1092,23 @@ test('readPositionValue: finalised -> {finalised:true, no quote}; live bal>0 -> 
   assert.equal(settled.finalised, true);
   assert.equal(settled.bal, 0n);
   assert.equal(redeemCalls, 1, 'a finalised market is never quoted (left for claim)');
+  // a finalised Token Race market REVERTS snapshotMarket (array-OOB Panic 0x32) instead of returning -> still read as finalised,
+  // dropped from monitoring and left for claim, rather than crashing the take-profit loop.
+  const panicCtx = {
+    address: ADDR,
+    marketAt: () => ({ balanceOf: async () => 5n * 10n ** 18n }),
+    lens: {
+      snapshotMarket: async () => { const e = new Error('execution reverted'); e.revert = { name: 'Panic', args: [0x32n] }; throw e; },
+      simulateRedeem: { staticCall: async () => { redeemCalls += 1; return { quote: { collateralToUser: 0n } }; } },
+    },
+  };
+  const panicFinal = await readPositionValue(panicCtx, MKT, 2n);
+  assert.equal(panicFinal.finalised, true);
+  assert.equal(panicFinal.bal, 0n);
+  assert.equal(redeemCalls, 1, 'a snapshot that reverts-as-finalised is never quoted either');
+  // any OTHER snapshot error (RPC down) propagates — it must NOT be mistaken for finalisation
+  const downCtx = { ...panicCtx, lens: { snapshotMarket: async () => { throw new Error('could not detect network'); } } };
+  await assert.rejects(readPositionValue(downCtx, MKT, 2n), /could not detect network/);
 });
 
 test('static scan: sell has ONE live send path — cmdSell and runSell both execute via executeSell (sendStep, allow-list [ROUTER, market]); a dry run returns first', () => {
