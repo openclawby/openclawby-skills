@@ -14,7 +14,7 @@ test('encrypt -> decrypt round-trips', () => {
   const v = encryptKey(PRIV, PIN, ADDR);
   assert.equal(decryptKey(v, PIN), PRIV);
   assert.equal(v.addr, ADDR);
-  assert.equal(v.pin_len, PIN.length);
+  assert.equal('pin_len' in v, false, 'the PIN length is a property of the PIN — it must never be written to the vault file');
 });
 
 test('wrong pin throws and leaks no pin/key', () => {

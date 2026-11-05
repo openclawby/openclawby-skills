@@ -35,7 +35,9 @@ export function validatePin(pin) {
 }
 
 // privHex -> a sealed vault object. `addr` (the embedded address) is stored as plain metadata for
-// reference/verification; it is NOT a secret. Returns { v, kdf, N, r, p, salt, iv, ct, tag, addr, pin_len, created_at }.
+// reference/verification; it is NOT a secret. Returns { v, kdf, N, r, p, salt, iv, ct, tag, addr, created_at }.
+// The PIN's length is deliberately NOT stored — it is a property of the PIN, which never touches disk (a persisted length
+// would narrow an offline brute-forcer's keyspace from a range to one exact length).
 export function encryptKey(privHex, pin, addr = null) {
   validatePin(pin);
   const salt = randomBytes(16);
@@ -49,7 +51,7 @@ export function encryptKey(privHex, pin, addr = null) {
       v: 1, kdf: 'scrypt', N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P,
       salt: salt.toString('base64'), iv: iv.toString('base64'),
       ct: ct.toString('base64'), tag: tag.toString('base64'),
-      addr, pin_len: pin.length, created_at: new Date().toISOString(),
+      addr, created_at: new Date().toISOString(),
     };
   } finally {
     key.fill(0);

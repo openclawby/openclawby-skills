@@ -274,6 +274,16 @@ export function isFinalisedSnapshotRevert(e) {
   return false;
 }
 
+// ethers v6 rejects any in-flight request when a provider is destroyed. Each per-call context does `provider.destroy()` in its
+// finally, which can land while the just-confirmed tx's receipt poll is still outstanding — surfacing a benign "provider
+// destroyed; cancelled request" rejection AFTER the work already succeeded. A long-running daemon (fast / blitz / take-profit)
+// would otherwise crash on it under Node's default --unhandled-rejections=throw. True for EXACTLY that noise so the CLI can
+// ignore it; every other rejection returns false and must still crash the process.
+export function isBenignProviderCancellation(e) {
+  if (e?.code === 'CANCELLED') return true;
+  return /provider destroyed|cancelled request/i.test(String(e?.message ?? e ?? ''));
+}
+
 // --------------------------------------------------------------------------------- CLI parsing
 const VALUE_FLAGS = {
   '--slippage': 'slippage', '--approve-mode': 'approveMode',
@@ -404,7 +414,16 @@ async function readMarket(c, market) {
   let version = 0;
   try { version = Number(await c.router.isMarketVersion(market)); } catch { /* not a market */ }
   if (version !== 1 && version !== 2) throw new Error(`${market} is not a recognised 42 market (router.isMarketVersion=${version})`);
-  const snap = await c.lens.snapshotMarket(market);
+  // A finalised Token Race market REVERTS snapshotMarket (array-OOB Panic 0x32) instead of returning, so the commands whose whole
+  // job is a finalised market — claim / status / set-operator — must read that revert AS finalised rather than die on it. The
+  // curve/outcomes/window are unreadable then, but claim needs only isFinalised (it previews the payout itself), status reports
+  // FINALISED, and set-operator is a market call independent of the Lens. Any OTHER snapshot error stays fatal.
+  let snap;
+  try { snap = await c.lens.snapshotMarket(market); }
+  catch (e) {
+    if (!isFinalisedSnapshotRevert(e)) throw e;
+    return { version, curve: ZeroAddress, tick: FALLBACK_TICK, tickSource: 'fallback 0.01 OT', endTs: 0, startTs: 0, isFinalised: true, isLive: false, ots: [] };
+  }
   let tick = FALLBACK_TICK;
   let tickSource = 'fallback 0.01 OT';
   try {
@@ -860,6 +879,14 @@ export async function sendStep(c, step, allowedTargets) {
     const r = await c.bawExec({ from: c.address, to: step.to, value: step.value, data: step.data });
     c.sent.push(r.hash);
     console.log(`  SENT (baw) tx ${r.hash}`);
+    // Confirm on-chain like the local-signer path below, WHEN the ctx has a provider (the trade ctx does): baw's preview
+    // simulates the call, but state can move between preview and execute, so a tx that reverts AFTER broadcast must not be
+    // reported as success. The identity SBT mint builds a minimal provider-less baw ctx (pure calldata, value 0, preview-gated,
+    // one-time), which has nothing to confirm with and skips this.
+    if (c.provider?.waitForTransaction) {
+      const rcpt = await c.provider.waitForTransaction(r.hash, 1, TX_WAIT_MS);
+      if (!rcpt || rcpt.status !== 1) throw new Error(`baw tx reverted or did not confirm: ${r.hash} — check tx-history in the Binance App before retrying`);
+    }
     return r;
   }
   let est;
@@ -1261,11 +1288,13 @@ async function previewBlitzClaim(c, step) {
 
 // Collect a won Blitz position, Lens-free. Reads the wallet's OT balance of (market, tokenId): a finalised Token Race burns the
 // LOSING outcome's OT to 0, so a held balance means this outcome WON (`held:true`), and nothing held means we lost. Before
-// broadcasting, the direct Market.claim is PREVIEWED with an eth_call; it is sent only when the preview shows a positive payout,
-// and the realized payout is measured as the wallet's USDT balance delta across the tx (claim's return value is not readable
-// from a sent tx without log decoding; the delta is exact and simpler). A held position whose preview will NOT pay is an anomaly
-// (`held:true, claimed:false, payout:0`) — never broadcast, surfaced for the caller to flag for manual recovery, never a silent
-// loss. Builds its own context. `makeCtx` is the test seam. -> { claimed, held, payout, txs } (+ would_claim on a dry run).
+// broadcasting, the direct Market.claim is PREVIEWED with an eth_call that returns the exact USDT `payout`; it is sent only when
+// that preview is positive, and that SAME previewed figure is the realized payout. A finalised Token Race claim is deterministic
+// (the win is frozen at finalisation), so the amount the eth_call computes is what the tx pays — and unlike a post-tx balanceOf
+// delta it can never read a stale 0 on a load-balanced RPC right after the claim (which would wrongly look like a 0 payout and
+// abort a real win). A held position whose preview will NOT pay is an anomaly (`held:true, claimed:false, payout:0`) — never
+// broadcast, surfaced for the caller to flag for manual recovery, never a silent loss. Builds its own context. `makeCtx` is the
+// test seam. -> { claimed, held, payout, txs } (+ would_claim on a dry run).
 export async function runBlitzClaim(
   { market, tokenId, live = false, rpcUrl, account } = {},
   { makeCtx = makeContext } = {},
@@ -1283,10 +1312,8 @@ export async function runBlitzClaim(
     const willPay = typeof preview.payout === 'bigint' && preview.payout > 0n;
     if (!c.live) return { claimed: false, held: true, payout: willPay ? preview.payout : 0n, would_claim: willPay, txs: [], ...(preview.error ? { previewError: preview.error } : {}) };
     if (!willPay) return { claimed: false, held: true, payout: 0n, txs: [], ...(preview.error ? { previewError: preview.error } : {}) };   // held winner the claim won't honour -> anomaly, no broadcast
-    const before = await c.usdt.balanceOf(c.address);
-    await sendStep(c, step, new Set([m]));
-    const after = await c.usdt.balanceOf(c.address);
-    return { claimed: true, held: true, payout: after - before, txs: c.sent.slice(alreadySent) };
+    await sendStep(c, step, new Set([m]));   // throws unless the claim confirms (status 1); the payout is the previewed return
+    return { claimed: true, held: true, payout: preview.payout, txs: c.sent.slice(alreadySent) };
   } catch (e) { noteSent(c, e); throw e; } finally { c.provider.destroy(); }
 }
 
@@ -1468,6 +1495,9 @@ export function isMain(argvPath, metaUrl) {
 }
 
 if (isMain(process.argv[1], import.meta.url)) {
+  // Ignore the benign "provider destroyed; cancelled request" rejection a per-call context's provider.destroy() can emit after a
+  // tx already confirmed; re-throw anything real so a genuine unhandled rejection still crashes (the default behaviour).
+  process.on('unhandledRejection', (e) => { if (!isBenignProviderCancellation(e)) throw e; });
   main(process.argv.slice(2)).catch((e) => {
     console.error('ERROR:', explainError(e));
     if (e?.afterNote) console.error(e.afterNote);

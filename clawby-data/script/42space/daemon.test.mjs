@@ -99,6 +99,17 @@ test('fastModeCycle: when NO market is below the threshold it returns exactly {t
   }
 });
 
+test('fastModeCycle: a pick no longer tradable at trade time (ended / not-started race — scan intentionally hands non-live markets to judge) is SKIPPED as {traded:false}, never crashing the daemon; a real broadcast failure still throws', async () => {
+  const rows = [row(1, 1, 100n)];   // one eligible pick
+  const notLive = await daemon.fastModeCycle({ scan: stubScan(rows), runRoundtrip: async () => { throw new Error('market is not live (finalised or outside its trading window) - refusing to send'); } }, { amount: '1' });
+  assert.deepEqual(notLive, { traded: false }, 'a pre-send tradability failure is a skip -> the loop waits and rescans, it does not die');
+  await assert.rejects(daemon.fastModeCycle({ scan: stubScan(rows), runRoundtrip: async () => { throw new Error('tx reverted on-chain: 0xabc'); } }, { amount: '1' }), /reverted on-chain/, 'a genuine broadcast failure stays fatal');
+  // a pick that fully FINALISED between scan and trade makes readMarket return the finalised stub (empty outcomes), so
+  // assertTradable throws "tokenId N is not an outcome of this market (valid tokenIds: )" — also a non-tradable skip, not a crash
+  const finalisedByTrade = await daemon.fastModeCycle({ scan: stubScan(rows), runRoundtrip: async () => { throw new Error('tokenId 1 is not an outcome of this market (valid tokenIds: )'); } }, { amount: '1' });
+  assert.deepEqual(finalisedByTrade, { traded: false });
+});
+
 test('fastModeCycle: the threshold is strict (just below passes, equal does not) and can be raised, never silently ignored', async () => {
   const below = await daemon.fastModeCycle({ scan: stubScan([row(1, 2.9999999, 1n)]), runRoundtrip: stubRoundtrip() }, { amount: '1' });
   assert.equal(below.traded, true);
@@ -738,6 +749,34 @@ test('takeProfitCycle: a dry run (execute:false) reports would_sell and never se
   assert.equal(r.sold, 0);
   assert.deepEqual(deps._removed, []);
   assert.ok(deps._results.some((x) => x.action === 'would_sell'));
+});
+
+test('takeProfitCycle: multiple lots on the SAME (market,tokenId) use a BLENDED cost basis — it never dumps the whole balance at a real net loss on one cheap lot\'s unit cost', async () => {
+  const WAD = 10n ** 18n;
+  const m = addr(1);
+  // lot1: 1 OT bought for 0.1 USDT (unit 0.1); lot2: 100 OT for 100 USDT (unit 1.0). Blended: 101 OT, cost 100.1 USDT.
+  const lot1 = { market: m, tokenId: '1', entryUsdt: (WAD / 10n).toString(), entryOt: WAD.toString(), ts: 1 };
+  const lot2 = { market: m, tokenId: '1', entryUsdt: (100n * WAD).toString(), entryOt: (100n * WAD).toString(), ts: 2 };
+  let sellCalled = false;
+  // redeeming the whole 101 OT now yields 50.5 USDT — a NET LOSS vs the 100.1 blended cost — so it must HOLD, never sell.
+  const deps = tpDeps({ positions: [lot1, lot2], readValue: async () => ({ bal: 101n * WAD, usdtOut: 505n * WAD / 10n }), sell: async () => { sellCalled = true; return { traded: true, txs: [] }; } });
+  const r = await daemon.takeProfitCycle(deps, { pct: 50, execute: true });
+  assert.equal(sellCalled, false, 'the blended basis shows a loss — the position must NOT be sold (one cheap lot must not trigger a full-stack dump)');
+  assert.equal(r.sold, 0);
+  assert.ok(deps._results.some((x) => x.action === 'hold' && x.market === m));
+  assert.deepEqual(deps._removed, []);
+});
+
+test('takeProfitCycle: a DRY run (execute:false) never mutates the ledger, even for a finalised / gone position (read-only contract)', async () => {
+  const fin = { market: addr(1), tokenId: '1', entryUsdt: '1', entryOt: '1', ts: 1 };
+  const gone = { market: addr(2), tokenId: '1', entryUsdt: '1', entryOt: '1', ts: 2 };
+  const deps = tpDeps({ positions: [fin, gone], readValue: async (mm) => (mm === addr(1) ? { finalised: true, bal: 10n * 10n ** 18n, usdtOut: 1n } : { bal: 0n, usdtOut: 0n }), sell: async () => { throw new Error('dry must not sell'); } });
+  const r = await daemon.takeProfitCycle(deps, { pct: 50, execute: false });
+  assert.deepEqual(deps._removed, [], 'a dry run removes nothing from the ledger');
+  assert.equal(deps._pool().length, 2, 'both rows remain after a dry run');
+  assert.ok(deps._results.some((x) => x.action === 'settled'));
+  assert.ok(deps._results.some((x) => x.action === 'gone'));
+  assert.equal(r.sold, 0);
 });
 
 test('takeProfitCycle: a sell that throws (finalised market) is a skip; the position stays in the ledger for claim', async () => {

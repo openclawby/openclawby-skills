@@ -10,7 +10,7 @@ import { AbiCoder, Interface, MaxUint256, id, ZeroAddress, getAddress } from 'et
 import {
   ROUTER, ROUTER_ABI, ERROR_ABI, ERC20_ABI, MARKET_ABI, DEFAULT_MARKET, USDT,
   smartEps, encodeDataGuess, slippageBips, applySlippage, floorToTick,
-  parseAmount, parseTokenId, parseMarket, explainError, isFinalisedSnapshotRevert, parseArgs, resolveClaimTarget,
+  parseAmount, parseTokenId, parseMarket, explainError, isFinalisedSnapshotRevert, isBenignProviderCancellation, parseArgs, resolveClaimTarget,
   loadAccount, makeContext, buildClaimStep, planClaim, claimRevertHint, sendStep, wantsLive, main,
   buildRoundtripMulticall, planRoundtrip, roundtripOutlook, printRoundtripQuote, planBuy, planSell, decodeForDisplay, gasUnitsFor,
   runBlitzBet, runBlitzClaim, buildBlitzClaimStep, ensureUsdtApproval,
@@ -181,6 +181,17 @@ test('isFinalisedSnapshotRevert: true ONLY for the array-out-of-bounds Panic(0x3
   assert.equal(isFinalisedSnapshotRevert({ shortMessage: 'execution reverted' }), false);
   assert.equal(isFinalisedSnapshotRevert(null), false);
   assert.equal(isFinalisedSnapshotRevert(undefined), false);
+});
+
+test('isBenignProviderCancellation: true ONLY for ethers provider.destroy() cancellation noise (so the CLI can ignore it instead of crashing), false for every real error', () => {
+  assert.equal(isBenignProviderCancellation(new Error('provider destroyed; cancelled request (operation="eth_getTransactionReceipt", code=CANCELLED, version=6.13.0)')), true);
+  assert.equal(isBenignProviderCancellation({ code: 'CANCELLED', message: 'cancelled' }), true);
+  assert.equal(isBenignProviderCancellation({ code: 'UNSUPPORTED_OPERATION', message: 'provider destroyed; cancelled request' }), true);
+  assert.equal(isBenignProviderCancellation(new Error('insufficient funds for intrinsic transaction cost')), false);
+  assert.equal(isBenignProviderCancellation(new Error('tx reverted on-chain')), false);
+  assert.equal(isBenignProviderCancellation(null), false);
+  assert.equal(isBenignProviderCancellation(undefined), false);
+  assert.equal(isBenignProviderCancellation('some unrelated string'), false);
 });
 
 // ------------------------------------------------------------------------------ CLI parsing
@@ -881,16 +892,18 @@ test('makeContext: a live local-signer ctx carries a per-wallet nonceLock (cross
   try { assert.equal(baw.nonceLock ?? null, null, 'baw signs in the Binance App, which manages its own nonce'); } finally { baw.provider.destroy(); }
 });
 
-test('sendStep: a baw ctx routes to bawExec (from/to/value/data), records the hash, and still enforces live + value-0 + allow-list', async () => {
+test('sendStep: a baw ctx routes to bawExec (from/to/value/data), confirms the tx on-chain, records the hash, and still enforces live + value-0 + allow-list', async () => {
   let got = null;
   const bawExec = async (x) => { got = x; return { hash: '0xbaw1', status: 'BROADCASTED' }; };
-  const ctx = (over = {}) => ({ live: true, exec: 'baw', address: ADDR, sent: [], bawExec, ...over });
+  const ctx = (over = {}) => ({ live: true, exec: 'baw', address: ADDR, sent: [], bawExec, provider: { waitForTransaction: async () => ({ status: 1 }) }, ...over });
   const step = { kind: 'swap', to: ROUTER, value: 0n, data: '0xfeed' };
   const c = ctx();
   const r = await sendStep(c, step, new Set([ROUTER]));
   assert.deepEqual(got, { from: ADDR, to: ROUTER, value: 0n, data: '0xfeed' });
   assert.deepEqual(c.sent, ['0xbaw1']);
   assert.equal(r.hash, '0xbaw1');
+  // a baw tx that reverts on-chain after broadcast must NOT be reported as success (parity with the local path's status check)
+  await assert.rejects(sendStep(ctx({ provider: { waitForTransaction: async () => ({ status: 0 }) } }), step, new Set([ROUTER])), /reverted or did not confirm/);
   await assert.rejects(sendStep(ctx(), step, new Set([USDT])), /unexpected target/);
   await assert.rejects(sendStep(ctx(), { ...step, value: 1n }, new Set([ROUTER])), /non-zero value/);
   await assert.rejects(sendStep(ctx({ live: false }), step, new Set([ROUTER])), /without --live/);
@@ -949,17 +962,19 @@ test('runBlitzBet: live sends exactly the Router.swap mint (pre-approved -> one 
   assert.equal(dry.sendArgs.length, 0);
 });
 
-test('runBlitzClaim: bal 0 -> {claimed:false, held:false, payout:0}, sends nothing; held + a positive claim preview -> one Market.claim tx, payout = USDT balance delta; held but the preview will not pay -> no send', async () => {
+test('runBlitzClaim: bal 0 -> {claimed:false, held:false, payout:0}, sends nothing; held + a positive claim preview -> one Market.claim tx, payout = the previewed claim return (not a stale balanceOf delta); held but the preview will not pay -> no send', async () => {
   // Losing OT is burned to 0 on finalisation, so bal 0 means we lost: nothing held, nothing to claim.
   const none = blitzCtx({ bal: 0n });
   assert.deepEqual(await runBlitzClaim({ market: MKT, tokenId: 2n, account: {}, live: true }, { makeCtx: none.makeCtx }), { claimed: false, held: false, payout: 0n, txs: [] });
   assert.equal(none.sendArgs.length, 0);
-  // held + the eth_call preview shows a payout -> broadcast; the reported payout is the real USDT balance delta, not the preview.
-  const win = blitzCtx({ bal: 99n * 10n ** 17n, previewPayout: 1n, usdtBefore: 10n ** 19n, usdtAfter: 1242n * 10n ** 16n });   // +2.42 USDT
+  // held + the eth_call preview shows a payout -> broadcast. The reported payout is the PREVIEWED claim return, NOT a balanceOf
+  // delta: on a load-balanced RPC the post-claim balance read can lag and show a 0 delta even though the claim paid, and that
+  // false 0 used to abort a real win. Here after == before (delta 0, the stale-read bug) yet the payout must be the real 2.42.
+  const win = blitzCtx({ bal: 99n * 10n ** 17n, previewPayout: 242n * 10n ** 16n, usdtBefore: 10n ** 19n, usdtAfter: 10n ** 19n });
   const r = await runBlitzClaim({ market: MKT, tokenId: 2n, account: {}, live: true }, { makeCtx: win.makeCtx });
   assert.equal(r.claimed, true);
   assert.equal(r.held, true);
-  assert.equal(r.payout, 242n * 10n ** 16n);
+  assert.equal(r.payout, 242n * 10n ** 16n, 'payout is the previewed claim return, never the (possibly stale 0) balance delta');
   assert.equal(win.sendArgs.length, 1);
   assert.equal(win.sendArgs[0].to, MKT);
   assert.equal(win.sendArgs[0].data.slice(0, 10), '0x63d05442');
@@ -1109,6 +1124,20 @@ test('readPositionValue: finalised -> {finalised:true, no quote}; live bal>0 -> 
   // any OTHER snapshot error (RPC down) propagates — it must NOT be mistaken for finalisation
   const downCtx = { ...panicCtx, lens: { snapshotMarket: async () => { throw new Error('could not detect network'); } } };
   await assert.rejects(readPositionValue(downCtx, MKT, 2n), /could not detect network/);
+});
+
+test('readMarket (via planClaim): a finalised Token Race market whose snapshotMarket REVERTS (Panic 0x32) is read as finalised — so claim / status / set-operator reach their logic instead of dying on the panic; a non-panic snapshot error still propagates', async () => {
+  const { planClaim } = await import('./trade.mjs');
+  const panicCtx = {
+    address: ADDR,
+    router: { isMarketVersion: async () => 2n },
+    lens: { snapshotMarket: async () => { const e = new Error('execution reverted'); e.revert = { name: 'Panic', args: [0x32n] }; throw e; } },
+  };
+  const p = await planClaim(panicCtx, { market: MKT });   // no `m` -> exercised through readMarket
+  assert.equal(p.steps.length, 1);
+  assert.equal(p.steps[0].kind, 'claim');
+  const downCtx = { ...panicCtx, lens: { snapshotMarket: async () => { throw new Error('could not detect network'); } } };
+  await assert.rejects(planClaim(downCtx, { market: MKT }), /could not detect network/);
 });
 
 test('static scan: sell has ONE live send path — cmdSell and runSell both execute via executeSell (sendStep, allow-list [ROUTER, market]); a dry run returns first', () => {

@@ -1452,6 +1452,18 @@ test('runTradeClaim (the real claim port): runs `<cli> claim <market> --live`; e
     'the child gets exactly `claim <market> --live` - nothing else');
 });
 
+test('runTradeClaim: a baw signer prints "SENT (baw) tx <hash>" — the hash is still captured (reporting parity with the local signer)', async () => {
+  const { runTradeClaim } = await import('./42space.mjs');
+  const dir = mkdtempSync(join(tmpdir(), '42bawclaim-'));
+  const fake = join(dir, 'fake-trade.mjs');
+  writeFileSync(fake, [
+    "console.log('== claim ==');",
+    "console.log('  SENT (baw) tx 0x' + 'ab'.repeat(32));",
+    "console.log('  CONFIRMED block 7, gas used 1');",
+  ].join('\n'));
+  assert.deepEqual(await runTradeClaim(ftAddr(1), { cli: fake }), { ok: true, tx: ['0x' + 'ab'.repeat(32)] });
+});
+
 test('runTradeClaim: the child gets the parent environment minus CLAWBY_API_KEY (it never needs the clawby key), and BSC_RPC from the injected env', async () => {
   const { runTradeClaim } = await import('./42space.mjs');
   const dir = mkdtempSync(join(tmpdir(), '42claim-env-'));

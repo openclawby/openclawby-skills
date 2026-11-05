@@ -25,7 +25,7 @@ import { formatUnits } from 'ethers';
 import { parseVolume, bnbStatus, readState, writeState } from './lib.mjs';
 import { guardedUnlock } from './vault.mjs';
 import { scanMarkets, listTokenRaces, marketSnapshot } from './scan.mjs';
-import { runRoundtrip as tradeRunRoundtrip, runSell as tradeRunSell, readPositionValue, makeContext, loadAccount, readPinJson, assertChain, parseAmount, parseMarket, parseTokenId, slippageBips, explainError, runBlitzBet as tradeRunBlitzBet, runBlitzClaim as tradeRunBlitzClaim, ensureUsdtApproval, isMain } from './trade.mjs';
+import { runRoundtrip as tradeRunRoundtrip, runSell as tradeRunSell, readPositionValue, makeContext, loadAccount, readPinJson, assertChain, parseAmount, parseMarket, parseTokenId, slippageBips, explainError, runBlitzBet as tradeRunBlitzBet, runBlitzClaim as tradeRunBlitzClaim, ensureUsdtApproval, isMain, isBenignProviderCancellation } from './trade.mjs';
 import { listPositions, removePosition } from './positions.mjs';
 import { ensureReferralBeforeTrade } from './invite.mjs';
 import { playRound as blitzPlayRound, runBlitzLoop, chooseRound, pickAsset, blitzWindow, assetName } from './blitz.mjs';
@@ -61,7 +61,17 @@ export async function fastModeCycle(deps = {}, { amount, threshold = DEFAULT_THR
     if (pick === null || r.costPct < pick.costPct || (r.costPct === pick.costPct && r.pool > pick.pool)) pick = r;
   }
   if (pick === null) return { traded: false };
-  const rt = await runRoundtrip({ market: pick.address, tokenId: pick.tokenId, usdt: String(size) });
+  // scan intentionally returns non-live markets for the daemon to judge; by the time we trade, the pick may have ended / not
+  // started (a race) and runRoundtrip's PRE-SEND tradability check throws. Nothing was broadcast, so that is a SKIP — return
+  // {traded:false} (no `market` key) so runFastLoop waits and rescans — never fatal to the whole unattended run. A genuine
+  // broadcast failure (reverted / did not confirm on-chain) does not match this and stays fatal.
+  let rt;
+  try { rt = await runRoundtrip({ market: pick.address, tokenId: pick.tokenId, usdt: String(size) }); }
+  catch (e) {
+    const why = explainError(e);
+    if (/is not live|not started|MarketEnded|MarketNotStarted|not an outcome of this market|not a recognised 42 market/i.test(why)) { onSkip?.({ stage: 'trade', market: pick.address, reason: why }); return { traded: false }; }
+    throw e;
+  }
   const added = Number(rt?.volumeAdded);
   return { market: pick.address, tokenId: pick.tokenId, cost: pick.costPct, traded: rt?.traded !== false, volumeAdded: Number.isFinite(added) ? added : 0 };
 }
@@ -307,25 +317,33 @@ export async function takeProfitCycle(deps, { pct, execute } = {}) {
   const { listPositions: list, removePosition: remove, readValue, sell, onResult } = deps;
   if (!positive(pct)) throw new Error('takeProfitCycle: pct must be a positive number (percent)');
   const positions = list();
+  // Group the ledger by (market, tokenId): scaling into an outcome appends >=1 row, but the chain holds ONE balance, `sell`
+  // sells ALL of it, and `remove` drops ALL matching rows — so the cost basis must be the BLENDED sum of every lot, not one
+  // lot's unit cost (that could read a gain on the cheap lot and dump the whole balance at a real net loss).
+  const groups = new Map();   // key -> { market, tokenId, entryOt, entryUsdt, bad }
+  for (const pos of positions) {
+    const key = `${String(pos.market).toLowerCase()}|${String(pos.tokenId)}`;
+    let g = groups.get(key);
+    if (!g) { g = { market: pos.market, tokenId: pos.tokenId, entryOt: 0n, entryUsdt: 0n, bad: false }; groups.set(key, g); }
+    // A hand-edited / truncated / future-schema lot must taint only its own group's basis, never throw (that would strand every
+    // other in-profit position). positions.mjs guarantees whole-file resilience; this guards a single malformed row.
+    try { g.entryOt += BigInt(pos.entryOt); g.entryUsdt += BigInt(pos.entryUsdt); } catch { g.bad = true; }
+  }
   let sold = 0;
   let removed = 0;
   const results = [];
   const emit = (r) => { results.push(r); onResult?.(r); };
   const bps = BigInt(Math.round(pct * 100));                     // pct may be fractional, e.g. 12.5 -> 1250 bps
-  for (const pos of positions) {
-    const { market, tokenId } = pos;
+  for (const g of groups.values()) {
+    const { market, tokenId } = g;
     let value;
     try { value = await readValue(market, tokenId); } catch (e) { emit({ market, tokenId, action: 'skip', reason: explainError(e) }); continue; }
-    if (value.finalised) { remove(market, tokenId); removed += 1; emit({ market, tokenId, action: 'settled' }); continue; }   // market settled -> can't sell, leave for claim; drop from monitoring (no infinite retry)
+    // settled / gone are dropped from monitoring on a LIVE run only — a dry run is read-only and must not mutate the ledger.
+    if (value.finalised) { if (execute) { remove(market, tokenId); removed += 1; } emit({ market, tokenId, action: 'settled' }); continue; }
     const bal = BigInt(value.bal);
-    if (bal <= 0n) { remove(market, tokenId); removed += 1; emit({ market, tokenId, action: 'gone' }); continue; }
-    // Entry fields come straight off the on-disk ledger; a hand-edited / truncated / future-schema row must skip, not
-    // throw (that would strand every other in-profit position). positions.mjs guarantees whole-file resilience; this
-    // guards a single malformed row.
-    let entryOt, entryUsdt;
-    try { entryOt = BigInt(pos.entryOt); entryUsdt = BigInt(pos.entryUsdt); }
-    catch { emit({ market, tokenId, action: 'skip', reason: 'unusable entry row' }); continue; }
-    const costForBal = entryOt > 0n ? entryUsdt * bal / entryOt : 0n;   // entry cost scaled to the balance still held
+    if (bal <= 0n) { if (execute) { remove(market, tokenId); removed += 1; } emit({ market, tokenId, action: 'gone' }); continue; }
+    if (g.bad || g.entryOt <= 0n) { emit({ market, tokenId, action: 'skip', reason: 'unusable entry row' }); continue; }
+    const costForBal = g.entryUsdt * bal / g.entryOt;   // BLENDED entry cost, scaled to the balance still held
     if (costForBal <= 0n) { emit({ market, tokenId, action: 'skip', reason: 'unusable entry cost' }); continue; }
     const usdtOut = BigInt(value.usdtOut);
     const gainPct = Number((usdtOut - costForBal) * 10000n / costForBal) / 100;
@@ -546,6 +564,9 @@ export async function main(argv, deps = {}) {
 }
 
 if (isMain(process.argv[1], import.meta.url)) {
+  // A long-running daemon must not die on the benign "provider destroyed; cancelled request" rejection a per-call context's
+  // provider.destroy() can emit after a tx already confirmed; re-throw anything real (keeps the default crash on a true bug).
+  process.on('unhandledRejection', (e) => { if (!isBenignProviderCancellation(e)) throw e; });
   main(process.argv.slice(2)).catch((e) => {
     // One JSON error event on stdout (the convention of the module's other CLIs); afterNote says what was already broadcast, if anything.
     defaultLog({ event: 'error', error: explainError(e), ...(e?.afterNote ? { note: e.afterNote } : {}) });

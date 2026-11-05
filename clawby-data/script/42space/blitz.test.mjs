@@ -106,12 +106,18 @@ test('playRound: a loss (losing OT burned to 0 -> the claim reports not held) re
   assert.equal(claimCalls, 1, 'win/loss is now read Lens-free via the claim probe, so claim IS called on every finalised round');
 });
 
-test('playRound: a snapshot error that is NOT the finalised-market panic (e.g. the RPC is down) stays FATAL - it is never mistaken for settlement', async () => {
-  const rpcDown = () => new Error('could not detect network');   // no .revert, not a Panic
-  await assert.rejects(playRound(baseRound({
-    snapshot: snapThenThrow(1, rpcDown),
-    claim: async () => ({ claimed: true, held: true, payout: WAD }),
-  }), roundOpts()), /could not detect network/);
+test('playRound: a TRANSIENT snapshot error during settlement (a flaky public RPC) is NOT fatal and NOT mistaken for settlement — it keeps polling to the deadline, then books the committed bet settled:false (never abandons the stake or kills the daemon)', async () => {
+  let t = 1_001;
+  const rpcDown = () => new Error('could not detect network');   // no .revert, not a Panic — a transient read error, not finalisation
+  const r = await playRound(baseRound({
+    now: () => t, sleep: async () => { t += 100; },
+    snapshot: snapThenThrow(1, rpcDown),                          // one live read (window/outcomes), then every settlement read fails
+    claim: async () => { throw new Error('claim must never run — the round never finalised'); },
+  }), roundOpts({ pollMs: 1, settleGraceSec: 300 }));
+  assert.equal(r.result, 'bet');
+  assert.equal(r.settled, false, 'never read as finalised -> booked conservatively, not abandoned');
+  assert.equal(r.won, false);
+  assert.equal(r.realized, -WAD);
 });
 
 test('playRound: the trading window is already closed (now >= end-1) -> skip, nothing is bet', async () => {

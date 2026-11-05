@@ -65,9 +65,11 @@ export async function playRound(deps, { market, amount, slippage, rng = Math.ran
   try { betRes = await bet({ market, tokenId, usdt: String(amount), slippage }); }
   catch (e) { return { result: 'skip', reason: explainError(e), market, tokenId }; }   // MarketEnded etc. -> atomic, no stake spent
   // Settle from chain. 42's Lens snapshotMarket REVERTS with an array-out-of-bounds Panic(0x32) the moment a Token Race market
-  // finalises (it indexes an outcome array finalisation has emptied), so a thrown finalised-snapshot IS the settlement signal,
-  // not a fatal error. Any OTHER throw (RPC down, a different revert) stays fatal. `answer` is never read — the whole snapshot
-  // reverts once finalised, so the winning outcome is read Lens-free below, through the claim.
+  // finalises (it indexes an outcome array finalisation has emptied), so a thrown finalised-snapshot IS the settlement signal.
+  // The bet is already committed on chain, so NOTHING here may abandon it or kill the daemon: any OTHER snapshot error (a flaky
+  // public RPC blip, a transient revert) is treated as transient and we keep polling to the deadline. Only the array panic or a
+  // clean isFinalised:true ends the poll as "settled" — a transient error is never mistaken for settlement. `answer` is never
+  // read (the whole snapshot reverts once finalised); the winning outcome is read Lens-free below, through the claim.
   const deadline = end + settleGraceSec;
   let finalised = false;
   for (;;) {
@@ -76,7 +78,7 @@ export async function playRound(deps, { market, amount, slippage, rng = Math.ran
       if (sN.isFinalised) { finalised = true; break; }
     } catch (e) {
       if (isFinalisedSnapshotRevert(e)) { finalised = true; break; }
-      throw e;
+      // transient read error: fall through to the deadline check and poll again (never fatal, never "settled")
     }
     if (now() >= deadline) break;
     await wait(pollMs);

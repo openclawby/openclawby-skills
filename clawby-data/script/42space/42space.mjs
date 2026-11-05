@@ -275,7 +275,7 @@ export async function runTradeClaim(market, { env = process.env, cli = TRADE_CLI
     child.stderr.on('data', (d) => { stderr += d; });
     child.on('error', (e) => resolve({ ok: false, tx: [], error: `could not start trade.mjs: ${firstLine(e.message)}` }));
     child.on('close', (code) => {
-      const tx = [...stdout.matchAll(/SENT\s+tx (0x[0-9a-fA-F]{64})/g)].map((m) => m[1]);
+      const tx = [...stdout.matchAll(/SENT(?:\s+\(baw\))?\s+tx (0x[0-9a-fA-F]{64})/g)].map((m) => m[1]);   // local: "SENT tx 0x…"; baw: "SENT (baw) tx 0x…"
       if (code === 0) resolve({ ok: true, tx });
       else resolve({ ok: false, tx, error: firstLine(stderr.match(/^ERROR: (.*)$/m)?.[1] ?? `trade.mjs claim exited with code ${code}`) });
     });
